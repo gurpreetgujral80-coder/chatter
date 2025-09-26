@@ -9,23 +9,17 @@ from fido2.server import Fido2Server
 from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
 from fido2.utils import websafe_encode
 
-# Config from environment
+app = Flask(__name__, static_folder="static")
+app.secret_key = os.urandom(32)
 PORT = int(os.environ.get("PORT", 5004))
-RP_NAME = os.environ.get("RP_NAME", "Asphalt Legends")
-RP_ID = os.environ.get("RP_ID", "localhost")  # IMPORTANT: set this on Render to your-service.onrender.com
-DB_DIR = os.environ.get("DB_DIR", os.path.dirname(__file__))  # if using Render persistent disk, set this to the mounted path (e.g. /data)
-DB_PATH = os.path.join(DB_DIR, "Asphalt_Legends.db")
-SECRET_KEY = os.environ.get("SECRET_KEY") or os.urandom(32)
+DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
+RP_ID = "localhost"
+RP_NAME = "Asphalt Legends"
 
-app = Flask(__name__, static_folder="static", static_url_path="/static")
-app.secret_key = SECRET_KEY
-
-# In-memory state for FIDO2 (okay for single-process dev; use a real store for multi-process)
 FIDO2_STATES = {}
 
-# --- DB helpers ---
+# ---------- DB ----------
 def init_db():
-    os.makedirs(DB_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("""
@@ -125,11 +119,11 @@ def fetch_messages(since_id=0):
 
 init_db()
 
-# --- FIDO2 server setup (RP_ID must be set to your deployed domain on Render)
+# ---------- FIDO2 ----------
 rp = PublicKeyCredentialRpEntity(id=RP_ID, name=RP_NAME)
 server = Fido2Server(rp)
 
-# --- utility encoders ... robust across fido2 versions
+# ---------- helpers ----------
 def b64u_encode_bytes(b):
     if b is None:
         return ""
@@ -204,14 +198,13 @@ def make_authenticate_dict(auth_data):
                 allow_list.append({"type": "public-key", "id": b64u_encode_bytes(aid)})
     return {"challenge": challenge_b64, "allowCredentials": allow_list, "timeout": getattr(pk, "timeout", None), "rpId": getattr(pk, "rpId", getattr(pk, "rp_id", RP_ID)), "userVerification": getattr(pk, "user_verification", None) or (pk.get("userVerification") if isinstance(pk, dict) else None)}
 
-# --- HTML templates (index + chat). Keep the static fallback file in static/ folder!
+# ---------- Templates ----------
 INDEX_HTML = """<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <title>Asphalt Legends — Private Chat</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/webauthn-json/2.1.1/webauthn-json.browser-ponyfill.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}</style>
 </head>
@@ -233,7 +226,7 @@ INDEX_HTML = """<!doctype html>
         <div class="p-4 border rounded-lg">
           <h3 class="font-semibold mb-2">Register (Face/Touch ID)</h3>
           <form id="regForm" class="space-y-3">
-            <input id="name" name="name" class="w-full p-3 border rounded-lg" placeholder="Enter your name" value="ProGamer &#8734;" />
+            <input id="name" name="name" class="w-full p-3 border rounded-lg" placeholder="Enter your name" value="ProGamer ♾️" />
             <div class="flex justify-center">
               <button type="submit" class="px-6 py-2 rounded-lg bg-green-600 text-white font-semibold">Register Face/Touch ID</button>
             </div>
@@ -254,7 +247,6 @@ INDEX_HTML = """<!doctype html>
   </div>
 
 <script>
-/* robust loader with local static fallback at /static/webauthn-json.browser-ponyfill.min.js */
 async function tryLoadScript(url){
   return new Promise((resolve, reject)=>{
     const s = document.createElement('script');
@@ -264,30 +256,35 @@ async function tryLoadScript(url){
     document.head.appendChild(s);
   });
 }
+
 async function ensureWebAuthnLib(){
   if(window.webauthnJSON || window.WebAuthnJSON){
     if(window.webauthnJSON && !window.WebAuthnJSON) window.WebAuthnJSON = window.webauthnJSON;
     if(window.WebAuthnJSON && !window.webauthnJSON) window.webauthnJSON = window.WebAuthnJSON;
     return window.webauthnJSON || window.WebAuthnJSON;
   }
+
   const candidates = [
-    "https://cdnjs.cloudflare.com/ajax/libs/webauthn-json/2.1.1/webauthn-json.browser-ponyfill.min.js",
     "https://cdn.jsdelivr.net/npm/webauthn-json@2.1.1/dist/webauthn-json.browser-ponyfill.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/webauthn-json/2.1.1/webauthn-json.browser-ponyfill.min.js",
     "https://unpkg.com/webauthn-json@2.1.1/dist/webauthn-json.browser-ponyfill.min.js",
     "/static/webauthn-json.browser-ponyfill.min.js"
   ];
+
   for(const url of candidates){
     try{
       await tryLoadScript(url);
-      await new Promise(r=>setTimeout(r, 30));
+      await new Promise(r => setTimeout(r, 30)); // small delay
       if(window.webauthnJSON || window.WebAuthnJSON){
         if(window.webauthnJSON && !window.WebAuthnJSON) window.WebAuthnJSON = window.webauthnJSON;
         if(window.WebAuthnJSON && !window.webauthnJSON) window.webauthnJSON = window.WebAuthnJSON;
         console.log("Loaded webauthn lib from", url);
         return window.webauthnJSON || window.WebAuthnJSON;
+      } else {
+        console.warn("Script loaded but global not found:", url);
       }
-    }catch(e){
-      console.warn("load failed", url, e);
+    } catch(e){
+      console.warn("Load failed:", url, e);
     }
   }
   return null;
@@ -303,7 +300,9 @@ function show(el, msg, isError=false){
 window.addEventListener('DOMContentLoaded', async ()=>{
   const WA = await ensureWebAuthnLib();
   if(!WA){
-    document.getElementById('libStatus').textContent = "WebAuthn library not available. If offline or CDNs blocked, put webauthn-json.browser-ponyfill.min.js in static/ and reload.";
+    document.getElementById('libStatus').textContent =
+      "WebAuthn library not available. If you are offline or your network blocks CDNs, download the file 'webauthn-json.browser-ponyfill.min.js' and put it in the 'static' folder of this project (path: static/webauthn-json.browser-ponyfill.min.js). Then reload.";
+    console.error('WebAuthn library not available.');
     const regBtn = document.querySelector('#regForm button');
     if(regBtn) regBtn.disabled = true;
     const loginBtn = document.getElementById('loginBtn');
@@ -320,28 +319,36 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     return { ok: r.ok, status: r.status, text, json };
   }
 
+  // Registration
   const regForm = document.getElementById('regForm');
   if(regForm){
     regForm.addEventListener('submit', async (e)=>{
       e.preventDefault();
       show('regStatus','Starting registration...');
-      const name = document.getElementById('name').value || 'ProGamer ∞';
+      const name = document.getElementById('name').value || 'ProGamer ♾️';
       try{
         const begin = await fetchJsonOrText('/begin_register', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
         if(!begin.ok){ throw new Error('begin_register failed: '+begin.text); }
         const options = begin.json || JSON.parse(begin.text);
-        const attestation = await (window.webauthnJSON || window.WebAuthnJSON).create(options);
+        let attestation;
+        try{
+          attestation = await (window.webauthnJSON || window.WebAuthnJSON).create(options);
+        }catch(err){
+          console.error('WA.create failed', err);
+          throw new Error('Platform authenticator did not create credential (cancelled or blocked): '+(err.message||err));
+        }
         const complete = await fetchJsonOrText('/complete_register', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, credential: attestation})});
         if(!complete.ok){ throw new Error('complete_register failed: '+complete.text); }
-        show('regStatus','Registration successful — redirecting...');
+        show('regStatus','Registration successful — signed in.');
         window.location = '/after_register?name=' + encodeURIComponent(name);
       }catch(err){
-        console.error(err);
-        show('regStatus','Registration failed: '+(err.message || err), true);
+        console.error('registration error', err);
+        show('regStatus','Registration failed: '+err.message, true);
       }
     });
   }
 
+  // Login
   const loginBtn = document.getElementById('loginBtn');
   if(loginBtn){
     loginBtn.addEventListener('click', async ()=>{
@@ -350,15 +357,24 @@ window.addEventListener('DOMContentLoaded', async ()=>{
         const begin = await fetchJsonOrText('/begin_login', {method:'POST'});
         if(!begin.ok){ throw new Error('begin_login failed: '+begin.text); }
         const options = begin.json || JSON.parse(begin.text);
-        const assertion = await (window.webauthnJSON || window.WebAuthnJSON).get(options);
+        let assertion;
+        try{
+          assertion = await (window.webauthnJSON || window.WebAuthnJSON).get(options);
+        }catch(err){
+          console.error('WA.get failed', err);
+          throw new Error('Platform authenticator did not return assertion (cancelled/blocked): '+(err.message||err));
+        }
         const complete = await fetchJsonOrText('/complete_login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({credential: assertion})});
         if(!complete.ok){ throw new Error('complete_login failed: '+complete.text); }
         const body = complete.json || JSON.parse(complete.text);
-        if(body && body.username) window.location = '/after_login?name=' + encodeURIComponent(body.username);
-        else window.location = '/chat';
+        if(body && body.username){
+          window.location = '/after_login?name=' + encodeURIComponent(body.username);
+        } else {
+          window.location = '/chat';
+        }
       }catch(err){
-        console.error(err);
-        show('loginStatus','Login failed: '+(err.message || err), true);
+        console.error('login error', err);
+        show('loginStatus','Login failed: '+err.message, true);
       }
     });
   }
@@ -369,13 +385,23 @@ window.addEventListener('DOMContentLoaded', async ()=>{
 """
 
 CHAT_HTML = """<!doctype html>
-<html><head><meta charset="utf-8"><title>Chat</title><meta name="viewport" content="width=device-width,initial-scale=1" /><script src="https://cdn.tailwindcss.com"></script></head>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Asphalt Legends — Chat</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}</style>
+</head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 flex items-center justify-center">
   <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-6">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-bold text-indigo-700">Chat — Private (2 people)</h2>
-      <div><form method="post" action="{{ url_for('logout') }}"><button class="px-3 py-1 rounded bg-gray-200">Logout</button></form></div>
+      <div>
+        <form method="post" action="{{ url_for('logout') }}"><button class="px-3 py-1 rounded bg-gray-200">Logout</button></form>
+      </div>
     </div>
+
     <div class="mb-4">
       <div>Signed in as <strong>{{ username }}</strong></div>
       {% if is_owner and not partner_name %}
@@ -386,29 +412,82 @@ CHAT_HTML = """<!doctype html>
         <div class="text-sm text-gray-600">Chatting with owner: <strong>{{ owner_name }}</strong></div>
       {% endif %}
     </div>
+
     {% if not is_member %}
       <div class="mb-4">
         <button id="joinBtn" class="px-4 py-2 rounded bg-indigo-600 text-white">Join Chat</button>
         <div id="joinStatus" class="text-sm mt-2 text-red-500"></div>
       </div>
     {% endif %}
+
     <div id="messages" class="h-64 overflow-auto border rounded p-3 mb-3 bg-gray-50"></div>
+
     <form id="sendForm" class="flex space-x-2">
       <input id="msg" class="flex-1 p-2 border rounded" placeholder="Type a message..." />
       <button class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
     </form>
+
   </div>
+
 <script>
 let lastId = 0;
-function fmtMessage(m){ const when = new Date(m.created_at * 1000).toLocaleTimeString(); return `<div class="mb-2"><div class="text-sm text-gray-500">${m.sender} · ${when}</div><div class="mt-1">${escapeHtml(m.text)}</div></div>`; }
+function fmtMessage(m){
+  const when = new Date(m.created_at * 1000).toLocaleTimeString();
+  return `<div class="mb-2"><div class="text-sm text-gray-500">${m.sender} · ${when}</div><div class="mt-1">${escapeHtml(m.text)}</div></div>`;
+}
 function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-async function poll(){ try{ const resp = await fetch('/poll_messages?since=' + lastId); if(!resp.ok) return; const data = await resp.json(); if(data.length){ const container = document.getElementById('messages'); for(const m of data){ container.insertAdjacentHTML('beforeend', fmtMessage(m)); lastId = m.id; } container.scrollTop = container.scrollHeight; } }catch(e){ console.error('poll error', e); } }
-document.addEventListener('DOMContentLoaded', ()=>{ poll(); setInterval(poll, 1200); const sendForm = document.getElementById('sendForm'); sendForm.addEventListener('submit', async (e)=>{ e.preventDefault(); const txt = document.getElementById('msg').value.trim(); if(!txt) return; document.getElementById('msg').value = ''; await fetch('/send_message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text: txt})}); await poll(); }); const joinBtn = document.getElementById('joinBtn'); if(joinBtn){ joinBtn.addEventListener('click', async ()=>{ const res = await fetch('/join_chat', {method:'POST'}); const txt = await res.text(); if(res.ok){ location.reload(); } else { document.getElementById('joinStatus').textContent = txt; } }); } });
+
+async function poll(){
+  try{
+    const resp = await fetch('/poll_messages?since=' + lastId);
+    if(!resp.ok) return;
+    const data = await resp.json();
+    if(data.length){
+      const container = document.getElementById('messages');
+      for(const m of data){
+        container.insertAdjacentHTML('beforeend', fmtMessage(m));
+        lastId = m.id;
+      }
+      container.scrollTop = container.scrollHeight;
+    }
+  }catch(e){
+    console.error('poll error', e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  poll();
+  setInterval(poll, 1200);
+
+  const sendForm = document.getElementById('sendForm');
+  sendForm.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const txt = document.getElementById('msg').value.trim();
+    if(!txt) return;
+    document.getElementById('msg').value = '';
+    await fetch('/send_message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text: txt})});
+    await poll();
+  });
+
+  const joinBtn = document.getElementById('joinBtn');
+  if(joinBtn){
+    joinBtn.addEventListener('click', async ()=>{
+      const res = await fetch('/join_chat', {method:'POST'});
+      const txt = await res.text();
+      if(res.ok){
+        location.reload();
+      } else {
+        document.getElementById('joinStatus').textContent = txt;
+      }
+    });
+  }
+});
 </script>
-</body></html>
+</body>
+</html>
 """
 
-# --- Flask routes
+# -------- routes ----------
 @app.route("/")
 def index():
     return render_template_string(INDEX_HTML)
@@ -432,11 +511,11 @@ def logout():
     session.pop('username', None)
     return redirect(url_for('index'))
 
-# Begin / complete register
+# ---------- WebAuthn endpoints ----------
 @app.route("/begin_register", methods=["POST"])
 def begin_register():
     body = request.get_json() or {}
-    name = body.get("name") or "ProGamer ∞"
+    name = body.get("name") or "ProGamer ♾️"
     user_entity = PublicKeyCredentialUserEntity(id=os.urandom(16), name=name, display_name=name)
     try:
         registration_data, state = server.register_begin(user_entity, user_verification="required")
@@ -451,7 +530,7 @@ def begin_register():
 @app.route("/complete_register", methods=["POST"])
 def complete_register():
     body = request.get_json() or {}
-    name = body.get("name") or "ProGamer ∞"
+    name = body.get("name") or "ProGamer ♾️"
     credential = body.get("credential")
     if not credential:
         return "missing credential", 400
@@ -509,7 +588,6 @@ def complete_register():
     session['username'] = name
     return jsonify({"status": "registered", "username": name})
 
-# Begin / complete login
 @app.route("/begin_login", methods=["POST"])
 def begin_login():
     user = load_first_user()
@@ -580,7 +658,7 @@ def complete_login():
     session['username'] = username
     return jsonify({"status":"ok", "username": username})
 
-# Chat routes (join/send/poll)
+# ---------- Chat ----------
 @app.route("/chat")
 def chat():
     username = session.get('username')
@@ -640,5 +718,5 @@ def poll_messages():
     return jsonify(msgs)
 
 if __name__ == "__main__":
-    print("Starting Asphalt_Legends with DB:", DB_PATH, "RP_ID:", RP_ID)
+    print("DB:", DB_PATH)
     app.run(host="0.0.0.0", port=PORT, debug=True)
