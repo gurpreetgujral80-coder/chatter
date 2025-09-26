@@ -246,50 +246,8 @@ INDEX_HTML = """<!doctype html>
     <div id="libStatus" class="mt-3 text-xs text-center text-gray-500"></div>
   </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@github/webauthn-json@2.1.1/dist/browser-ponyfill.min.js"></script>
 <script>
-async function tryLoadScript(url){
-  return new Promise((resolve, reject)=>{
-    const s = document.createElement('script');
-    s.src = url;
-    s.onload = ()=>resolve(true);
-    s.onerror = ()=>reject(new Error('load failed: '+url));
-    document.head.appendChild(s);
-  });
-}
-
-async function ensureWebAuthnLib(){
-  if(window.webauthnJSON || window.WebAuthnJSON){
-    if(window.webauthnJSON && !window.WebAuthnJSON) window.WebAuthnJSON = window.webauthnJSON;
-    if(window.WebAuthnJSON && !window.webauthnJSON) window.webauthnJSON = window.WebAuthnJSON;
-    return window.webauthnJSON || window.WebAuthnJSON;
-  }
-
-  const candidates = [
-    "https://cdn.jsdelivr.net/npm/webauthn-json@2.1.1/dist/webauthn-json.browser-ponyfill.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/webauthn-json/2.1.1/webauthn-json.browser-ponyfill.min.js",
-    "https://unpkg.com/webauthn-json@2.1.1/dist/webauthn-json.browser-ponyfill.min.js",
-    "/static/webauthn-json.browser-ponyfill.min.js"
-  ];
-
-  for(const url of candidates){
-    try{
-      await tryLoadScript(url);
-      await new Promise(r => setTimeout(r, 30)); // small delay
-      if(window.webauthnJSON || window.WebAuthnJSON){
-        if(window.webauthnJSON && !window.WebAuthnJSON) window.WebAuthnJSON = window.webauthnJSON;
-        if(window.WebAuthnJSON && !window.webauthnJSON) window.webauthnJSON = window.WebAuthnJSON;
-        console.log("Loaded webauthn lib from", url);
-        return window.webauthnJSON || window.WebAuthnJSON;
-      } else {
-        console.warn("Script loaded but global not found:", url);
-      }
-    } catch(e){
-      console.warn("Load failed:", url, e);
-    }
-  }
-  return null;
-}
-
 function show(el, msg, isError=false){
   const node = document.getElementById(el);
   if(!node) return;
@@ -298,10 +256,10 @@ function show(el, msg, isError=false){
 }
 
 window.addEventListener('DOMContentLoaded', async ()=>{
-  const WA = await ensureWebAuthnLib();
+  const WA = window.WebAuthnJSON || window.webauthnJSON;
   if(!WA){
     document.getElementById('libStatus').textContent =
-      "WebAuthn library not available. If you are offline or your network blocks CDNs, download the file 'webauthn-json.browser-ponyfill.min.js' and put it in the 'static' folder of this project (path: static/webauthn-json.browser-ponyfill.min.js). Then reload.";
+      "WebAuthn library not available. Ensure the CDN is reachable.";
     console.error('WebAuthn library not available.');
     const regBtn = document.querySelector('#regForm button');
     if(regBtn) regBtn.disabled = true;
@@ -319,26 +277,19 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     return { ok: r.ok, status: r.status, text, json };
   }
 
-  // Registration
   const regForm = document.getElementById('regForm');
   if(regForm){
-    regForm.addEventListener('submit', async (e)=>{
+    regForm.addEventListener('submit', async e=>{
       e.preventDefault();
       show('regStatus','Starting registration...');
       const name = document.getElementById('name').value || 'ProGamer ♾️';
       try{
         const begin = await fetchJsonOrText('/begin_register', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
-        if(!begin.ok){ throw new Error('begin_register failed: '+begin.text); }
+        if(!begin.ok) throw new Error('begin_register failed: '+begin.text);
         const options = begin.json || JSON.parse(begin.text);
-        let attestation;
-        try{
-          attestation = await (window.webauthnJSON || window.WebAuthnJSON).create(options);
-        }catch(err){
-          console.error('WA.create failed', err);
-          throw new Error('Platform authenticator did not create credential (cancelled or blocked): '+(err.message||err));
-        }
+        const attestation = await WA.create(options);
         const complete = await fetchJsonOrText('/complete_register', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, credential: attestation})});
-        if(!complete.ok){ throw new Error('complete_register failed: '+complete.text); }
+        if(!complete.ok) throw new Error('complete_register failed: '+complete.text);
         show('regStatus','Registration successful — signed in.');
         window.location = '/after_register?name=' + encodeURIComponent(name);
       }catch(err){
@@ -348,30 +299,20 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     });
   }
 
-  // Login
   const loginBtn = document.getElementById('loginBtn');
   if(loginBtn){
     loginBtn.addEventListener('click', async ()=>{
       show('loginStatus','Starting login...');
       try{
         const begin = await fetchJsonOrText('/begin_login', {method:'POST'});
-        if(!begin.ok){ throw new Error('begin_login failed: '+begin.text); }
+        if(!begin.ok) throw new Error('begin_login failed: '+begin.text);
         const options = begin.json || JSON.parse(begin.text);
-        let assertion;
-        try{
-          assertion = await (window.webauthnJSON || window.WebAuthnJSON).get(options);
-        }catch(err){
-          console.error('WA.get failed', err);
-          throw new Error('Platform authenticator did not return assertion (cancelled/blocked): '+(err.message||err));
-        }
+        const assertion = await WA.get(options);
         const complete = await fetchJsonOrText('/complete_login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({credential: assertion})});
-        if(!complete.ok){ throw new Error('complete_login failed: '+complete.text); }
+        if(!complete.ok) throw new Error('complete_login failed: '+complete.text);
         const body = complete.json || JSON.parse(complete.text);
-        if(body && body.username){
-          window.location = '/after_login?name=' + encodeURIComponent(body.username);
-        } else {
-          window.location = '/chat';
-        }
+        if(body && body.username) window.location = '/after_login?name=' + encodeURIComponent(body.username);
+        else window.location = '/chat';
       }catch(err){
         console.error('login error', err);
         show('loginStatus','Login failed: '+err.message, true);
@@ -426,7 +367,6 @@ CHAT_HTML = """<!doctype html>
       <input id="msg" class="flex-1 p-2 border rounded" placeholder="Type a message..." />
       <button class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
     </form>
-
   </div>
 
 <script>
@@ -450,9 +390,7 @@ async function poll(){
       }
       container.scrollTop = container.scrollHeight;
     }
-  }catch(e){
-    console.error('poll error', e);
-  }
+  }catch(e){ console.error('poll error', e); }
 }
 
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -474,11 +412,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     joinBtn.addEventListener('click', async ()=>{
       const res = await fetch('/join_chat', {method:'POST'});
       const txt = await res.text();
-      if(res.ok){
-        location.reload();
-      } else {
-        document.getElementById('joinStatus').textContent = txt;
-      }
+      if(res.ok) location.reload();
+      else document.getElementById('joinStatus').textContent = txt;
     });
   }
 });
