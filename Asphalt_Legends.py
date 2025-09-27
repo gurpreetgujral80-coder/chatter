@@ -13,14 +13,14 @@ from flask import (
     redirect, url_for, send_from_directory, abort
 )
 from werkzeug.utils import secure_filename
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import SocketIO, emit
 
 # -------- CONFIG ----------
 app = Flask(__name__, static_folder="static")
 app.secret_key = os.urandom(32)
 PORT = int(os.environ.get("PORT", 5004))
 DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
-HEADING_IMG = "/static/heading.png"  # ensure you add this file to static/
+HEADING_IMG = "/static/heading.png"  # place your heading image here
 MAX_MESSAGES = 80
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
 
@@ -264,7 +264,6 @@ def initials_and_color(name):
         initials = parts[0][:2].upper()
     else:
         initials = (parts[0][0] + parts[-1][0]).upper()
-    # color from name hash
     h = hashlib.sha256(nm.encode("utf-8")).digest()
     r,g,b = h[0], h[1], h[2]
     return initials, f"rgb({r},{g},{b})"
@@ -287,24 +286,29 @@ def list_static_folder(sub):
     folder = os.path.join(app.static_folder, sub)
     if not os.path.isdir(folder): return []
     out=[]
-    for fn in os.listdir(folder):
+    for fn in sorted(os.listdir(folder)):
         p = os.path.join(folder, fn)
         if os.path.isfile(p):
             ext = fn.rsplit(".",1)[-1].lower()
-            out.append(url_for('static', filename=f"{sub}/{fn}"))
+            if ext:
+                out.append(url_for('static', filename=f"{sub}/{fn}"))
     return out
 
-# ---------- TEMPLATES (compact but feature-complete) ----------
+# ---------- Templates ----------
 INDEX_HTML = r'''<!doctype html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Asphalt Legends — Login</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<style>body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;} .heading{display:flex;justify-content:center;gap:8px;align-items:center} .left{color:#3730a3;font-weight:800;font-size:1.5rem} .right{color:#be185d;font-weight:800;font-size:1.5rem}</style>
-</head>
-<body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 p-4">
+<style>
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+  .heading{display:flex;justify-content:center;gap:8px;align-items:center}
+  .left{color:#3730a3;font-weight:800;font-size:1.5rem}
+  .right{color:#be185d;font-weight:800;font-size:1.5rem}
+  header{ text-align:center; margin:18px 0; }
+</style>
+</head><body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 p-4">
   <div class="max-w-3xl mx-auto">
-    <header class="text-center my-4">
+    <header>
       <img src="{{ heading_img }}" alt="heading" class="mx-auto" style="max-height:64px"/>
       <div class="heading mt-2"><div class="left">Asphalt</div><div class="right">Legends</div></div>
       <p class="text-xs text-gray-500 mt-2">Shared single passkey login. First user creates master passkey.</p>
@@ -315,7 +319,7 @@ INDEX_HTML = r'''<!doctype html>
       <section class="p-4 bg-white rounded-lg shadow">
         <h3 class="text-indigo-700 font-semibold mb-2">Register (create master passkey)</h3>
         <form id="regForm">
-          <input id="reg_name" class="w-full p-2 border rounded mb-2" placeholder="Your display name" />
+          <input id="reg_name" class="w-full p-2 border rounded mb-2" placeholder="Display name" />
           <input id="reg_passkey" type="password" class="w-full p-2 border rounded mb-2" placeholder="Choose master passkey" />
           <div class="flex gap-2">
             <button type="submit" class="px-3 py-2 rounded bg-green-600 text-white flex-1">Register</button>
@@ -329,7 +333,7 @@ INDEX_HTML = r'''<!doctype html>
       <section class="p-4 bg-white rounded-lg shadow">
         <h3 class="text-indigo-700 font-semibold mb-2">Login</h3>
         <form id="loginForm">
-          <input id="login_name" class="w-full p-2 border rounded mb-2" placeholder="Your display name" />
+          <input id="login_name" class="w-full p-2 border rounded mb-2" placeholder="Display name" />
           <input id="login_passkey" type="password" class="w-full p-2 border rounded mb-2" placeholder="Master passkey" />
           <button type="submit" class="w-full px-3 py-2 rounded bg-indigo-600 text-white">Login</button>
           <div id="loginStatus" class="text-sm mt-2 text-red-500"></div>
@@ -339,7 +343,7 @@ INDEX_HTML = r'''<!doctype html>
   </div>
 
 <script>
-function show(id,msg,err){const e=document.getElementById(id); if(!e) return; e.textContent=msg; e.style.color = err? '#b91c1c':'#16a34a';}
+function show(id,msg,err){const e=document.getElementById(id); if(!e)return; e.textContent=msg; e.style.color = err? '#b91c1c':'#16a34a';}
 document.getElementById('genBtn')?.addEventListener('click', ()=>{ const s = Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => (b%36).toString(36)).join(''); document.getElementById('reg_passkey').value = s; show('regStatus','Generated — copy it.'); });
 
 async function postJson(url, body){
@@ -374,18 +378,16 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   }catch(err){ show('loginStatus','Login failed: '+(err.message||err), true); }
 });
 </script>
-</body>
-</html>
+</body></html>
 '''
 
 CHAT_HTML = r'''<!doctype html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Asphalt Legends — Chat</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
-  header{ text-align:center; margin:6px 0; }
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: linear-gradient(180deg, #eef2ff 0%, #fff0f6 100%); }
+  header{ text-align:center; margin:12px 0 6px; }
   header img{max-height:64px; display:block; margin:0 auto;}
   .heading{display:flex;justify-content:center;gap:8px;align-items:center;margin-top:6px;}
   .left{ color:#3730a3;font-weight:800;font-size:1.4rem;}
@@ -398,19 +400,27 @@ CHAT_HTML = r'''<!doctype html>
   .meta{ font-size:.75rem; color:#6b7280; margin-bottom:4px;}
   .msg-row{ margin-bottom:10px; display:flex; gap:8px; align-items:flex-start;}
   .msg-body{ display:flex; flex-direction:column;}
-  .three-dot{ background: none; border: none; cursor:pointer; font-size:1rem; color:#6b7280;}
-  .menu{ position: absolute; background:white; border:1px solid #eee; padding:6px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.12); z-index:80;}
-  .fab{ position: fixed; right:20px; bottom:20px; z-index:50; }
-  .attach-menu{ position: fixed; right:20px; bottom:84px; z-index:50; display:none; flex-direction:column; gap:8px; }
-  .call-history{ position: fixed; right:20px; bottom:140px; z-index:50; display:none; background:white; border-radius:8px; padding:8px; box-shadow:0 8px 20px rgba(0,0,0,.12); max-height:50vh; overflow:auto;}
+  .three-dot{ background: none; border: none; cursor:pointer; font-size:1.05rem; color:#f3f4f6; padding:6px 8px; border-radius:8px; background:#111827; box-shadow:0 6px 18px rgba(0,0,0,.25);}
+  .menu{ position: absolute; background:#111827; color:#fff; padding:8px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.25); z-index:120; min-width:140px;}
+  .menu div{ padding:8px 10px; cursor:pointer; border-radius:6px;}
+  .menu div:hover{ background: rgba(255,255,255,0.06); }
+  .attach-menu{ position: fixed; right:20px; bottom:84px; z-index:90; display:none; flex-direction:column; gap:8px; }
+  .attach-menu button, .attach-menu label{ min-width:160px; text-align:left; }
+  .call-history{ position: fixed; right:20px; bottom:140px; z-index:90; display:none; background:white; border-radius:8px; padding:8px; box-shadow:0 8px 20px rgba(0,0,0,.12); max-height:50vh; overflow:auto;}
   .mic-active{ background:#10b981 !important; color:white !important; }
   .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
-  .image-attachment{ border-radius:10px; display:block; max-width:280px; margin-top:8px; }
+  .image-attachment{ border-radius:10px; display:block; max-width:86vw; margin-top:8px; }
   .sticker{ width:120px; height:auto; margin-top:8px; }
-  .textarea{ resize:none; min-height:40px; max-height:200px; overflow:auto; }
+  .textarea{ resize:none; min-height:44px; max-height:220px; overflow:auto; border-radius:12px; padding:8px; }
+  main{ max-width:900px; margin:0 auto; padding-bottom:110px; } /* padding-bottom so messages not hidden behind composer */
+  .composer { position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom, 0); display:flex; justify-content:center; padding:12px; background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.8)); backdrop-filter: blur(6px); }
+  .composer-inner{ width:100%; max-width:900px; display:flex; gap:8px; align-items:flex-end; }
+  .no-bubble-image{ display:block; max-width:86vw; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.08); }
+  @media (min-width: 768px) {
+    .image-attachment { max-width:400px; }
+  }
 </style>
-</head>
-<body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 p-4">
+</head><body>
   <div class="top-right">
     <button id="callHistoryBtn" class="px-2 py-1 rounded bg-gray-100">Call History</button>
     <button id="profileBtn" class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center">P</button>
@@ -425,22 +435,25 @@ CHAT_HTML = r'''<!doctype html>
     </div>
   </header>
 
-  <main class="max-w-2xl mx-auto">
+  <main>
     <div class="flex items-center justify-between mb-2">
       <div>
         <div class="text-lg font-semibold">{{ username }}</div>
         <div class="text-xs text-gray-500">{{ user_status }}</div>
       </div>
       <div class="flex gap-2 items-center">
-        <button id="callAudio" class="px-3 py-1 rounded bg-gray-100">📞</button>
-        <button id="callVideo" class="px-3 py-1 rounded bg-gray-100">📹</button>
+        <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
+        <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
       </div>
     </div>
 
     <div id="messages" class="mb-3"></div>
+  </main>
 
-    <div class="flex items-end gap-2">
-      <button id="plusBtn" class="px-3 py-2 rounded bg-gray-100">＋</button>
+  <!-- composer fixed bottom -->
+  <div class="composer">
+    <div class="composer-inner">
+      <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow">＋</button>
 
       <div id="attachMenu" class="attach-menu">
         <label class="px-3 py-2 rounded bg-white border cursor-pointer">
@@ -457,11 +470,11 @@ CHAT_HTML = r'''<!doctype html>
         <button id="shareLocationBtn" class="px-3 py-2 rounded bg-white border">Share Location</button>
       </div>
 
-      <textarea id="msg" class="textarea flex-1 p-2 border rounded" placeholder="Type a message..."></textarea>
-      <button id="mic" class="mic-btn bg-gray-100 w-11 h-11 rounded-full">🎤</button>
+      <textarea id="msg" class="textarea flex-1" placeholder="Type a message..."></textarea>
+      <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎤</button>
       <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
     </div>
-  </main>
+  </div>
 
   <!-- sticker modal -->
   <div id="stickerModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50">
@@ -503,18 +516,40 @@ let micRecording = false;
 let mediaRecorder = null;
 let mediaChunks = [];
 const attachMenu = document.getElementById('attachMenu');
+const stickerModal = document.getElementById('stickerModal');
+const stickerGrid = document.getElementById('stickerGrid');
 
-// helper
+// helpers
 function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function byId(id){ return document.getElementById(id); }
 
 // auto-resize textarea
-const inputEl = document.getElementById('msg');
+const inputEl = byId('msg');
 function resizeTextarea(){
   inputEl.style.height = 'auto';
-  inputEl.style.height = Math.min(200, inputEl.scrollHeight) + 'px';
+  inputEl.style.height = Math.min(220, inputEl.scrollHeight) + 'px';
 }
 inputEl.addEventListener('input', resizeTextarea);
 resizeTextarea();
+
+// hide menus on body click
+document.addEventListener('click', (ev)=>{
+  // if click inside attachMenu or plusBtn or stickerModal, ignore
+  const attach = attachMenu;
+  const plus = byId('plusBtn');
+  if(attach && (attach.contains(ev.target) || plus.contains(ev.target))) {
+    return;
+  }
+  // close attach menu
+  if(attach) attach.style.display = 'none';
+  // close any message menus
+  document.querySelectorAll('.menu').forEach(n=>n.remove());
+  // close sticker modal if clicked outside modal content
+  if(stickerModal && !stickerModal.classList.contains('hidden')){
+    const wrap = stickerModal.querySelector('div');
+    if(!wrap.contains(ev.target)) { stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); }
+  }
+});
 
 // fetch & render messages
 async function poll(){
@@ -528,69 +563,107 @@ async function poll(){
       const me = (m.sender === myName);
       const wrapper = document.createElement('div'); wrapper.className='msg-row';
       const body = document.createElement('div'); body.className='msg-body';
+
+      // meta (name/time/ticks) on top
       const meta = document.createElement('div'); meta.className='msg-meta-top';
       const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
       const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
       meta.appendChild(leftMeta); meta.appendChild(rightMeta);
 
-      const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
-      bubble.innerHTML = m.text ? escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'' ) : '';
+      // attachments-only (no bubble) — show image/sticker directly when no text
+      const hasText = m.text && m.text.trim().length > 0;
+      const attachments = (m.attachments || []);
 
-      // attachments
-      if(m.attachments && m.attachments.length){
-        m.attachments.forEach(a=>{
-          if(a.type==='image' || a.type==='sticker') {
-            const el = document.createElement('img'); el.src = a.url; el.className = (a.type==='sticker'?'sticker':'image-attachment');
-            bubble.appendChild(el);
-          } else if(a.type==='audio'){
-            const el = document.createElement('audio'); el.src = a.url; el.controls=true; el.style.display='block'; el.style.marginTop='8px'; bubble.appendChild(el);
-          } else if(a.type==='doc'){
-            const el = document.createElement('a'); el.href = a.url; el.textContent = a.name || 'Document'; el.style.display='block'; el.style.marginTop='8px'; bubble.appendChild(el);
-          }
-        });
-      }
-
-      // menu button
+      // menu button (styled darker)
       const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
       menuBtn.onclick = (ev)=>{
         ev.stopPropagation();
         document.querySelectorAll('.menu').forEach(n=>n.remove());
         const menu = document.createElement('div'); menu.className='menu';
-        const edit = document.createElement('div'); edit.innerText='Edit'; edit.style.cursor='pointer'; edit.onclick = async ()=>{
-          const newText = prompt('Edit message text', m.text);
+        const edit = document.createElement('div'); edit.innerText='Edit'; edit.onclick = async (e)=>{
+          e.stopPropagation();
+          const newText = prompt('Edit message text', m.text || '');
           if(newText !== null){
             await fetch('/edit_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,text:newText})});
             container.innerHTML=''; lastId=0; poll();
           }
         };
-        const del = document.createElement('div'); del.innerText='Delete'; del.style.cursor='pointer'; del.onclick = async ()=>{
+        const del = document.createElement('div'); del.innerText='Delete'; del.onclick = async (e)=>{
+          e.stopPropagation();
           if(confirm('Delete this message?')){
             await fetch('/delete_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id})});
             container.innerHTML=''; lastId=0; poll();
           }
         };
-        const react = document.createElement('div'); react.innerText='React ❤️'; react.style.cursor='pointer'; react.onclick = async ()=>{
+        const react = document.createElement('div'); react.innerText='React ❤️'; react.onclick = async (e)=>{
+          e.stopPropagation();
           await fetch('/react_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,emoji:'❤️'})});
           container.innerHTML=''; lastId=0; poll();
         };
-        menu.appendChild(edit); menu.appendChild(del); menu.appendChild(react);
+        // permissions: only show Edit if sender == me
+        if(m.sender === myName) menu.appendChild(edit);
+        menu.appendChild(del); menu.appendChild(react);
         document.body.appendChild(menu);
         const rect = menuBtn.getBoundingClientRect();
-        menu.style.left = (rect.left - 10)+'px'; menu.style.top = (rect.bottom + window.scrollY + 6)+'px';
+        menu.style.left = (rect.left - 8) + 'px';
+        menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
       };
 
       body.appendChild(meta);
-      const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
-      if(!me) {
-        const avatar = document.createElement('div'); avatar.style.width='34px'; avatar.style.height='34px'; avatar.style.borderRadius='999px'; avatar.style.background='#e5e7eb'; avatar.innerText=m.sender[0]||'?'; avatar.style.display='flex'; avatar.style.alignItems='center'; avatar.style.justifyContent='center';
-        rowInner.appendChild(avatar);
+
+      // build content
+      // If attachments exist and no text: render attachments alone with no bubble
+      if(attachments.length && !hasText){
+        const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
+        if(!me){
+          const avatar = document.createElement('div'); avatar.style.width='34px'; avatar.style.height='34px'; avatar.style.borderRadius='999px'; avatar.style.background='#e5e7eb'; avatar.innerText=m.sender[0]||'?'; avatar.style.display='flex'; avatar.style.alignItems='center'; avatar.style.justifyContent='center';
+          rowInner.appendChild(avatar);
+        }
+        const attContainer = document.createElement('div');
+        attachments.forEach(a=>{
+          if(a.type==='image' || a.type==='sticker'){
+            const img = document.createElement('img'); img.src = a.url;
+            img.className = (a.type==='sticker' ? 'sticker' : 'no-bubble-image');
+            attContainer.appendChild(img);
+          } else if(a.type==='audio'){
+            const au = document.createElement('audio'); au.src = a.url; au.controls=true; attContainer.appendChild(au);
+          } else if(a.type==='doc'){
+            const link = document.createElement('a'); link.href = a.url; link.textContent = a.name || 'Document'; attContainer.appendChild(link);
+          }
+        });
+        rowInner.appendChild(attContainer);
+        body.appendChild(rowInner);
+      } else {
+        // normal bubble with text and inline attachments
+        const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
+        if(!me){
+          const avatar = document.createElement('div'); avatar.style.width='34px'; avatar.style.height='34px'; avatar.style.borderRadius='999px'; avatar.style.background='#e5e7eb'; avatar.innerText=m.sender[0]||'?'; avatar.style.display='flex'; avatar.style.alignItems='center'; avatar.style.justifyContent='center';
+          rowInner.appendChild(avatar);
+        }
+        const msgContainer = document.createElement('div');
+        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
+        bubble.innerHTML = hasText ? (escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'') ) : '';
+        // attachments inline (if both text+attachments)
+        if(attachments.length){
+          attachments.forEach(a=>{
+            if(a.type==='image'){
+              const el = document.createElement('img'); el.src = a.url; el.className = 'image-attachment'; bubble.appendChild(el);
+            } else if(a.type==='sticker'){
+              const el = document.createElement('img'); el.src = a.url; el.className = 'sticker'; bubble.appendChild(el);
+            } else if(a.type==='audio'){
+              const el = document.createElement('audio'); el.src = a.url; el.controls=true; bubble.appendChild(el);
+            } else if(a.type==='doc'){
+              const el = document.createElement('a'); el.href = a.url; el.textContent = a.name || 'Document'; bubble.appendChild(el);
+            }
+          });
+        }
+        const topRow = document.createElement('div'); topRow.style.display='flex'; topRow.style.justifyContent='space-between'; topRow.style.alignItems='flex-start';
+        topRow.appendChild(bubble); topRow.appendChild(menuBtn);
+        msgContainer.appendChild(topRow);
+        rowInner.appendChild(msgContainer);
+        body.appendChild(rowInner);
       }
-      const msgContainer = document.createElement('div');
-      const topRow = document.createElement('div'); topRow.style.display='flex'; topRow.style.justifyContent='space-between'; topRow.style.alignItems='center';
-      topRow.appendChild(bubble); topRow.appendChild(menuBtn);
-      msgContainer.appendChild(topRow);
-      rowInner.appendChild(msgContainer);
-      body.appendChild(rowInner);
+
       wrapper.appendChild(body);
       container.appendChild(wrapper);
       lastId = m.id;
@@ -598,34 +671,29 @@ async function poll(){
     container.scrollTop = container.scrollHeight;
   }catch(e){ console.error(e); }
 }
-poll(); setInterval(poll, 1500);
+poll(); setInterval(poll, 1600);
 
 // send text
-document.getElementById('sendBtn').addEventListener('click', async ()=>{
+byId('sendBtn').addEventListener('click', async ()=>{
   const text = inputEl.value.trim(); if(!text) return;
   inputEl.value = ''; resizeTextarea();
   await fetch('/send_message',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})});
   await poll();
 });
 
-// plus button opens attach menu
-document.getElementById('plusBtn').addEventListener('click', ()=> attachMenu.style.display = (attachMenu.style.display==='flex'?'none':'flex'));
-
-// file attachments
-document.getElementById('fileAttach').addEventListener('change', async (e)=>{
-  const f = e.target.files[0]; if(!f) return;
-  const fd = new FormData(); fd.append('file', f);
-  const r = await fetch('/upload_file',{method:'POST', body: fd}); const j = await r.json();
-  if(r.ok){ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:j.attachments})}); await poll(); }
-  e.target.value='';
-  attachMenu.style.display='none';
+// support Enter to send (Shift+Enter for newline)
+inputEl.addEventListener('keydown', async (e)=>{
+  if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); byId('sendBtn').click(); }
 });
 
-// camera maps to file input as well
-document.getElementById('cameraAttach').addEventListener('change', async (e)=> document.getElementById('fileAttach').files = e.target.files);
+// plus button opens attach menu
+byId('plusBtn').addEventListener('click', (ev)=>{ ev.stopPropagation(); attachMenu.style.display = (attachMenu.style.display==='flex'?'none':'flex'); });
 
-// document
-document.getElementById('docAttach').addEventListener('change', async (e)=>{
+// map camera input to file input when used on mobile
+byId('cameraAttach').addEventListener('change', async (e)=> document.getElementById('fileAttach').files = e.target.files);
+
+// file attachments
+byId('fileAttach').addEventListener('change', async (e)=>{
   const f = e.target.files[0]; if(!f) return;
   const fd = new FormData(); fd.append('file', f);
   const r = await fetch('/upload_file',{method:'POST', body: fd}); const j = await r.json();
@@ -633,28 +701,38 @@ document.getElementById('docAttach').addEventListener('change', async (e)=>{
   e.target.value=''; attachMenu.style.display='none';
 });
 
-// sticker picker
-const stickerModal = document.getElementById('stickerModal');
-document.getElementById('stickerPickerBtn').addEventListener('click', async ()=>{
-  const r1 = await fetch('/stickers_list'); const s = await r1.json();
-  const grid = document.getElementById('stickerGrid'); grid.innerHTML='';
-  s.forEach(url=>{
+// doc
+byId('docAttach').addEventListener('change', async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fetch('/upload_file',{method:'POST', body: fd}); const j = await r.json();
+  if(r.ok){ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:j.attachments})}); await poll(); }
+  e.target.value=''; attachMenu.style.display='none';
+});
+
+// sticker picker: auto load stickers+gifs from server
+byId('stickerPickerBtn').addEventListener('click', async (ev)=>{
+  ev.stopPropagation();
+  const res = await fetch('/stickers_list'); const arr = await res.json();
+  stickerGrid.innerHTML = '';
+  arr.forEach(url=>{
     const img = document.createElement('img'); img.src = url; img.className='sticker cursor-pointer';
-    img.onclick = async ()=>{ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:[{type:'sticker', url}]})}); stickerModal.classList.add('hidden'); await poll(); };
-    grid.appendChild(img);
+    img.onclick = async (e)=>{
+      await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:[{type:'sticker', url}]})});
+      stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex');
+      await poll();
+    };
+    stickerGrid.appendChild(img);
   });
   stickerModal.classList.remove('hidden'); stickerModal.classList.add('flex');
 });
-document.getElementById('closeSticker').addEventListener('click', ()=>{ stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); });
 
 // share contact & location
-document.getElementById('shareContactBtn').addEventListener('click', async ()=>{ const name = prompt('Contact name'); const phone = prompt('Phone'); if(!name||!phone) return; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`Contact: ${name} (${phone})`})}); await poll(); attachMenu.style.display='none'; });
-document.getElementById('shareLocationBtn').addEventListener('click', async ()=>{ if(!navigator.geolocation) return alert('Geolocation not supported'); navigator.geolocation.getCurrentPosition(async (pos)=>{ const lat=pos.coords.latitude, lon=pos.coords.longitude; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`Location: https://maps.google.com/?q=${lat},${lon}`})}); await poll(); }, err=> alert('Location error: '+err.message)); attachMenu.style.display='none'; });
+byId('shareContactBtn').addEventListener('click', async ()=>{ const name = prompt('Contact name'); const phone = prompt('Phone'); if(!name||!phone) return; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`Contact: ${name} (${phone})`})}); await poll(); attachMenu.style.display='none'; });
+byId('shareLocationBtn').addEventListener('click', async ()=>{ if(!navigator.geolocation) return alert('Geolocation not supported'); navigator.geolocation.getCurrentPosition(async (pos)=>{ const lat=pos.coords.latitude, lon=pos.coords.longitude; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`Location: https://maps.google.com/?q=${lat},${lon}`})}); await poll(); }, err=> alert('Location error: '+err.message)); attachMenu.style.display='none'; });
 
-// sticker upload handled earlier via /upload_sticker if using file picker (not necessary here)
-
-// mic toggle: record audio and send on stop
-const micBtn = document.getElementById('mic');
+// mic toggle
+const micBtn = byId('mic');
 micBtn.addEventListener('click', async ()=>{
   if(!micRecording){
     if(!navigator.mediaDevices) return alert('Media not supported');
@@ -679,31 +757,24 @@ micBtn.addEventListener('click', async ()=>{
   }
 });
 
-// profile modal handlers
-document.getElementById('profileBtn').addEventListener('click', async ()=>{
-  const modal = document.getElementById('profileModal'); modal.classList.remove('hidden'); modal.classList.add('flex');
-  const r = await fetch('/profile_get'); if(r.ok){ const j = await r.json(); document.getElementById('profile_display_name').value = j.name || ''; document.getElementById('profile_status').value = j.status || ''; }
+// profile modal
+byId('profileBtn').addEventListener('click', async ()=>{
+  const modal = byId('profileModal'); modal.classList.remove('hidden'); modal.classList.add('flex');
+  const r = await fetch('/profile_get'); if(r.ok){ const j = await r.json(); byId('profile_display_name').value = j.name || ''; byId('profile_status').value = j.status || ''; }
 });
-document.getElementById('closeProfile').addEventListener('click', ()=>{ const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
-document.getElementById('profileCancel').addEventListener('click', ()=>{ const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
-document.getElementById('profileForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const fd = new FormData(e.target); const r = await fetch('/profile_update',{method:'POST', body:fd}); const t = await r.text(); if(!r.ok){ document.getElementById('profileMsg').textContent = t; return; } document.getElementById('profileMsg').textContent='Saved'; setTimeout(()=> location.reload(), 400); });
+byId('closeProfile').addEventListener('click', ()=>{ const m=byId('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
+byId('profileCancel').addEventListener('click', ()=>{ const m=byId('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
+byId('profileForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const fd = new FormData(e.target); const r = await fetch('/profile_update',{method:'POST', body:fd}); const t = await r.text(); if(!r.ok){ byId('profileMsg').textContent = t; return; } byId('profileMsg').textContent='Saved'; setTimeout(()=> location.reload(), 400); });
 
-// call UI & Socket.io signaling
+// call flow
 let currentInvite = null;
 socket.on('connect', ()=> socket.emit('identify',{name: myName}));
-socket.on('incoming_call', (data)=>{ currentInvite = data.call_id; document.getElementById('incomingText').textContent = `${data.from} is calling (${data.isVideo ? 'video':'audio'})`; document.getElementById('incomingCall').style.display = 'block'; });
-document.getElementById('declineCall')?.addEventListener('click', ()=>{ if(currentInvite) socket.emit('call_decline',{call_id: currentInvite}); document.getElementById('incomingCall').style.display='none'; currentInvite=null; });
-document.getElementById('acceptCall')?.addEventListener('click', async ()=>{
-  if(!currentInvite) return;
-  socket.emit('call_accept',{call_id: currentInvite});
-  document.getElementById('incomingCall').style.display='none'; currentInvite=null;
-  // Basic approach: open a new page for the call or integrate WebRTC here.
-  window.open('/chat','_blank');
-});
+socket.on('incoming_call', (data)=>{ currentInvite = data.call_id; byId('incomingText').textContent = `${data.from} is calling (${data.isVideo ? 'video':'audio'})`; byId('incomingCall').style.display = 'block'; });
+byId('declineCall')?.addEventListener('click', ()=>{ if(currentInvite) socket.emit('call_decline',{call_id: currentInvite}); byId('incomingCall').style.display='none'; currentInvite=null; });
+byId('acceptCall')?.addEventListener('click', async ()=>{ if(!currentInvite) return; socket.emit('call_accept',{call_id: currentInvite}); byId('incomingCall').style.display='none'; currentInvite=null; window.open('/chat','_blank'); });
 
-// outgoing
-document.getElementById('callAudio').addEventListener('click', ()=> initiateCall(false));
-document.getElementById('callVideo').addEventListener('click', ()=> initiateCall(true));
+byId('callAudio').addEventListener('click', ()=> initiateCall(false));
+byId('callVideo').addEventListener('click', ()=> initiateCall(true));
 async function initiateCall(isVideo){
   const resp = await fetch('/partner_info'); const p = await resp.json();
   if(!p || !p.name) return alert('No partner yet');
@@ -712,8 +783,8 @@ async function initiateCall(isVideo){
 }
 
 // call history
-document.getElementById('callHistoryBtn').addEventListener('click', async ()=>{
-  const el = document.getElementById('callHistory'); el.style.display = el.style.display==='block'?'none':'block';
+byId('callHistoryBtn').addEventListener('click', async ()=>{
+  const el = byId('callHistory'); el.style.display = el.style.display==='block'?'none':'block';
   if(el.style.display==='block'){
     const r = await fetch('/call_logs'); const j = await r.json();
     el.innerHTML = '<div class="font-semibold mb-2">Call History</div>';
@@ -727,8 +798,7 @@ document.getElementById('callHistoryBtn').addEventListener('click', async ()=>{
   }
 });
 </script>
-</body>
-</html>
+</body></html>
 '''
 
 # --------- Routes & API ----------
@@ -1012,7 +1082,7 @@ def on_call_end(data):
         sid = USER_SID.get(info['caller'])
         if sid: emit('call_ended', {'call_id': call_id}, room=sid)
 
-# Simple WebRTC signaling passthrough
+# WebRTC signaling passthrough
 @socketio.on('webrtc_offer')
 def on_webrtc_offer(data):
     to = data.get('to'); sid = USER_SID.get(to)
@@ -1035,3 +1105,4 @@ if __name__ == "__main__":
     pathlib.Path(os.path.join(app.static_folder,"stickers")).mkdir(parents=True, exist_ok=True)
     pathlib.Path(os.path.join(app.static_folder,"gifs")).mkdir(parents=True, exist_ok=True)
     socketio.run(app, host="0.0.0.0", port=PORT, debug=True)
+    
