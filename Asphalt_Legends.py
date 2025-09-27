@@ -10,10 +10,9 @@ app = Flask(__name__)
 app.secret_key = os.urandom(32)
 PORT = int(os.environ.get("PORT", 5004))
 DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
-RP_ID = "localhost"
 RP_NAME = "Asphalt Legends"
 
-# simple in-memory map for per-flow challenge states
+# in-memory per-flow state (ok for single-process dev)
 FIDO2_STATES = {}
 
 # ---------- DB ----------
@@ -46,7 +45,6 @@ def save_credential(name, cred_id_bytes, raw_blob_bytes, make_owner=False):
     c = conn.cursor()
     if make_owner:
         c.execute("UPDATE users SET is_owner = 0")
-    # Insert or replace by name
     c.execute(
         "INSERT OR REPLACE INTO users (name, cred_id, cred_raw, is_owner, is_partner) VALUES (?, ?, ?, COALESCE((SELECT is_owner FROM users WHERE name = ?),?), COALESCE((SELECT is_partner FROM users WHERE name = ?),0))",
         (name, sqlite3.Binary(cred_id_bytes), sqlite3.Binary(raw_blob_bytes), name, 1 if make_owner else 0, name),
@@ -132,8 +130,8 @@ def b64url_decode(s: str) -> bytes:
     s2 = s + "=" * ((4 - len(s) % 4) % 4)
     return base64.urlsafe_b64decode(s2)
 
-# ---------- Templates (index + chat) ----------
-INDEX_HTML = """<!doctype html>
+# ---------- HTML templates (raw strings to avoid Python escape warnings) ----------
+INDEX_HTML = r"""<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -181,7 +179,7 @@ INDEX_HTML = """<!doctype html>
   </div>
 
 <script>
-// ----- base64url <-> ArrayBuffer helpers -----
+// base64url <-> ArrayBuffer helpers
 function bufferToBase64Url(buffer){
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -199,16 +197,8 @@ function base64UrlToBuffer(base64url){
   for(let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
   return bytes.buffer;
 }
-function utf8ToBuffer(s){
-  return new TextEncoder().encode(s).buffer;
-}
-function decodeClientDataJSON(b64str){
-  const buf = base64UrlToBuffer(b64str);
-  const txt = new TextDecoder().decode(buf);
-  return JSON.parse(txt);
-}
 
-// ----- helpers to talk to server and perform navigator.credentials -----
+// fetch wrapper
 async function fetchJsonOrText(url, opts){
   const r = await fetch(url, opts);
   const text = await r.text();
@@ -216,7 +206,7 @@ async function fetchJsonOrText(url, opts){
   catch(e){ return { ok: r.ok, status: r.status, json: null, text }; }
 }
 
-// Registration flow
+// Registration and login handlers
 document.addEventListener('DOMContentLoaded', ()=>{
   const regForm = document.getElementById('regForm');
   const loginBtn = document.getElementById('loginBtn');
@@ -233,19 +223,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
         // convert challenge + user.id to ArrayBuffers
         opts.challenge = base64UrlToBuffer(opts.challenge);
         opts.user.id = base64UrlToBuffer(opts.user.id);
-        // ensure pubKeyCredParams present:
         opts.pubKeyCredParams = opts.pubKeyCredParams || [{type:'public-key', alg:-7}];
-
-        // call WebAuthn create
+        // create credential
         const cred = await navigator.credentials.create({ publicKey: opts });
         if(!cred) throw new Error('No credential returned (user canceled?)');
-
-        // build transportable object
         const clientDataJSON = bufferToBase64Url(cred.response.clientDataJSON);
         const attObj = bufferToBase64Url(cred.response.attestationObject);
         const rawId = bufferToBase64Url(cred.rawId || cred.id);
-
-        // send to server
         const complete = await fetchJsonOrText('/complete_register', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ name, credential: { id: rawId, rawId: rawId, response: { clientDataJSON, attestationObject: attObj } } })
@@ -271,16 +255,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
         if(opts.allowCredentials && Array.isArray(opts.allowCredentials)){
           opts.allowCredentials = opts.allowCredentials.map(c => ({ type: c.type, id: base64UrlToBuffer(c.id) }));
         }
-
         const assertion = await navigator.credentials.get({ publicKey: opts });
         if(!assertion) throw new Error('No assertion returned (user canceled?)');
-
-        // prepare to send
         const clientDataJSON = bufferToBase64Url(assertion.response.clientDataJSON);
         const authenticatorData = bufferToBase64Url(assertion.response.authenticatorData);
         const signature = bufferToBase64Url(assertion.response.signature);
         const rawId = bufferToBase64Url(assertion.rawId || assertion.id);
-
         const complete = await fetchJsonOrText('/complete_login', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ credential: { id: rawId, rawId, response: { clientDataJSON, authenticatorData, signature } } })
@@ -288,7 +268,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         if(!complete.ok) throw new Error('complete_login failed: '+complete.text);
         const body = complete.json;
         document.getElementById('loginStatus').textContent = 'Login successful.';
-        // redirect to chat
         window.location = '/after_login?name=' + encodeURIComponent(body.username || '');
       }catch(err){
         console.error(err);
@@ -302,7 +281,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </html>
 """
 
-CHAT_HTML = """<!doctype html>
+CHAT_HTML = r"""<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -423,22 +402,26 @@ def logout():
     session.pop('username', None)
     return redirect(url_for('index'))
 
-# ---------- WebAuthn endpoints (simplified verification) ----------
+# ---------- WebAuthn endpoints ----------
+def _current_rp_id():
+    # derive rp id from request host (strip optional port)
+    host = request.host.split(':')[0]
+    return host
+
 @app.route("/begin_register", methods=["POST"])
 def begin_register():
     body = request.get_json() or {}
     name = body.get("name") or "ProGamer ♾️"
-    # Make user id and challenge
     user_id = secrets.token_bytes(16)
     challenge = secrets.token_bytes(32)
-    # Save state key
     key = secrets.token_hex(16)
+    # store state: challenge and user_id (both base64url)
     FIDO2_STATES[key] = {"type": "register", "challenge": b64url_encode(challenge), "name": name, "user_id": b64url_encode(user_id)}
     session['fido2_state_key'] = key
-    # Options returned to browser (challenge and user.id are base64url strings)
+    rp_id = _current_rp_id()
     options = {
         "challenge": b64url_encode(challenge),
-        "rp": {"name": RP_NAME, "id": RP_ID},
+        "rp": {"name": RP_NAME, "id": rp_id},
         "user": {"id": b64url_encode(user_id), "name": name, "displayName": name},
         "pubKeyCredParams": [{"type": "public-key", "alg": -7}, {"type":"public-key","alg": -257}],
         "timeout": 60000,
@@ -458,21 +441,18 @@ def complete_register():
     if not key or key not in FIDO2_STATES:
         return "no state", 400
     state = FIDO2_STATES.pop(key)
-    # credential includes rawId (b64url), response.clientDataJSON (b64url), response.attestationObject (b64url)
     try:
         rawId_b64 = credential.get("rawId") or credential.get("id")
         clientDataJSON_b64 = credential.get("response", {}).get("clientDataJSON")
         attObj_b64 = credential.get("response", {}).get("attestationObject")
         if not rawId_b64 or not clientDataJSON_b64 or not attObj_b64:
             return "bad credential shape", 400
-        # Basic check: verify clientData.challenge matches our challenge
         clientData = b64url_decode(clientDataJSON_b64)
         import json
         cd = json.loads(clientData.decode("utf-8"))
-        # cd.challenge is base64url string (no padding) in most browsers
+        # verify challenge matches what we generated
         if cd.get("challenge") != state["challenge"]:
             return "challenge mismatch", 400
-        # store credential id and raw attestation
         cred_id = b64url_decode(rawId_b64)
         raw_blob = b64url_decode(attObj_b64)
         existing = load_first_user()
@@ -492,12 +472,13 @@ def begin_login():
     key = secrets.token_hex(16)
     FIDO2_STATES[key] = {"type": "login", "challenge": b64url_encode(challenge)}
     session['fido2_state_key'] = key
+    rp_id = _current_rp_id()
     options = {
         "challenge": b64url_encode(challenge),
         "allowCredentials": [{"type": "public-key", "id": b64url_encode(user["cred_id"])}],
         "timeout": 60000,
         "userVerification": "required",
-        "rpId": RP_ID
+        "rpId": rp_id
     }
     return jsonify(options)
 
@@ -518,28 +499,25 @@ def complete_login():
         signature_b64 = credential.get("response", {}).get("signature")
         if not rawId_b64 or not clientDataJSON_b64 or not authenticatorData_b64 or not signature_b64:
             return "bad assertion shape", 400
-        # verify clientData challenge
         clientData = b64url_decode(clientDataJSON_b64)
         import json
         cd = json.loads(clientData.decode("utf-8"))
         if cd.get("challenge") != state["challenge"]:
             return "challenge mismatch", 400
-        # verify rawId matches stored cred_id
         raw_id = b64url_decode(rawId_b64)
         stored = load_first_user()
         if not stored:
             return "no stored user", 400
         if raw_id != stored["cred_id"]:
             return "credential id mismatch", 403
-        # NOTE: we are NOT verifying the signature/authenticatorData cryptographically here.
-        # Mark user as signed in
+        # NOTE: not verifying signature/authenticatorData cryptographically here (demo only)
         username = stored["name"]
         session['username'] = username
         return jsonify({"status":"ok", "username": username})
     except Exception as e:
         return f"login error: {e}", 500
 
-# ---------- Chat ----------
+# ---------- Chat endpoints ----------
 @app.route("/chat")
 def chat():
     username = session.get('username')
