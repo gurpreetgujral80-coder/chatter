@@ -4,24 +4,22 @@ import sqlite3
 import base64
 import secrets
 import time
+import json
 import hashlib
 import hmac
 from flask import Flask, render_template_string, request, jsonify, session, redirect, url_for
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static")
 app.secret_key = os.urandom(32)
 PORT = int(os.environ.get("PORT", 5004))
 DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
 RP_NAME = "Asphalt Legends"
 
-# in-memory typing status: {username: expiry_timestamp}
-TYPING = {}
-
 # ---------- DB helpers ----------
 def init_db():
-    # create tables if missing; we'll also ensure schema upgraded below
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    # users: master passkey stored as salted hash (first user = owner)
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,52 +27,21 @@ def init_db():
             pass_salt BLOB,
             pass_hash BLOB,
             is_owner INTEGER DEFAULT 0,
-            is_partner INTEGER DEFAULT 0,
-            last_seen INTEGER
+            is_partner INTEGER DEFAULT 0
         );
     """)
+    # messages: text, created timestamp, reactions (JSON text), edited flag, deleted flag
     c.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sender TEXT,
             text TEXT,
-            created_at INTEGER,
-            delivered INTEGER DEFAULT 0,
-            read INTEGER DEFAULT 0
+            reactions TEXT DEFAULT '[]',
+            edited INTEGER DEFAULT 0,
+            deleted INTEGER DEFAULT 0,
+            created_at INTEGER
         );
     """)
-    conn.commit()
-    conn.close()
-    ensure_schema()
-
-def ensure_schema():
-    """
-    Ensure DB has the expected columns (safe migration).
-    Adds last_seen on users and delivered,read on messages if missing.
-    """
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    # users columns
-    c.execute("PRAGMA table_info(users)")
-    cols = [r[1] for r in c.fetchall()]
-    if "last_seen" not in cols:
-        try:
-            c.execute("ALTER TABLE users ADD COLUMN last_seen INTEGER")
-        except Exception:
-            pass
-    # messages columns
-    c.execute("PRAGMA table_info(messages)")
-    cols = [r[1] for r in c.fetchall()]
-    if "delivered" not in cols:
-        try:
-            c.execute("ALTER TABLE messages ADD COLUMN delivered INTEGER DEFAULT 0")
-        except Exception:
-            pass
-    if "read" not in cols:
-        try:
-            c.execute("ALTER TABLE messages ADD COLUMN read INTEGER DEFAULT 0")
-        except Exception:
-            pass
     conn.commit()
     conn.close()
 
@@ -83,17 +50,14 @@ def save_user(name, salt_bytes, hash_bytes, make_owner=False, make_partner=False
     c = conn.cursor()
     if make_owner:
         c.execute("UPDATE users SET is_owner = 0")  # only one owner
-    # insert or replace: keep flags if existing
-    # Use UPSERT pattern that keeps existing flags if row exists
     c.execute("""
-        INSERT INTO users (name, pass_salt, pass_hash, is_owner, is_partner, last_seen)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO users (name, pass_salt, pass_hash, is_owner, is_partner)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(name) DO UPDATE SET
-          pass_salt=excluded.pass_salt,
-          pass_hash=excluded.pass_hash,
+          pass_salt=excluded.pass_salt, pass_hash=excluded.pass_hash,
           is_owner=COALESCE((SELECT is_owner FROM users WHERE name = excluded.name), excluded.is_owner),
           is_partner=COALESCE((SELECT is_partner FROM users WHERE name = excluded.name), excluded.is_partner)
-    """, (name, sqlite3.Binary(salt_bytes), sqlite3.Binary(hash_bytes), 1 if make_owner else 0, 1 if make_partner else 0, int(time.time())))
+    """, (name, sqlite3.Binary(salt_bytes), sqlite3.Binary(hash_bytes), 1 if make_owner else 0, 1 if make_partner else 0))
     conn.commit()
     conn.close()
 
@@ -107,11 +71,11 @@ def set_partner_by_name(name):
 def get_owner():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, name, pass_salt, pass_hash, is_owner, is_partner, last_seen FROM users WHERE is_owner = 1 LIMIT 1")
+    c.execute("SELECT id, name, pass_salt, pass_hash, is_owner, is_partner FROM users WHERE is_owner = 1 LIMIT 1")
     row = c.fetchone()
     conn.close()
     if row:
-        return {"id": row[0], "name": row[1], "pass_salt": row[2], "pass_hash": row[3], "is_owner": bool(row[4]), "is_partner": bool(row[5]), "last_seen": row[6]}
+        return {"id": row[0], "name": row[1], "pass_salt": row[2], "pass_hash": row[3], "is_owner": bool(row[4]), "is_partner": bool(row[5])}
     return None
 
 def get_partner():
@@ -127,65 +91,130 @@ def get_partner():
 def load_user_by_name(name):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, name, pass_salt, pass_hash, is_owner, is_partner, last_seen FROM users WHERE name = ? LIMIT 1", (name,))
+    c.execute("SELECT id, name, pass_salt, pass_hash, is_owner, is_partner FROM users WHERE name = ? LIMIT 1", (name,))
     row = c.fetchone()
     conn.close()
     if row:
-        return {"id": row[0], "name": row[1], "pass_salt": row[2], "pass_hash": row[3], "is_owner": bool(row[4]), "is_partner": bool(row[5]), "last_seen": row[6]}
+        return {"id": row[0], "name": row[1], "pass_salt": row[2], "pass_hash": row[3], "is_owner": bool(row[4]), "is_partner": bool(row[5])}
     return None
 
 def load_first_user():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT name, pass_salt, pass_hash, is_owner, is_partner, last_seen FROM users ORDER BY id LIMIT 1")
+    c.execute("SELECT name, pass_salt, pass_hash, is_owner, is_partner FROM users ORDER BY id LIMIT 1")
     row = c.fetchone()
     conn.close()
     if row:
-        return {"name": row[0], "pass_salt": row[1], "pass_hash": row[2], "is_owner": bool(row[3]), "is_partner": bool(row[4]), "last_seen": row[5]}
+        return {"name": row[0], "pass_salt": row[1], "pass_hash": row[2], "is_owner": bool(row[3]), "is_partner": bool(row[4])}
     return None
 
 def save_message(sender, text):
-    """
-    Save message and then prune older messages to keep only the last 80.
-    """
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("INSERT INTO messages (sender, text, created_at, delivered, read) VALUES (?, ?, ?, 0, 0)", (sender, text, int(time.time())))
+    ts = int(time.time())
+    c.execute("INSERT INTO messages (sender, text, created_at) VALUES (?, ?, ?)", (sender, text, ts))
     conn.commit()
-    # prune if more than 80 messages exist
+    conn.close()
+    trim_messages_limit(80)
+
+def fetch_messages(since_id=0, include_deleted=False):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    if include_deleted:
+        c.execute("SELECT id, sender, text, reactions, edited, deleted, created_at FROM messages WHERE id > ? ORDER BY id ASC", (since_id,))
+    else:
+        c.execute("SELECT id, sender, text, reactions, edited, deleted, created_at FROM messages WHERE id > ? AND deleted = 0 ORDER BY id ASC", (since_id,))
+    rows = c.fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        reactions = []
+        try:
+            reactions = json.loads(r[3] or "[]")
+        except Exception:
+            reactions = []
+        out.append({"id": r[0], "sender": r[1], "text": r[2], "reactions": reactions, "edited": bool(r[4]), "deleted": bool(r[5]), "created_at": r[6]})
+    return out
+
+def trim_messages_limit(max_messages=80):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM messages")
     total = c.fetchone()[0]
-    MAX = 80
-    if total > MAX:
-        to_remove = total - MAX
-        # delete oldest 'to_remove' messages
-        c.execute("DELETE FROM messages WHERE id IN (SELECT id FROM messages ORDER BY id ASC LIMIT ?)", (to_remove,))
-        conn.commit()
+    if total <= max_messages:
+        conn.close()
+        return
+    to_delete = total - max_messages
+    # delete oldest 'to_delete' rows
+    c.execute("DELETE FROM messages WHERE id IN (SELECT id FROM messages ORDER BY id ASC LIMIT ?)", (to_delete,))
+    conn.commit()
     conn.close()
 
-def fetch_messages(since_id=0, viewer=None):
-    """
-    Return messages with delivered/read flags.
-    If viewer provided, messages not sent by viewer are marked delivered.
-    """
+def edit_message(msg_id, new_text, editor):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, sender, text, created_at, delivered, read FROM messages WHERE id > ? ORDER BY id ASC", (since_id,))
-    rows = c.fetchall()
-    msgs = [{"id": r[0], "sender": r[1], "text": r[2], "created_at": r[3], "delivered": bool(r[4]), "read": bool(r[5])} for r in rows]
-    # mark delivered for messages addressed to viewer (i.e., messages where sender != viewer)
-    if viewer:
-        ids_to_mark = [m["id"] for m in msgs if m["sender"] != viewer and not m["delivered"]]
-        if ids_to_mark:
-            q = "UPDATE messages SET delivered = 1 WHERE id IN ({})".format(",".join("?"*len(ids_to_mark)))
-            c.execute(q, ids_to_mark)
-            conn.commit()
-            # reflect change in returned messages
-            for m in msgs:
-                if m["id"] in ids_to_mark:
-                    m["delivered"] = True
+    # only allow if editor is the sender or owner
+    c.execute("SELECT sender FROM messages WHERE id = ? LIMIT 1", (msg_id,))
+    r = c.fetchone()
+    if not r:
+        conn.close()
+        return False, "no message"
+    sender = r[0]
+    user = load_user_by_name(editor)
+    if editor != sender and not (user and user.get("is_owner")):
+        conn.close()
+        return False, "not allowed"
+    c.execute("UPDATE messages SET text = ?, edited = 1 WHERE id = ?", (new_text, msg_id))
+    conn.commit()
     conn.close()
-    return msgs
+    return True, None
+
+def delete_message(msg_id, requester):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT sender FROM messages WHERE id = ? LIMIT 1", (msg_id,))
+    r = c.fetchone()
+    if not r:
+        conn.close()
+        return False, "no message"
+    sender = r[0]
+    user = load_user_by_name(requester)
+    if requester != sender and not (user and user.get("is_owner")):
+        conn.close()
+        return False, "not allowed"
+    # soft-delete
+    c.execute("UPDATE messages SET deleted = 1 WHERE id = ?", (msg_id,))
+    conn.commit()
+    conn.close()
+    return True, None
+
+def react_message(msg_id, reactor, emoji):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT reactions FROM messages WHERE id = ? LIMIT 1", (msg_id,))
+    r = c.fetchone()
+    if not r:
+        conn.close()
+        return False, "no message"
+    reactions = []
+    try:
+        reactions = json.loads(r[0] or "[]")
+    except Exception:
+        reactions = []
+    # reactions stored as list of {"emoji":"❤️","user":"name"}
+    # toggle: if same user+emoji present -> remove; else add
+    found = False
+    for rec in reactions:
+        if rec.get("emoji") == emoji and rec.get("user") == reactor:
+            reactions.remove(rec)
+            found = True
+            break
+    if not found:
+        reactions.append({"emoji": emoji, "user": reactor})
+    c.execute("UPDATE messages SET reactions = ? WHERE id = ?", (json.dumps(reactions), msg_id))
+    conn.commit()
+    conn.close()
+    return True, None
 
 init_db()
 
@@ -214,7 +243,16 @@ def verify_pass(passphrase: str, salt: bytes, expected_hash: bytes) -> bool:
     dk = hashlib.pbkdf2_hmac("sha256", passphrase, salt, PBKDF2_ITER, dklen=len(expected_hash))
     return hmac.compare_digest(dk, expected_hash)
 
-# ---------- Responsive templates (Tailwind) ----------
+# ---------- typing/presence in-memory state ----------
+TYPING = {}       # username -> last typing timestamp
+LAST_SEEN = {}    # username -> last activity timestamp
+
+def touch_user_presence(username):
+    if not username: return
+    LAST_SEEN[username] = int(time.time())
+
+# ---------- Templates ----------
+# Header uses an image at static/heading.png (you must place that file)
 INDEX_HTML = r"""<!doctype html>
 <html>
 <head>
@@ -224,36 +262,37 @@ INDEX_HTML = r"""<!doctype html>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
-  .card { backdrop-filter: blur(6px); }
+  header img { height:48px; width:auto; }
 </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 flex items-center justify-center p-4">
-  <div class="w-full max-w-3xl card bg-white/90 rounded-3xl shadow-2xl p-6">
-    <div class="sm:flex sm:items-center sm:justify-between mb-4">
-      <div>
-        <h1 class="text-2xl sm:text-3xl font-extrabold text-indigo-700">Asphalt Legends</h1>
-        <p class="text-sm text-gray-600 mt-1">Private chat for two — use the single passkey to register & login.</p>
+<body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 flex items-start justify-center p-4">
+  <div class="w-full max-w-3xl">
+    <header class="flex items-center justify-between gap-4 mb-4">
+      <div class="flex items-center gap-3">
+        <img src="/static/heading.png" alt="heading" />
+        <div class="text-2xl font-extrabold">
+          <span class="text-indigo-700">asphalt</span>
+          <span class="text-pink-600 ml-2">legends</span>
+        </div>
       </div>
-      <div class="mt-4 sm:mt-0 text-sm text-gray-500">Tip: First registration sets the shared passkey (owner).</div>
-    </div>
+      <div class="text-sm text-gray-500">Demo chat • single shared passkey</div>
+    </header>
 
     {% if session.get('username') %}
-      <div class="text-center mb-6">
-        <div class="text-lg">Signed in as <strong>{{ session['username'] }}</strong></div>
-        <div class="mt-4 flex justify-center gap-3">
-          <a href="{{ url_for('chat') }}" class="px-4 py-2 rounded-lg bg-indigo-600 text-white">Open Chat</a>
-          <form method="post" action="{{ url_for('logout') }}">
-            <button class="px-4 py-2 rounded-lg bg-gray-200">Logout</button>
-          </form>
+      <div class="mb-6 flex items-center justify-between bg-white p-4 rounded-lg shadow">
+        <div>Signed in as <strong>{{ session['username'] }}</strong></div>
+        <div class="flex items-center gap-3">
+          <button id="profileBtn" class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center">P</button>
+          <form method="post" action="{{ url_for('logout') }}"><button class="px-4 py-2 rounded bg-gray-200">Logout</button></form>
         </div>
       </div>
     {% else %}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div class="p-4 border rounded-lg bg-white">
-          <h3 class="font-semibold mb-3 text-indigo-700">Register</h3>
+          <h3 class="font-semibold mb-3 text-indigo-700">Register (set / use shared passkey)</h3>
           <form id="regForm" class="space-y-3">
             <input id="reg_name" name="name" class="w-full p-3 border rounded-lg" placeholder="Your name" value="ProGamer ♾️" />
-            <input id="reg_passkey" name="passkey" type="password" class="w-full p-3 border rounded-lg" placeholder="Enter master passkey (choose one)" />
+            <input id="reg_passkey" name="passkey" type="password" class="w-full p-3 border rounded-lg" placeholder="Choose a shared master passkey" />
             <div class="flex items-center gap-3">
               <button type="submit" class="px-4 py-2 rounded-lg bg-green-600 text-white flex-1">Register</button>
               <button id="genBtn" type="button" class="px-3 py-2 rounded-lg bg-gray-100">Generate</button>
@@ -277,8 +316,26 @@ INDEX_HTML = r"""<!doctype html>
         </div>
       </div>
     {% endif %}
+
     <footer class="text-center text-xs text-gray-400 mt-6">Responsive — works on phone, tablet & desktop</footer>
   </div>
+
+<!-- Profile modal -->
+<div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40">
+  <div class="bg-white rounded-lg p-4 w-80">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <div class="text-lg font-bold">Profile</div>
+        <div id="profileName" class="text-sm text-gray-600"></div>
+      </div>
+      <button id="closeProfile" class="text-gray-500">✕</button>
+    </div>
+    <div class="flex gap-2">
+      <a id="openChat" class="px-3 py-2 rounded bg-indigo-600 text-white">Open Chat</a>
+      <form method="post" action="{{ url_for('logout') }}"><button class="px-3 py-2 rounded bg-gray-200">Logout</button></form>
+    </div>
+  </div>
+</div>
 
 <script>
 function show(el, msg, err=false){
@@ -287,21 +344,18 @@ function show(el, msg, err=false){
   node.textContent = msg;
   node.style.color = err ? '#b91c1c' : '#16a34a';
 }
-
 document.getElementById('genBtn')?.addEventListener('click', ()=>{
   const s = Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => (b%36).toString(36)).join('');
   document.getElementById('reg_passkey').value = s;
   show('regStatus','Generated passkey — copy it and keep it safe.');
 });
-
 async function postJson(url, body){
   const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   const text = await r.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch(e){ json = null; }
-  return { ok: r.ok, status: r.status, text, json };
+  try { return { ok: r.ok, status: r.status, json: JSON.parse(text), text }; } catch(e){ return { ok: r.ok, status: r.status, json: null, text }; }
 }
 
+// Register
 document.getElementById('regForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
   show('regStatus','Registering...');
@@ -318,6 +372,7 @@ document.getElementById('regForm')?.addEventListener('submit', async (e)=>{
   }
 });
 
+// Login
 document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
   show('loginStatus','Logging in...');
@@ -333,6 +388,20 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
     show('loginStatus','Login failed: '+(err.message || err), true);
   }
 });
+
+// Profile modal
+document.getElementById('profileBtn')?.addEventListener('click', async ()=>{
+  const modal = document.getElementById('profileModal');
+  document.getElementById('profileName').textContent = '{{ session.get("username") or "" }}';
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+});
+document.getElementById('closeProfile')?.addEventListener('click', ()=>{
+  const modal = document.getElementById('profileModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+});
+document.getElementById('openChat')?.addEventListener('click', ()=> location.href = '/chat');
 </script>
 </body>
 </html>
@@ -347,15 +416,15 @@ CHAT_HTML = r"""<!doctype html>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}</style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 p-4 flex items-center justify-center">
-  <div class="w-full max-w-2xl bg-white/95 rounded-3xl shadow-2xl p-6">
+<body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 p-4 flex items-start justify-center">
+  <div class="w-full max-w-2xl bg-white/95 rounded-2xl shadow-2xl p-6">
     <div class="flex items-center justify-between mb-4">
       <div>
         <h2 class="text-xl font-bold text-indigo-700">Chat — Private (2 people)</h2>
         <div class="text-sm text-gray-600 mt-1">Signed in as <strong>{{ username }}</strong></div>
       </div>
       <div class="flex gap-2 items-center">
-        <div id="remoteStatus" class="text-sm text-gray-500 mr-3">—</div>
+        <button id="profileBtn" class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center">P</button>
         <form method="post" action="{{ url_for('logout') }}"><button class="px-3 py-1 rounded bg-gray-200">Logout</button></form>
       </div>
     </div>
@@ -377,36 +446,46 @@ CHAT_HTML = r"""<!doctype html>
 
     <div id="messages" class="h-64 overflow-auto border rounded p-3 mb-3 bg-gray-50"></div>
 
-    <div id="typing" class="text-sm text-gray-500 mb-2" style="min-height:1.2rem"></div>
-
     <form id="sendForm" class="flex gap-2">
-      <input id="msg" class="flex-1 p-2 border rounded" placeholder="Type a message..." autocomplete="off"/>
+      <input id="msg" class="flex-1 p-2 border rounded" placeholder="Type a message..." />
       <button class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
     </form>
   </div>
 
+<!-- small profile modal -->
+<div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40">
+  <div class="bg-white rounded-lg p-4 w-80">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <div class="text-lg font-bold">Profile</div>
+        <div id="profileName" class="text-sm text-gray-600"></div>
+      </div>
+      <button id="closeProfile" class="text-gray-500">✕</button>
+    </div>
+    <div class="flex gap-2">
+      <button id="profileCloseBtn" class="px-3 py-2 rounded bg-indigo-600 text-white">Close</button>
+      <form method="post" action="{{ url_for('logout') }}"><button class="px-3 py-2 rounded bg-gray-200">Logout</button></form>
+    </div>
+  </div>
+</div>
+
 <script>
 let lastId = 0;
-let typingTimer = null;
-const TYPING_TTL = 4000; // ms
-
 function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function fmtMessage(m, me){
+function fmtMessage(m){
   const when = new Date(m.created_at * 1000).toLocaleTimeString();
-  // show ticks: delivered (single) and read (double)
-  let ticks = '';
-  if(me){
-    if(m.read) ticks = '✓✓';
-    else if(m.delivered) ticks = '✓';
-    else ticks = '';
-  }
-  return `<div class="mb-2"><div class="text-sm text-gray-500">${escapeHtml(m.sender)} · ${when} ${ticks ? '<span class="ml-2 text-indigo-600">'+escapeHtml(ticks)+'</span>' : ''}</div><div class="mt-1">${escapeHtml(m.text)}</div></div>`;
-}
-
-async function fetchJson(url){
-  const r = await fetch(url);
-  if(!r.ok) return null;
-  return r.json();
+  const text = m.deleted ? '<em>message deleted</em>' : escapeHtml(m.text) + (m.edited ? ' <span class="text-xs text-gray-400">edited</span>' : '');
+  const reactions = (m.reactions || []).map(r => `<span title="${escapeHtml(r.user)}">${escapeHtml(r.emoji)}</span>`).join(' ');
+  return `<div class="mb-2 rounded p-2 bg-white shadow-sm">
+    <div class="text-sm text-gray-500">${escapeHtml(m.sender)} · ${when}</div>
+    <div class="mt-1">${text}</div>
+    <div class="mt-1 text-sm">${reactions}</div>
+    <div class="mt-2 flex gap-2">
+      <button data-id="${m.id}" class="react-btn text-xs px-2 py-1 rounded bg-gray-100">❤️</button>
+      <button data-id="${m.id}" class="edit-btn text-xs px-2 py-1 rounded bg-gray-100">Edit</button>
+      <button data-id="${m.id}" class="del-btn text-xs px-2 py-1 rounded bg-gray-100">Delete</button>
+    </div>
+  </div>`;
 }
 
 async function poll(){
@@ -416,33 +495,11 @@ async function poll(){
     const data = await resp.json();
     if(data.length){
       const container = document.getElementById('messages');
-      const me = "{{ username }}";
       for(const m of data){
-        container.insertAdjacentHTML('beforeend', fmtMessage(m, m.sender === me ? true : false));
+        container.insertAdjacentHTML('beforeend', fmtMessage(m));
         lastId = m.id;
       }
       container.scrollTop = container.scrollHeight;
-      // notify server we've read up to lastId
-      await fetch('/mark_read', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({up_to: lastId})});
-    }
-    // status (online / typing)
-    const st = await fetchJson('/status');
-    if(st){
-      const other = st.other;
-      let s = '';
-      if(other){
-        if(other.typing) s = other.name + ' is typing…';
-        else if(other.last_seen) {
-          const age = Math.floor((Date.now()/1000 - other.last_seen));
-          if(age < 10) s = other.name + ' • online';
-          else s = other.name + ' • last seen ' + age + 's ago';
-        } else s = other.name;
-      } else {
-        s = 'No partner';
-      }
-      document.getElementById('remoteStatus').textContent = s;
-      const typ = document.getElementById('typing');
-      typ.textContent = (st.other && st.other.typing) ? (st.other.name + ' is typing…') : '';
     }
   }catch(e){ console.error('poll error', e); }
 }
@@ -451,15 +508,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   poll();
   setInterval(poll, 1200);
 
+  // send
   document.getElementById('sendForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
-    const text = document.getElementById('msg').value.trim();
+    const textEl = document.getElementById('msg');
+    const text = textEl.value.trim();
     if(!text) return;
-    document.getElementById('msg').value = '';
+    textEl.value = '';
     await fetch('/send_message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})});
     await poll();
   });
 
+  // join
   const joinBtn = document.getElementById('joinBtn');
   if(joinBtn){
     joinBtn.addEventListener('click', async ()=>{
@@ -470,15 +530,41 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  // typing indicator: send updates while typing
-  const msgInput = document.getElementById('msg');
-  msgInput.addEventListener('input', async ()=>{
-    // notify server typing=true
-    try{ await fetch('/typing', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({typing:true})}); }catch(e){}
-    if(typingTimer) clearTimeout(typingTimer);
-    typingTimer = setTimeout(async ()=>{
-      try{ await fetch('/typing', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({typing:false})}); }catch(e){}
-    }, TYPING_TTL);
+  // profile modal
+  document.getElementById('profileBtn')?.addEventListener('click', ()=>{
+    const modal = document.getElementById('profileModal');
+    document.getElementById('profileName').textContent = '{{ username }}';
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+  });
+  document.getElementById('closeProfile')?.addEventListener('click', ()=> { const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex');});
+  document.getElementById('profileCloseBtn')?.addEventListener('click', ()=> { const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex');});
+
+  // delegation for react/edit/delete
+  document.getElementById('messages').addEventListener('click', async (e)=>{
+    const id = e.target.getAttribute('data-id');
+    if(!id) return;
+    if(e.target.classList.contains('react-btn')){
+      // use hardcoded emoji for demo
+      await fetch('/react_message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: parseInt(id), emoji: '❤️'})});
+      await poll();
+    } else if(e.target.classList.contains('edit-btn')){
+      const newText = prompt('Edit message text:');
+      if(newText !== null){
+        await fetch('/edit_message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: parseInt(id), text: newText})});
+        // refresh
+        document.getElementById('messages').innerHTML = '';
+        lastId = 0;
+        await poll();
+      }
+    } else if(e.target.classList.contains('del-btn')){
+      if(confirm('Delete this message?')){
+        await fetch('/delete_message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: parseInt(id)})});
+        // refresh
+        document.getElementById('messages').innerHTML = '';
+        lastId = 0;
+        await poll();
+      }
+    }
   });
 });
 </script>
@@ -498,21 +584,19 @@ def register():
     passkey = body.get("passkey") or ""
     if not name:
         return "missing name", 400
-    # First user: create master passkey if none exists
     existing_master = load_first_user()
     if existing_master is None:
-        # owner creation; passkey required
         if not passkey:
             return "passkey required for first registration (choose a master passkey)", 400
         salt, h = hash_pass(passkey)
         try:
             save_user(name, salt, h, make_owner=True)
             session['username'] = name
+            touch_user_presence(name)
             return jsonify({"status":"registered", "username": name})
         except Exception as e:
             return f"db error: {e}", 500
     else:
-        # not first user: require passkey match the master's passkey
         master = get_owner()
         if master is None:
             master = load_first_user()
@@ -526,6 +610,7 @@ def register():
         try:
             save_user(name, salt, h, make_owner=False, make_partner=False)
             session['username'] = name
+            touch_user_presence(name)
             return jsonify({"status":"registered", "username": name})
         except Exception as e:
             return f"db error: {e}", 500
@@ -546,86 +631,17 @@ def login():
         owner = get_owner()
         if owner and verify_pass(passkey, owner['pass_salt'], owner['pass_hash']):
             session['username'] = name
-            # update last_seen
-            conn = sqlite3.connect(DB_PATH); c = conn.cursor(); c.execute("UPDATE users SET last_seen = ? WHERE name = ?", (int(time.time()), name)); conn.commit(); conn.close()
+            touch_user_presence(name)
             return jsonify({"status":"ok", "username": name})
         return "invalid passkey", 403
     session['username'] = name
-    # update last_seen
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor(); c.execute("UPDATE users SET last_seen = ? WHERE name = ?", (int(time.time()), name)); conn.commit(); conn.close()
+    touch_user_presence(name)
     return jsonify({"status":"ok", "username": name})
 
 @app.route("/logout", methods=["POST"])
 def logout():
     session.pop('username', None)
     return redirect(url_for('index'))
-
-# ---------- Web-like realtime endpoints ----------
-@app.route("/begin_login", methods=["POST"])
-def begin_login_stub():
-    return "not used", 400
-
-@app.route("/typing", methods=["POST"])
-def typing():
-    username = session.get('username')
-    if not username:
-        return "not signed in", 400
-    body = request.get_json() or {}
-    typing = bool(body.get("typing"))
-    if typing:
-        TYPING[username] = time.time() + 4.0
-    else:
-        TYPING.pop(username, None)
-    # update last_seen
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor(); c.execute("UPDATE users SET last_seen = ? WHERE name = ?", (int(time.time()), username)); conn.commit(); conn.close()
-    return "ok"
-
-@app.route("/status")
-def status():
-    """
-    Return partner info and typing/last_seen relative to current user.
-    """
-    username = session.get('username')
-    owner = get_owner()
-    partner = get_partner()
-    other = None
-    if not username:
-        return jsonify({"other": None})
-    if owner and owner['name'] == username:
-        # I'm owner; other is partner if exists
-        if partner:
-            name = partner['name']
-            # read last_seen from DB
-            u = load_user_by_name(name)
-            ls = u.get("last_seen") if u else None
-            t = bool(TYPING.get(name, 0) > time.time())
-            other = {"name": name, "last_seen": ls, "typing": t}
-    else:
-        # I'm partner or normal user; show owner
-        if owner:
-            name = owner['name']
-            u = load_user_by_name(name)
-            ls = u.get("last_seen") if u else None
-            t = bool(TYPING.get(name, 0) > time.time())
-            other = {"name": name, "last_seen": ls, "typing": t}
-    return jsonify({"other": other})
-
-@app.route("/mark_read", methods=["POST"])
-def mark_read():
-    username = session.get('username')
-    if not username:
-        return "not signed in", 400
-    body = request.get_json() or {}
-    up_to = int(body.get("up_to") or 0)
-    if up_to <= 0:
-        return "bad up_to", 400
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    # mark as read only messages not sent by user
-    c.execute("UPDATE messages SET read = 1 WHERE id <= ? AND sender != ?", (up_to, username))
-    conn.commit()
-    conn.close()
-    return "ok"
 
 # ---------- Chat endpoints ----------
 @app.route("/chat")
@@ -643,6 +659,7 @@ def chat():
     owner_name = owner["name"] if owner else None
     partner_name = partner["name"] if partner else None
     is_member = is_owner or is_partner
+    touch_user_presence(username)
     return render_template_string(CHAT_HTML, username=username, is_owner=is_owner, is_partner=is_partner, owner_name=owner_name, partner_name=partner_name, is_member=is_member)
 
 @app.route("/join_chat", methods=["POST"])
@@ -678,25 +695,74 @@ def send_message():
     if not text:
         return "empty", 400
     save_message(username, text)
-    # update last_seen
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor(); c.execute("UPDATE users SET last_seen = ? WHERE name = ?", (int(time.time()), username)); conn.commit(); conn.close()
+    touch_user_presence(username)
     return jsonify({"status": "ok"})
 
 @app.route("/poll_messages")
 def poll_messages():
     since = int(request.args.get("since", 0))
-    username = session.get('username')
-    # update last_seen
-    if username:
-        conn = sqlite3.connect(DB_PATH); c = conn.cursor(); c.execute("UPDATE users SET last_seen = ? WHERE name = ?", (int(time.time()), username)); conn.commit(); conn.close()
-    msgs = fetch_messages(since, viewer=username)
+    msgs = fetch_messages(since)
     return jsonify(msgs)
 
-@app.route("/poll_all_messages")   # optional full fetch
-def poll_all_messages():
+@app.route("/edit_message", methods=["POST"])
+def route_edit_message():
     username = session.get('username')
-    msgs = fetch_messages(0, viewer=username)
-    return jsonify(msgs)
+    if not username:
+        return "not signed in", 400
+    body = request.get_json() or {}
+    msg_id = body.get("id")
+    text = body.get("text", "").strip()
+    ok, err = edit_message(msg_id, text, username)
+    if not ok:
+        return err, 400
+    touch_user_presence(username)
+    return jsonify({"status":"ok"})
+
+@app.route("/delete_message", methods=["POST"])
+def route_delete_message():
+    username = session.get('username')
+    if not username:
+        return "not signed in", 400
+    body = request.get_json() or {}
+    msg_id = body.get("id")
+    ok, err = delete_message(msg_id, username)
+    if not ok:
+        return err, 400
+    touch_user_presence(username)
+    return jsonify({"status":"ok"})
+
+@app.route("/react_message", methods=["POST"])
+def route_react_message():
+    username = session.get('username')
+    if not username:
+        return "not signed in", 400
+    body = request.get_json() or {}
+    msg_id = body.get("id")
+    emoji = body.get("emoji", "❤️")
+    ok, err = react_message(msg_id, username, emoji)
+    if not ok:
+        return err, 400
+    touch_user_presence(username)
+    return jsonify({"status":"ok"})
+
+# presence & typing endpoints (lightweight)
+@app.route("/typing", methods=["POST"])
+def route_typing():
+    username = session.get('username')
+    if not username:
+        return "not signed in", 400
+    TYPING[username] = int(time.time())
+    touch_user_presence(username)
+    return jsonify({"status":"ok"})
+
+@app.route("/status/<name>")
+def status(name):
+    last = LAST_SEEN.get(name)
+    typing = False
+    t = TYPING.get(name)
+    if t and (int(time.time()) - t) < 4:
+        typing = True
+    return jsonify({"last_seen": last, "typing": typing})
 
 if __name__ == "__main__":
     print("DB:", DB_PATH)
