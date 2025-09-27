@@ -7,9 +7,10 @@ import json
 import hashlib
 import hmac
 import pathlib
+import base64
 from flask import (
     Flask, render_template_string, request, jsonify, session,
-    redirect, url_for, send_from_directory
+    redirect, url_for, send_from_directory, abort
 )
 from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -19,12 +20,14 @@ app = Flask(__name__, static_folder="static")
 app.secret_key = os.urandom(32)
 PORT = int(os.environ.get("PORT", 5004))
 DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
-HEADING_IMG = "/static/heading.png"  # <-- add this to static/
+HEADING_IMG = "/static/heading.png"  # ensure you add this file to static/
 MAX_MESSAGES = 80
+ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
 
 # ensure static subfolders
 pathlib.Path(os.path.join(app.static_folder, "uploads")).mkdir(parents=True, exist_ok=True)
 pathlib.Path(os.path.join(app.static_folder, "stickers")).mkdir(parents=True, exist_ok=True)
+pathlib.Path(os.path.join(app.static_folder, "gifs")).mkdir(parents=True, exist_ok=True)
 
 # SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
@@ -33,7 +36,6 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # base schema (kept compatible with previous versions)
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +57,6 @@ def init_db():
             reactions TEXT DEFAULT '[]',
             edited INTEGER DEFAULT 0,
             created_at INTEGER
-            -- status column added below if missing
         );
     """)
     c.execute("""
@@ -70,15 +71,6 @@ def init_db():
         );
     """)
     conn.commit()
-    # ensure messages.status column exists (0=sent,1=delivered,2=read)
-    try:
-        c.execute("SELECT status FROM messages LIMIT 1")
-    except Exception:
-        try:
-            c.execute("ALTER TABLE messages ADD COLUMN status INTEGER DEFAULT 0")
-            conn.commit()
-        except Exception:
-            pass
     conn.close()
 
 def db_conn():
@@ -89,7 +81,8 @@ init_db()
 # user helpers
 def save_user(name, salt_bytes, hash_bytes, avatar=None, status="", make_owner=False, make_partner=False):
     conn = db_conn(); c = conn.cursor()
-    if make_owner: c.execute("UPDATE users SET is_owner = 0")
+    if make_owner:
+        c.execute("UPDATE users SET is_owner = 0")
     c.execute("""
         INSERT INTO users (name, pass_salt, pass_hash, avatar, status, is_owner, is_partner)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -140,20 +133,20 @@ def save_message(sender, text, attachments=None):
     conn = db_conn(); c = conn.cursor()
     ts = int(time.time())
     att = json.dumps(attachments or [])
-    c.execute("INSERT INTO messages (sender, text, attachments, created_at, status) VALUES (?, ?, ?, ?, ?)", (sender, text, att, ts, 0))
+    c.execute("INSERT INTO messages (sender, text, attachments, created_at) VALUES (?, ?, ?, ?)", (sender, text, att, ts))
     conn.commit(); conn.close()
     trim_messages_limit(MAX_MESSAGES)
 
 def fetch_messages(since_id=0):
     conn = db_conn(); c = conn.cursor()
-    c.execute("SELECT id, sender, text, attachments, reactions, edited, created_at, COALESCE(status,0) FROM messages WHERE id > ? ORDER BY id ASC", (since_id,))
+    c.execute("SELECT id, sender, text, attachments, reactions, edited, created_at FROM messages WHERE id > ? ORDER BY id ASC", (since_id,))
     rows = c.fetchall(); conn.close()
     out = []
     for r in rows:
-        mid, sender, text, attachments_json, reactions_json, edited, created_at, status = r
+        mid, sender, text, attachments_json, reactions_json, edited, created_at = r
         attachments = json.loads(attachments_json or "[]")
         reactions = json.loads(reactions_json or "[]")
-        out.append({"id": mid, "sender": sender, "text": text, "attachments": attachments, "reactions": reactions, "edited": bool(edited), "created_at": created_at, "status": int(status)})
+        out.append({"id": mid, "sender": sender, "text": text, "attachments": attachments, "reactions": reactions, "edited": bool(edited), "created_at": created_at})
     return out
 
 def trim_messages_limit(max_messages=80):
@@ -197,7 +190,6 @@ def react_message_db(msg_id, reactor, emoji):
     if not r:
         conn.close(); return False, "no message"
     reactions = json.loads(r[0] or "[]")
-    # toggle reactor/emoji
     found = False
     for rec in list(reactions):
         if rec.get("emoji") == emoji and rec.get("user") == reactor:
@@ -252,163 +244,144 @@ def verify_pass(passphrase: str, salt: bytes, expected_hash: bytes) -> bool:
     dk = hashlib.pbkdf2_hmac("sha256", passphrase, salt, PBKDF2_ITER, dklen=len(expected_hash))
     return hmac.compare_digest(dk, expected_hash)
 
-# ---------- presence ----------
+# ---------- presence & runtime state ----------
 LAST_SEEN = {}
+USER_SID = {}      # username -> sid
+CALL_INVITES = {}  # call_id -> info
+
 def touch_user_presence(username):
     if not username: return
     LAST_SEEN[username] = int(time.time())
 
-# ---------- Socket & signalling state ----------
-USER_SID = {}      # username -> sid
-CALL_INVITES = {}  # call_id -> info
+# ---------- Avatar generation (WhatsApp-like initials SVG) ----------
+def initials_and_color(name):
+    nm = (name or "").strip()
+    initials = ""
+    parts = nm.split()
+    if len(parts) == 0:
+        initials = "?"
+    elif len(parts) == 1:
+        initials = parts[0][:2].upper()
+    else:
+        initials = (parts[0][0] + parts[-1][0]).upper()
+    # color from name hash
+    h = hashlib.sha256(nm.encode("utf-8")).digest()
+    r,g,b = h[0], h[1], h[2]
+    return initials, f"rgb({r},{g},{b})"
 
-# ------------- Avatar generation (WhatsApp-like initials) -------------
-def generate_avatar_for_name(name):
-    # deterministic initials avatar with circular gradient like WhatsApp.
-    if not name: name = "U"
-    initials = "".join([p[:1].upper() for p in name.split() if p][:2]) or name[:1].upper()
-    digest = hashlib.sha256(name.encode("utf-8")).hexdigest()
-    # pick two colors from digest
-    c1 = "#" + digest[0:6]
-    c2 = "#" + digest[6:12]
-    svg = f"""<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'>
-      <defs>
-        <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
-          <stop offset='0' stop-color='{c1}'/>
-          <stop offset='1' stop-color='{c2}'/>
-        </linearGradient>
-      </defs>
-      <rect width='100%' height='100%' fill='transparent'/>
-      <circle cx='128' cy='128' r='120' fill='url(#g)'/>
-      <text x='50%' y='55%' font-size='96' font-family='Helvetica, Arial, sans-serif' text-anchor='middle' fill='#ffffff' font-weight='700'>{initials}</text>
-    </svg>"""
-    fname = f"uploads/avatar_{secrets.token_hex(6)}.svg"
-    path = os.path.join(app.static_folder, fname)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(svg)
-    return url_for('static', filename=fname)
+@app.route("/avatar/<name>")
+def avatar_svg(name):
+    try:
+        name = name.replace("/", " ").strip()
+        initials, color = initials_and_color(name)
+        svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128">
+  <rect width="100%" height="100%" fill="{color}" rx="20" />
+  <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="system-ui,Segoe UI,Roboto" font-size="52" fill="#fff">{initials}</text>
+</svg>'''
+        return app.response_class(svg, mimetype='image/svg+xml')
+    except Exception:
+        abort(404)
 
-# --------- Templates (modified only where needed) ----------
-# INDEX and CHAT templates are similar to previous version but not shown fully here for brevity.
-# They are included below inline as strings so the file is self-contained (kept largely the same,
-# but poll endpoint now returns status and socket emits 'message_read' etc).
+# ---------- Helpers for listing stickers/gifs ----------
+def list_static_folder(sub):
+    folder = os.path.join(app.static_folder, sub)
+    if not os.path.isdir(folder): return []
+    out=[]
+    for fn in os.listdir(folder):
+        p = os.path.join(folder, fn)
+        if os.path.isfile(p):
+            ext = fn.rsplit(".",1)[-1].lower()
+            out.append(url_for('static', filename=f"{sub}/{fn}"))
+    return out
 
-INDEX_HTML = r"""<!doctype html>
+# ---------- TEMPLATES (compact but feature-complete) ----------
+INDEX_HTML = r'''<!doctype html>
 <html>
-<head>
-<meta charset="utf-8">
-<title>Asphalt Legends — Login / Register</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Asphalt Legends — Login</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<style>
-  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
-  header { text-align:center; margin-top:12px; margin-bottom:6px; }
-  header img { max-height:64px; display:block; margin:0 auto; }
-  .heading { display:flex; justify-content:center; gap:8px; align-items:center; margin-top:6px; }
-  .heading .left{ color:#3730a3; font-weight:800; font-size:1.5rem; }
-  .heading .right{ color:#be185d; font-weight:800; font-size:1.5rem; margin-left:6px; }
-  .top-right { position: absolute; right: 16px; top: 8px; display:flex; gap:8px; align-items:center; }
-  .avatar-sm{width:40px;height:40px;border-radius:999px;object-fit:cover;}
-</style>
+<style>body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;} .heading{display:flex;justify-content:center;gap:8px;align-items:center} .left{color:#3730a3;font-weight:800;font-size:1.5rem} .right{color:#be185d;font-weight:800;font-size:1.5rem}</style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 p-4">
-  <div class="top-right">
-    {% if session.get('username') %}
-      <button id="profileBtn" class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center">P</button>
-      <form method="post" action="{{ url_for('logout') }}"><button class="px-3 py-1 rounded bg-gray-200">Logout</button></form>
-    {% endif %}
-  </div>
+  <div class="max-w-3xl mx-auto">
+    <header class="text-center my-4">
+      <img src="{{ heading_img }}" alt="heading" class="mx-auto" style="max-height:64px"/>
+      <div class="heading mt-2"><div class="left">Asphalt</div><div class="right">Legends</div></div>
+      <p class="text-xs text-gray-500 mt-2">Shared single passkey login. First user creates master passkey.</p>
+    </header>
 
-  <header>
-    <img src="{{ heading_img }}" alt="heading" />
-    <div class="heading">
-      <div class="left">Asphalt</div>
-      <div class="right">Legends</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {% if first_user_none %}
+      <section class="p-4 bg-white rounded-lg shadow">
+        <h3 class="text-indigo-700 font-semibold mb-2">Register (create master passkey)</h3>
+        <form id="regForm">
+          <input id="reg_name" class="w-full p-2 border rounded mb-2" placeholder="Your display name" />
+          <input id="reg_passkey" type="password" class="w-full p-2 border rounded mb-2" placeholder="Choose master passkey" />
+          <div class="flex gap-2">
+            <button type="submit" class="px-3 py-2 rounded bg-green-600 text-white flex-1">Register</button>
+            <button id="genBtn" type="button" class="px-3 py-2 rounded bg-gray-100">Generate</button>
+          </div>
+          <div id="regStatus" class="text-sm mt-2 text-red-500"></div>
+        </form>
+      </section>
+      {% endif %}
+
+      <section class="p-4 bg-white rounded-lg shadow">
+        <h3 class="text-indigo-700 font-semibold mb-2">Login</h3>
+        <form id="loginForm">
+          <input id="login_name" class="w-full p-2 border rounded mb-2" placeholder="Your display name" />
+          <input id="login_passkey" type="password" class="w-full p-2 border rounded mb-2" placeholder="Master passkey" />
+          <button type="submit" class="w-full px-3 py-2 rounded bg-indigo-600 text-white">Login</button>
+          <div id="loginStatus" class="text-sm mt-2 text-red-500"></div>
+        </form>
+      </section>
     </div>
-    <div class="text-xs text-gray-500 mt-2">Shared passkey login — first registered account sets the master passkey.</div>
-  </header>
-
-  <main class="max-w-3xl mx-auto mt-6">
-    {% if session.get('username') %}
-      <div class="bg-white rounded-lg p-4 shadow">
-        <div class="flex items-center gap-3">
-          {% set u = load_user(session.get('username')) %}
-          {% if u and u.avatar %}<img src="{{ u.avatar }}" class="avatar-sm">{% else %}<div class="avatar-sm bg-gray-200 flex items-center justify-center">P</div>{% endif %}
-          <div><div class="font-semibold">{{ session['username'] }}</div><div class="text-xs text-gray-500">{{ u.status if u else '' }}</div></div>
-        </div>
-        <div class="mt-4"><a href="{{ url_for('chat') }}" class="px-4 py-2 rounded bg-indigo-600 text-white">Open Chat</a></div>
-      </div>
-    {% else %}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {% if first_user_none %}
-        <section class="p-4 bg-white rounded-lg shadow">
-          <h3 class="text-indigo-700 font-semibold mb-2">Register (create master passkey)</h3>
-          <form id="regForm">
-            <input id="reg_name" class="w-full p-2 border rounded mb-2" placeholder="Name" />
-            <input id="reg_passkey" type="password" class="w-full p-2 border rounded mb-2" placeholder="Choose master passkey" />
-            <div class="flex gap-2">
-              <button type="submit" class="px-3 py-2 rounded bg-green-600 text-white flex-1">Register</button>
-              <button id="genBtn" type="button" class="px-3 py-2 rounded bg-gray-100">Generate</button>
-            </div>
-            <div id="regStatus" class="text-sm mt-2 text-red-500"></div>
-          </form>
-        </section>
-        {% endif %}
-        <section class="p-4 bg-white rounded-lg shadow">
-          <h3 class="text-indigo-700 font-semibold mb-2">Login</h3>
-          <form id="loginForm">
-            <input id="login_name" class="w-full p-2 border rounded mb-2" placeholder="Name" />
-            <input id="login_passkey" type="password" class="w-full p-2 border rounded mb-2" placeholder="Master passkey" />
-            <button type="submit" class="w-full px-3 py-2 rounded bg-indigo-600 text-white">Login</button>
-            <div id="loginStatus" class="text-sm mt-2 text-red-500"></div>
-          </form>
-        </section>
-      </div>
-    {% endif %}
-  </main>
-
-<div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40">
-  <div class="bg-white rounded-lg p-4 w-96">
-    <div class="flex items-center justify-between mb-3">
-      <div><div class="text-lg font-bold">Profile</div><div id="profileName" class="text-sm text-gray-600"></div></div>
-      <button id="closeProfile" class="text-gray-500">✕</button>
-    </div>
-    <form id="profileForm" enctype="multipart/form-data">
-      <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name" class="w-full p-2 border rounded" /></div>
-      <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status" class="w-full p-2 border rounded" /></div>
-      <div class="mb-2"><label class="text-xs">Avatar</label><input id="profile_avatar" name="avatar" type="file" accept="image/*" class="w-full" /></div>
-      <div class="flex gap-2"><button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button><button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button></div>
-      <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
-    </form>
   </div>
-</div>
 
 <script>
-function show(el, msg, err=false){ const n=document.getElementById(el); if(!n) return; n.textContent=msg; n.style.color=err? '#b91c1c':'#16a34a'; }
-document.getElementById('genBtn')?.addEventListener('click', ()=>{
-  const s = Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b=> (b%36).toString(36)).join('');
-  document.getElementById('reg_passkey').value = s; show('regStatus','Generated, copy it now.');
-});
-async function postJson(url, body){ const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}); const text = await r.text(); try{return {ok:r.ok,json:JSON.parse(text),text};}catch(e){return {ok:r.ok,text};} }
-document.getElementById('regForm')?.addEventListener('submit', async (e)=>{ e.preventDefault(); show('regStatus','Registering...'); try{ const res = await postJson('/register',{name:document.getElementById('reg_name').value, passkey:document.getElementById('reg_passkey').value}); if(!res.ok) throw new Error(res.text||'failed'); show('regStatus','Registered'); setTimeout(()=>location.href='/chat',400); }catch(err){ show('regStatus','Register failed: '+(err.message||err), true); }});
-document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{ e.preventDefault(); show('loginStatus','Logging in...'); try{ const res = await postJson('/login',{name:document.getElementById('login_name').value, passkey:document.getElementById('login_passkey').value}); if(!res.ok) throw new Error(res.text||'failed'); show('loginStatus','Logged in'); setTimeout(()=>location.href='/chat',300); }catch(err){ show('loginStatus','Login failed: '+(err.message||err), true); }});
+function show(id,msg,err){const e=document.getElementById(id); if(!e) return; e.textContent=msg; e.style.color = err? '#b91c1c':'#16a34a';}
+document.getElementById('genBtn')?.addEventListener('click', ()=>{ const s = Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => (b%36).toString(36)).join(''); document.getElementById('reg_passkey').value = s; show('regStatus','Generated — copy it.'); });
 
-// profile
-document.getElementById('profileBtn')?.addEventListener('click', async ()=>{ const m=document.getElementById('profileModal'); m.classList.remove('hidden'); m.classList.add('flex'); const r=await fetch('/profile_get'); if(r.ok){ const j=await r.json(); document.getElementById('profile_display_name').value=j.name||''; document.getElementById('profile_status').value=j.status||''; document.getElementById('profileName').textContent=j.name||''; }});
-document.getElementById('closeProfile')?.addEventListener('click', ()=>{ const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
-document.getElementById('profileCancel')?.addEventListener('click', ()=>{ const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
-document.getElementById('profileForm')?.addEventListener('submit', async (e)=>{ e.preventDefault(); const fd=new FormData(e.target); const r=await fetch('/profile_update',{method:'POST',body:fd}); const t=await r.text(); if(!r.ok) { document.getElementById('profileMsg').textContent=t; return;} document.getElementById('profileMsg').textContent='Saved'; setTimeout(()=>location.reload(),500); });
+async function postJson(url, body){
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const text = await r.text();
+  try { return {ok:r.ok, json: JSON.parse(text), text}; } catch(e){ return {ok:r.ok, text}; }
+}
+
+document.getElementById('regForm')?.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  show('regStatus','Registering...');
+  const name = document.getElementById('reg_name').value.trim();
+  const passkey = document.getElementById('reg_passkey').value;
+  try{
+    const res = await postJson('/register', {name, passkey});
+    if(!res.ok) throw new Error(res.text || 'register failed');
+    show('regStatus','Registered — redirecting...');
+    setTimeout(()=> location.href='/chat', 500);
+  }catch(err){ show('regStatus','Register failed: '+(err.message||err), true); }
+});
+
+document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  show('loginStatus','Logging in...');
+  const name = document.getElementById('login_name').value.trim();
+  const passkey = document.getElementById('login_passkey').value;
+  try{
+    const res = await postJson('/login', {name, passkey});
+    if(!res.ok) throw new Error(res.text || 'login failed');
+    show('loginStatus','Logged in — redirecting...');
+    setTimeout(()=> location.href='/chat', 300);
+  }catch(err){ show('loginStatus','Login failed: '+(err.message||err), true); }
+});
 </script>
 </body>
 </html>
-"""
+'''
 
-CHAT_HTML = r"""<!doctype html>
+CHAT_HTML = r'''<!doctype html>
 <html>
-<head>
-<meta charset="utf-8">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Asphalt Legends — Chat</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
@@ -417,46 +390,31 @@ CHAT_HTML = r"""<!doctype html>
   .heading{display:flex;justify-content:center;gap:8px;align-items:center;margin-top:6px;}
   .left{ color:#3730a3;font-weight:800;font-size:1.4rem;}
   .right{ color:#be185d;font-weight:800;font-size:1.4rem;margin-left:6px;}
-  .top-left{ position: absolute; left: 12px; top: 8px; display:flex; gap:8px; align-items:center;}
   .top-right{ position: absolute; right: 12px; top: 8px; display:flex; gap:8px; align-items:center;}
   .avatar-sm{width:36px;height:36px;border-radius:999px;object-fit:cover;}
-  .bubble{ padding:10px 12px; border-radius:12px; display:inline-block; max-width:72%; box-shadow: 0 1px 0 rgba(0,0,0,0.03); transition: transform .12s ease; }
-  .bubble.opening{ transform: scale(.98); }
-  .me{ background: linear-gradient(90deg,#DCF8C6,#E6FFE6); border-bottom-right-radius:3px;}
+  .bubble{ padding:10px 12px; border-radius:12px; display:inline-block; max-width:72%; word-break:break-word; white-space:pre-wrap;}
+  .me{ background: linear-gradient(90deg,#dcf8c6,#e6ffe6); border-bottom-right-radius:3px;}
   .them{ background:#fff; border-bottom-left-radius:3px;}
   .meta{ font-size:.75rem; color:#6b7280; margin-bottom:4px;}
   .msg-row{ margin-bottom:10px; display:flex; gap:8px; align-items:flex-start;}
   .msg-body{ display:flex; flex-direction:column;}
-  .three-dot{ background: none; border: none; cursor:pointer; font-size:1rem; color:#6b7280; transition: transform .08s ease; }
-  .three-dot:active{ transform: scale(.92); }
-  .menu{ position: absolute; background:white; border:1px solid #eee; padding:6px; border-radius:8px; box-shadow:0 8px 20px rgba(0,0,0,.08); z-index:60; transform-origin: top right; animation: pop .12s ease; }
-  @keyframes pop { from { transform: scale(.9); opacity:0 } to { transform: scale(1); opacity:1 } }
+  .three-dot{ background: none; border: none; cursor:pointer; font-size:1rem; color:#6b7280;}
+  .menu{ position: absolute; background:white; border:1px solid #eee; padding:6px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.12); z-index:80;}
   .fab{ position: fixed; right:20px; bottom:20px; z-index:50; }
   .attach-menu{ position: fixed; right:20px; bottom:84px; z-index:50; display:none; flex-direction:column; gap:8px; }
-  .call-history{ position: fixed; right:20px; bottom:140px; z-index:50; display:none; background:white; border-radius:8px; padding:8px; box-shadow:0 8px 20px rgba(0,0,0,.12); max-width:320px; overflow:auto; max-height:60vh;}
+  .call-history{ position: fixed; right:20px; bottom:140px; z-index:50; display:none; background:white; border-radius:8px; padding:8px; box-shadow:0 8px 20px rgba(0,0,0,.12); max-height:50vh; overflow:auto;}
   .mic-active{ background:#10b981 !important; color:white !important; }
   .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
-  .photo-only img{ border-radius:12px; max-width:100%; height:auto; display:block; margin:8px 0; box-shadow: 0 6px 18px rgba(0,0,0,0.06);}
-  .composer{ position: sticky; bottom: 0; background: transparent; padding-top:10px; margin-top:8px; }
-  textarea#msg { min-height:44px; max-height:140px; resize:none; overflow:auto; border-radius:8px; }
-  .sticker-picker{ position: fixed; left:50%; transform:translateX(-50%); bottom:100px; background:white; padding:8px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.12); display:none; z-index:70; max-width:90vw; max-height:50vh; overflow:auto; }
-  .sticker-grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(80px,1fr)); gap:8px; }
-  .sticker-grid img{ width:100%; height:auto; border-radius:8px; cursor:pointer; }
-  .typing-indicator{ font-size:0.9rem; color:#6b7280; margin-bottom:6px; }
-  .tick-gray{ color:#9ca3af; margin-left:6px; font-weight:700; }
-  .tick-blue{ color:#0ea5a4; margin-left:6px; font-weight:700; }
+  .image-attachment{ border-radius:10px; display:block; max-width:280px; margin-top:8px; }
+  .sticker{ width:120px; height:auto; margin-top:8px; }
+  .textarea{ resize:none; min-height:40px; max-height:200px; overflow:auto; }
 </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 p-4">
-  <div class="top-left">
-    <button id="callAudio" class="px-3 py-1 rounded bg-gray-100">Audio</button>
-    <button id="callVideo" class="px-3 py-1 rounded bg-gray-100">Video</button>
-  </div>
-
   <div class="top-right">
     <button id="callHistoryBtn" class="px-2 py-1 rounded bg-gray-100">Call History</button>
     <button id="profileBtn" class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center">P</button>
-    <form method="post" action="{{ url_for('logout') }}"><button class="px-3 py-1 rounded bg-gray-200">Logout</button></form>
+    <form method="post" action="{{ url_for('logout') }}" style="display:inline"><button class="px-3 py-1 rounded bg-gray-200">Logout</button></form>
   </div>
 
   <header>
@@ -467,52 +425,54 @@ CHAT_HTML = r"""<!doctype html>
     </div>
   </header>
 
-  <main class="max-w-2xl mx-auto" style="padding-bottom:56px;">
+  <main class="max-w-2xl mx-auto">
     <div class="flex items-center justify-between mb-2">
       <div>
         <div class="text-lg font-semibold">{{ username }}</div>
-        <div id="typing" class="typing-indicator" style="display:none;"></div>
+        <div class="text-xs text-gray-500">{{ user_status }}</div>
       </div>
       <div class="flex gap-2 items-center">
+        <button id="callAudio" class="px-3 py-1 rounded bg-gray-100">📞</button>
+        <button id="callVideo" class="px-3 py-1 rounded bg-gray-100">📹</button>
       </div>
     </div>
 
     <div id="messages" class="mb-3"></div>
 
-    <!-- composer: sticky to bottom so it stays until phone keyboard opens -->
-    <div class="composer">
-      <div class="flex items-center gap-2">
-        <button id="plusBtn" class="px-3 py-2 rounded bg-gray-100">+</button>
+    <div class="flex items-end gap-2">
+      <button id="plusBtn" class="px-3 py-2 rounded bg-gray-100">＋</button>
 
-        <div id="attachMenu" class="attach-menu">
-          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-            <input id="fileAttach" type="file" accept="image/*" class="hidden" /> Photo/Video
-          </label>
-          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-            <input id="cameraAttach" type="file" accept="image/*" capture="environment" class="hidden" /> Camera
-          </label>
-          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-            <input id="docAttach" type="file" class="hidden" /> Document
-          </label>
-          <button id="stickerBtn" class="px-3 py-2 rounded bg-white border">Sticker</button>
-          <button id="shareContactBtn" class="px-3 py-2 rounded bg-white border">Share Contact</button>
-          <button id="shareLocationBtn" class="px-3 py-2 rounded bg-white border">Share Location</button>
-        </div>
-
-        <textarea id="msg" class="flex-1 p-2 border" placeholder="Type a message..."></textarea>
-        <button id="mic" class="mic-btn bg-gray-100 w-11 h-11 rounded-full">🎤</button>
-        <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
+      <div id="attachMenu" class="attach-menu">
+        <label class="px-3 py-2 rounded bg-white border cursor-pointer">
+          <input id="fileAttach" type="file" accept="image/*" class="hidden" /> Photo/Video
+        </label>
+        <label class="px-3 py-2 rounded bg-white border cursor-pointer">
+          <input id="cameraAttach" type="file" accept="image/*" capture="environment" class="hidden" /> Camera
+        </label>
+        <label class="px-3 py-2 rounded bg-white border cursor-pointer">
+          <input id="docAttach" type="file" class="hidden" /> Document
+        </label>
+        <button id="stickerPickerBtn" class="px-3 py-2 rounded bg-white border">Stickers / GIFs</button>
+        <button id="shareContactBtn" class="px-3 py-2 rounded bg-white border">Share Contact</button>
+        <button id="shareLocationBtn" class="px-3 py-2 rounded bg-white border">Share Location</button>
       </div>
+
+      <textarea id="msg" class="textarea flex-1 p-2 border rounded" placeholder="Type a message..."></textarea>
+      <button id="mic" class="mic-btn bg-gray-100 w-11 h-11 rounded-full">🎤</button>
+      <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
     </div>
   </main>
 
-  <div id="stickerPicker" class="sticker-picker">
-    <div class="sticker-grid" id="stickerGrid"></div>
+  <!-- sticker modal -->
+  <div id="stickerModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50">
+    <div class="bg-white rounded-lg p-4 w-11/12 max-w-2xl">
+      <div class="flex justify-between items-center mb-3"><div class="font-semibold">Stickers & GIFs</div><button id="closeSticker" class="text-gray-500">✕</button></div>
+      <div id="stickerGrid" class="grid grid-cols-4 gap-3"></div>
+    </div>
   </div>
 
-  <div id="callHistory" class="call-history"></div>
-
-  <div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40">
+  <!-- profile modal -->
+  <div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-60">
     <div class="bg-white rounded-lg p-4 w-96">
       <div class="flex items-center justify-between mb-3"><div><div class="text-lg font-bold">Profile</div></div><button id="closeProfile" class="text-gray-500">✕</button></div>
       <form id="profileForm" enctype="multipart/form-data">
@@ -525,6 +485,10 @@ CHAT_HTML = r"""<!doctype html>
     </div>
   </div>
 
+  <!-- call history -->
+  <div id="callHistory" class="call-history"></div>
+
+  <!-- incoming call popup -->
   <div id="incomingCall" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:60; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
     <div id="incomingText">Incoming call</div>
     <div class="flex gap-2 mt-2"><button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button><button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button></div>
@@ -537,31 +501,22 @@ let myName = "{{ username }}";
 let lastId = 0;
 let micRecording = false;
 let mediaRecorder = null;
-let mediaStream = null;
 let mediaChunks = [];
 const attachMenu = document.getElementById('attachMenu');
-const stickerPicker = document.getElementById('stickerPicker');
-const stickerGrid = document.getElementById('stickerGrid');
-const typingEl = document.getElementById('typing');
+
+// helper
+function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 // auto-resize textarea
-const txt = document.getElementById('msg');
-function autoSize(el){
-  el.style.height = 'auto';
-  el.style.height = (el.scrollHeight) + 'px';
+const inputEl = document.getElementById('msg');
+function resizeTextarea(){
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(200, inputEl.scrollHeight) + 'px';
 }
-txt.addEventListener('input', ()=> { autoSize(txt); sendTyping(); });
-autoSize(txt);
+inputEl.addEventListener('input', resizeTextarea);
+resizeTextarea();
 
-// TYPING indicator debounce
-let typingTimer = null;
-function sendTyping(){
-  socket.emit('typing', { from: myName });
-  if(typingTimer) clearTimeout(typingTimer);
-  typingTimer = setTimeout(()=> socket.emit('typing_stop', { from: myName }), 1500);
-}
-
-// fetch & render messages (with status -> ticks)
+// fetch & render messages
 async function poll(){
   try{
     const resp = await fetch('/poll_messages?since=' + lastId);
@@ -575,94 +530,101 @@ async function poll(){
       const body = document.createElement('div'); body.className='msg-body';
       const meta = document.createElement('div'); meta.className='msg-meta-top';
       const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
-      const rightMeta = document.createElement('div');
-      // ticks for sender
-      if(me){
-        let tickHtml = '';
-        if(m.status === 0) tickHtml = `<span class='tick-gray'>✓</span>`;
-        else if(m.status === 1) tickHtml = `<span class='tick-gray'>✓✓</span>`;
-        else if(m.status === 2) tickHtml = `<span class='tick-blue'>✓✓</span>`;
-        rightMeta.innerHTML = tickHtml;
-      }
+      const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
       meta.appendChild(leftMeta); meta.appendChild(rightMeta);
 
-      const hasImageOnly = (!m.text || m.text.trim()==='') && m.attachments && m.attachments.length && m.attachments.every(a=> a.type==='image' || a.type==='sticker');
+      const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
+      bubble.innerHTML = m.text ? escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'' ) : '';
 
-      if(hasImageOnly){
-        const imageWrapper = document.createElement('div'); imageWrapper.className='photo-only';
+      // attachments
+      if(m.attachments && m.attachments.length){
         m.attachments.forEach(a=>{
-          if(a.url){
-            const el = document.createElement('img'); el.src = a.url; imageWrapper.appendChild(el);
+          if(a.type==='image' || a.type==='sticker') {
+            const el = document.createElement('img'); el.src = a.url; el.className = (a.type==='sticker'?'sticker':'image-attachment');
+            bubble.appendChild(el);
+          } else if(a.type==='audio'){
+            const el = document.createElement('audio'); el.src = a.url; el.controls=true; el.style.display='block'; el.style.marginTop='8px'; bubble.appendChild(el);
+          } else if(a.type==='doc'){
+            const el = document.createElement('a'); el.href = a.url; el.textContent = a.name || 'Document'; el.style.display='block'; el.style.marginTop='8px'; bubble.appendChild(el);
           }
         });
-        body.appendChild(meta);
-        body.appendChild(imageWrapper);
-      } else {
-        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
-        bubble.innerHTML = escapeHtml(m.text || '') + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'');
-        if(m.attachments && m.attachments.length){
-          m.attachments.forEach(a=>{
-            if(a.type==='image' || a.type==='sticker') {
-              const el = document.createElement('img'); el.src = a.url; el.style.maxWidth='220px'; el.style.borderRadius='8px'; el.style.display='block'; el.style.marginTop='8px'; bubble.appendChild(el);
-            } else if(a.type==='audio'){
-              const el = document.createElement('audio'); el.src = a.url; el.controls=true; el.style.display='block'; el.style.marginTop='8px'; bubble.appendChild(el);
-            }
-          });
-        }
-        body.appendChild(meta);
-        const topRow = document.createElement('div'); topRow.style.display='flex'; topRow.style.justifyContent='space-between'; topRow.style.alignItems='flex-start';
-        const msgContainer = document.createElement('div'); msgContainer.appendChild(bubble);
-        const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
-        menuBtn.onclick = (ev)=> {
-          ev.stopPropagation();
-          document.querySelectorAll('.menu').forEach(n=>n.remove());
-          const menu = document.createElement('div'); menu.className='menu';
-          const edit = document.createElement('div'); edit.innerText='Edit'; edit.style.cursor='pointer'; edit.style.padding='6px 8px';
-          edit.onclick = async ()=>{ const newText = prompt('Edit message text', m.text||''); if(newText !== null){ await fetch('/edit_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,text:newText})}); container.innerHTML=''; lastId=0; poll(); } };
-          const del = document.createElement('div'); del.innerText='Delete'; del.style.cursor='pointer'; del.style.padding='6px 8px'; del.onclick = async ()=>{ if(confirm('Delete this message?')){ await fetch('/delete_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id})}); container.innerHTML=''; lastId=0; poll(); } };
-          const react = document.createElement('div'); react.innerText='React ❤️'; react.style.cursor='pointer'; react.style.padding='6px 8px'; react.onclick = async ()=>{ await fetch('/react_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,emoji:'❤️'})}); container.innerHTML=''; lastId=0; poll(); };
-          menu.appendChild(edit); menu.appendChild(del); menu.appendChild(react);
-          document.body.appendChild(menu);
-          const rect = menuBtn.getBoundingClientRect();
-          let left = rect.left;
-          let top = rect.bottom + window.scrollY + 6;
-          menu.style.left = left + 'px'; menu.style.top = top + 'px';
-        };
-        topRow.appendChild(msgContainer); topRow.appendChild(menuBtn);
-        body.appendChild(topRow);
       }
 
+      // menu button
+      const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
+      menuBtn.onclick = (ev)=>{
+        ev.stopPropagation();
+        document.querySelectorAll('.menu').forEach(n=>n.remove());
+        const menu = document.createElement('div'); menu.className='menu';
+        const edit = document.createElement('div'); edit.innerText='Edit'; edit.style.cursor='pointer'; edit.onclick = async ()=>{
+          const newText = prompt('Edit message text', m.text);
+          if(newText !== null){
+            await fetch('/edit_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,text:newText})});
+            container.innerHTML=''; lastId=0; poll();
+          }
+        };
+        const del = document.createElement('div'); del.innerText='Delete'; del.style.cursor='pointer'; del.onclick = async ()=>{
+          if(confirm('Delete this message?')){
+            await fetch('/delete_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id})});
+            container.innerHTML=''; lastId=0; poll();
+          }
+        };
+        const react = document.createElement('div'); react.innerText='React ❤️'; react.style.cursor='pointer'; react.onclick = async ()=>{
+          await fetch('/react_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,emoji:'❤️'})});
+          container.innerHTML=''; lastId=0; poll();
+        };
+        menu.appendChild(edit); menu.appendChild(del); menu.appendChild(react);
+        document.body.appendChild(menu);
+        const rect = menuBtn.getBoundingClientRect();
+        menu.style.left = (rect.left - 10)+'px'; menu.style.top = (rect.bottom + window.scrollY + 6)+'px';
+      };
+
+      body.appendChild(meta);
+      const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
+      if(!me) {
+        const avatar = document.createElement('div'); avatar.style.width='34px'; avatar.style.height='34px'; avatar.style.borderRadius='999px'; avatar.style.background='#e5e7eb'; avatar.innerText=m.sender[0]||'?'; avatar.style.display='flex'; avatar.style.alignItems='center'; avatar.style.justifyContent='center';
+        rowInner.appendChild(avatar);
+      }
+      const msgContainer = document.createElement('div');
+      const topRow = document.createElement('div'); topRow.style.display='flex'; topRow.style.justifyContent='space-between'; topRow.style.alignItems='center';
+      topRow.appendChild(bubble); topRow.appendChild(menuBtn);
+      msgContainer.appendChild(topRow);
+      rowInner.appendChild(msgContainer);
+      body.appendChild(rowInner);
       wrapper.appendChild(body);
-      document.getElementById('messages').appendChild(wrapper);
+      container.appendChild(wrapper);
       lastId = m.id;
     }
-    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    container.scrollTop = container.scrollHeight;
   }catch(e){ console.error(e); }
 }
 poll(); setInterval(poll, 1500);
 
-// send message
+// send text
 document.getElementById('sendBtn').addEventListener('click', async ()=>{
-  const el = document.getElementById('msg'); const text = el.value.trim();
-  if(!text) return;
-  el.value = ''; autoSize(el);
-  await fetch('/send_message',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})}); await poll();
+  const text = inputEl.value.trim(); if(!text) return;
+  inputEl.value = ''; resizeTextarea();
+  await fetch('/send_message',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})});
+  await poll();
 });
 
-// plus menu toggle and attachments
+// plus button opens attach menu
 document.getElementById('plusBtn').addEventListener('click', ()=> attachMenu.style.display = (attachMenu.style.display==='flex'?'none':'flex'));
 
-// File attach
+// file attachments
 document.getElementById('fileAttach').addEventListener('change', async (e)=>{
   const f = e.target.files[0]; if(!f) return;
   const fd = new FormData(); fd.append('file', f);
   const r = await fetch('/upload_file',{method:'POST', body: fd}); const j = await r.json();
   if(r.ok){ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:j.attachments})}); await poll(); }
-  e.target.value=''; attachMenu.style.display='none';
+  e.target.value='';
+  attachMenu.style.display='none';
 });
+
+// camera maps to file input as well
 document.getElementById('cameraAttach').addEventListener('change', async (e)=> document.getElementById('fileAttach').files = e.target.files);
 
-// doc
+// document
 document.getElementById('docAttach').addEventListener('change', async (e)=>{
   const f = e.target.files[0]; if(!f) return;
   const fd = new FormData(); fd.append('file', f);
@@ -671,51 +633,34 @@ document.getElementById('docAttach').addEventListener('change', async (e)=>{
   e.target.value=''; attachMenu.style.display='none';
 });
 
-// sticker: picker and send
-document.getElementById('stickerBtn').addEventListener('click', async ()=>{
-  const r = await fetch('/stickers'); if(!r.ok) return;
-  const j = await r.json();
-  stickerGrid.innerHTML = '';
-  j.forEach(url => {
-    const img = document.createElement('img'); img.src = url;
-    img.onclick = async ()=> {
-      await fetch('/send_message',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text:'', attachments:[{type:'sticker', url}]})});
-      stickerPicker.style.display = 'none'; await poll();
-    };
-    stickerGrid.appendChild(img);
+// sticker picker
+const stickerModal = document.getElementById('stickerModal');
+document.getElementById('stickerPickerBtn').addEventListener('click', async ()=>{
+  const r1 = await fetch('/stickers_list'); const s = await r1.json();
+  const grid = document.getElementById('stickerGrid'); grid.innerHTML='';
+  s.forEach(url=>{
+    const img = document.createElement('img'); img.src = url; img.className='sticker cursor-pointer';
+    img.onclick = async ()=>{ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:[{type:'sticker', url}]})}); stickerModal.classList.add('hidden'); await poll(); };
+    grid.appendChild(img);
   });
-  stickerPicker.style.display = 'block';
+  stickerModal.classList.remove('hidden'); stickerModal.classList.add('flex');
 });
-document.addEventListener('click', (ev)=> {
-  if(stickerPicker.style.display==='block' && !stickerPicker.contains(ev.target) && ev.target.id!=='stickerBtn') stickerPicker.style.display='none';
-});
+document.getElementById('closeSticker').addEventListener('click', ()=>{ stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); });
 
-// share contact
-document.getElementById('shareContactBtn').addEventListener('click', async ()=>{
-  const name = prompt('Contact name'); const phone = prompt('Phone number');
-  if(!name || !phone) return;
-  const text = `Contact: ${name} (${phone})`;
-  await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text})}); await poll(); attachMenu.style.display='none';
-});
-// location
-document.getElementById('shareLocationBtn').addEventListener('click', async ()=>{
-  if(!navigator.geolocation) return alert('Geolocation not supported');
-  navigator.geolocation.getCurrentPosition(async (pos)=>{
-    const lat = pos.coords.latitude, lon = pos.coords.longitude;
-    const text = `Location: https://maps.google.com/?q=${lat},${lon}`;
-    await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text})}); await poll();
-  }, (err)=> alert('Location error: '+err.message));
-  attachMenu.style.display='none';
-});
+// share contact & location
+document.getElementById('shareContactBtn').addEventListener('click', async ()=>{ const name = prompt('Contact name'); const phone = prompt('Phone'); if(!name||!phone) return; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`Contact: ${name} (${phone})`})}); await poll(); attachMenu.style.display='none'; });
+document.getElementById('shareLocationBtn').addEventListener('click', async ()=>{ if(!navigator.geolocation) return alert('Geolocation not supported'); navigator.geolocation.getCurrentPosition(async (pos)=>{ const lat=pos.coords.latitude, lon=pos.coords.longitude; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`Location: https://maps.google.com/?q=${lat},${lon}`})}); await poll(); }, err=> alert('Location error: '+err.message)); attachMenu.style.display='none'; });
 
-// mic toggle
+// sticker upload handled earlier via /upload_sticker if using file picker (not necessary here)
+
+// mic toggle: record audio and send on stop
 const micBtn = document.getElementById('mic');
 micBtn.addEventListener('click', async ()=>{
   if(!micRecording){
     if(!navigator.mediaDevices) return alert('Media not supported');
     try{
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-      mediaRecorder = new MediaRecorder(mediaStream);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      mediaRecorder = new MediaRecorder(stream);
       mediaChunks = [];
       mediaRecorder.ondataavailable = e => mediaChunks.push(e.data);
       mediaRecorder.onstop = async ()=>{
@@ -723,58 +668,40 @@ micBtn.addEventListener('click', async ()=>{
         const fd = new FormData(); fd.append('file', blob, 'voice.webm');
         const r = await fetch('/upload_audio', {method:'POST', body: fd}); const j = await r.json();
         if(r.ok){ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'}, body: JSON.stringify({text:'', attachments:j.attachments})}); await poll(); }
-        mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null;
+        stream.getTracks().forEach(t=>t.stop());
       };
       mediaRecorder.start();
-      micRecording = true; micBtn.classList.add('mic-active'); txt.placeholder = 'Listening...';
+      micRecording = true; micBtn.classList.add('mic-active'); inputEl.placeholder = 'Listening...';
     }catch(e){ alert('Mic error: '+e.message); }
   } else {
     if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    micRecording = false; micBtn.classList.remove('mic-active'); txt.placeholder = 'Type a message...';
+    micRecording = false; micBtn.classList.remove('mic-active'); inputEl.placeholder = 'Type a message...';
   }
 });
 
-// three-dot menu cleanup
-document.addEventListener('click', ()=> document.querySelectorAll('.menu').forEach(n=>n.remove()));
+// profile modal handlers
+document.getElementById('profileBtn').addEventListener('click', async ()=>{
+  const modal = document.getElementById('profileModal'); modal.classList.remove('hidden'); modal.classList.add('flex');
+  const r = await fetch('/profile_get'); if(r.ok){ const j = await r.json(); document.getElementById('profile_display_name').value = j.name || ''; document.getElementById('profile_status').value = j.status || ''; }
+});
+document.getElementById('closeProfile').addEventListener('click', ()=>{ const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
+document.getElementById('profileCancel').addEventListener('click', ()=>{ const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
+document.getElementById('profileForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const fd = new FormData(e.target); const r = await fetch('/profile_update',{method:'POST', body:fd}); const t = await r.text(); if(!r.ok){ document.getElementById('profileMsg').textContent = t; return; } document.getElementById('profileMsg').textContent='Saved'; setTimeout(()=> location.reload(), 400); });
 
-// profile modal handling
-document.getElementById('profileBtn').addEventListener('click', async ()=>{ const modal = document.getElementById('profileModal'); modal.classList.remove('hidden'); modal.classList.add('flex'); });
-document.getElementById('closeProfile')?.addEventListener('click', ()=>{ const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
-document.getElementById('profileCancel')?.addEventListener('click', ()=>{ const m=document.getElementById('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
-document.getElementById('profileForm')?.addEventListener('submit', async (e)=>{ e.preventDefault(); const fd = new FormData(e.target); const r = await fetch('/profile_update',{method:'POST', body: fd}); const t = await r.text(); if(!r.ok){ document.getElementById('profileMsg').textContent = t; return; } document.getElementById('profileMsg').textContent='Saved'; setTimeout(()=> location.reload(), 400); });
-
-// --- Call flow & logs (Socket.IO) ---
+// call UI & Socket.io signaling
 let currentInvite = null;
 socket.on('connect', ()=> socket.emit('identify',{name: myName}));
-
-// typing events
-socket.on('typing', (data)=> {
-  if(data && data.from && data.from !== myName){
-    typingEl.style.display = 'block';
-    typingEl.textContent = `${data.from} is typing...`;
-  }
-});
-socket.on('typing_stop', (data)=> {
-  if(data && data.from && data.from !== myName){
-    typingEl.style.display = 'none';
-    typingEl.textContent = '';
-  }
+socket.on('incoming_call', (data)=>{ currentInvite = data.call_id; document.getElementById('incomingText').textContent = `${data.from} is calling (${data.isVideo ? 'video':'audio'})`; document.getElementById('incomingCall').style.display = 'block'; });
+document.getElementById('declineCall')?.addEventListener('click', ()=>{ if(currentInvite) socket.emit('call_decline',{call_id: currentInvite}); document.getElementById('incomingCall').style.display='none'; currentInvite=null; });
+document.getElementById('acceptCall')?.addEventListener('click', async ()=>{
+  if(!currentInvite) return;
+  socket.emit('call_accept',{call_id: currentInvite});
+  document.getElementById('incomingCall').style.display='none'; currentInvite=null;
+  // Basic approach: open a new page for the call or integrate WebRTC here.
+  window.open('/chat','_blank');
 });
 
-// when the server marks message read it may emit 'message_read' to notify sender
-socket.on('message_read', (data)=>{
-  // simple: refresh UI
-  document.getElementById('messages').innerHTML=''; lastId=0; poll();
-});
-
-socket.on('incoming_call', (data)=>{
-  currentInvite = data.call_id;
-  document.getElementById('incomingText').textContent = `${data.from} is calling (${data.isVideo ? 'video':'audio'})`;
-  document.getElementById('incomingCall').style.display = 'block';
-});
-document.getElementById('declineCall').addEventListener('click', ()=>{ if(currentInvite) socket.emit('call_decline',{call_id: currentInvite}); document.getElementById('incomingCall').style.display='none'; currentInvite=null; });
-document.getElementById('acceptCall').addEventListener('click', async ()=>{ if(!currentInvite) return; socket.emit('call_accept',{call_id: currentInvite}); document.getElementById('incomingCall').style.display='none'; currentInvite=null; window.open('/chat','_blank'); });
-
+// outgoing
 document.getElementById('callAudio').addEventListener('click', ()=> initiateCall(false));
 document.getElementById('callVideo').addEventListener('click', ()=> initiateCall(true));
 async function initiateCall(isVideo){
@@ -784,7 +711,7 @@ async function initiateCall(isVideo){
   alert('Calling ' + p.name + ' ...');
 }
 
-// show call logs
+// call history
 document.getElementById('callHistoryBtn').addEventListener('click', async ()=>{
   const el = document.getElementById('callHistory'); el.style.display = el.style.display==='block'?'none':'block';
   if(el.style.display==='block'){
@@ -799,17 +726,10 @@ document.getElementById('callHistoryBtn').addEventListener('click', async ()=>{
     }
   }
 });
-
-// identify to server
-socket.emit('identify',{name: myName});
-
-// helper
-function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
 </script>
 </body>
 </html>
-"""
+'''
 
 # --------- Routes & API ----------
 @app.context_processor
@@ -821,15 +741,9 @@ def index():
     first = load_first_user() is None
     return render_template_string(INDEX_HTML, first_user_none=first, heading_img=HEADING_IMG)
 
-@app.route("/stickers")
-def stickers():
-    sdir = os.path.join(app.static_folder, "stickers")
-    files = []
-    if os.path.isdir(sdir):
-        for fn in os.listdir(sdir):
-            if fn.lower().endswith(('.png','.jpg','.jpeg','.gif','webp','svg')):
-                files.append(url_for('static', filename=f"stickers/{fn}"))
-    return jsonify(files)
+@app.route("/stickers_list")
+def stickers_list():
+    return jsonify(list_static_folder("stickers") + list_static_folder("gifs"))
 
 @app.route("/profile_get")
 def profile_get():
@@ -876,8 +790,7 @@ def register():
         if not passkey: return "passkey required for first registration", 400
         salt, h = hash_pass(passkey)
         try:
-            avatar_url = generate_avatar_for_name(name)
-            save_user(name, salt, h, avatar=avatar_url, status="", make_owner=True)
+            save_user(name, salt, h, avatar=None, status="", make_owner=True)
             session['username'] = name; touch_user_presence(name)
             return jsonify({"status":"registered","username":name})
         except Exception as e: return f"db error: {e}", 500
@@ -887,8 +800,7 @@ def register():
         if not verify_pass(passkey, master['pass_salt'], master['pass_hash']): return "invalid passkey", 403
         salt, h = hash_pass(passkey)
         try:
-            avatar_url = generate_avatar_for_name(name)
-            save_user(name, salt, h, avatar=avatar_url, status="", make_owner=False)
+            save_user(name, salt, h, avatar=None, status="", make_owner=False)
             session['username'] = name; touch_user_presence(name)
             return jsonify({"status":"registered","username":name})
         except Exception as e: return f"db error: {e}", 500
@@ -917,9 +829,9 @@ def logout():
 
 @app.route("/chat")
 def chat():
-    username = session.get('username')
+    username = session.get('username'); 
     if not username: return redirect(url_for('index'))
-    user = load_user_by_name(username)
+    user = load_user_by_name(username); 
     if not user: return redirect(url_for('index'))
     owner = get_owner(); partner = get_partner()
     is_owner = user.get("is_owner", False); is_partner = user.get("is_partner", False)
@@ -930,9 +842,9 @@ def chat():
 
 @app.route("/join_chat", methods=["POST"])
 def join_chat():
-    username = session.get('username')
+    username = session.get('username'); 
     if not username: return "not signed in", 400
-    user = load_user_by_name(username)
+    user = load_user_by_name(username); 
     if not user: return "no such user", 400
     if user.get("is_owner") or user.get("is_partner"): return "already joined", 400
     partner = get_partner()
@@ -943,9 +855,9 @@ def join_chat():
 
 @app.route("/send_message", methods=["POST"])
 def send_message():
-    username = session.get('username')
+    username = session.get('username'); 
     if not username: return "not signed in", 400
-    user = load_user_by_name(username)
+    user = load_user_by_name(username); 
     if not user: return "unknown user", 400
     if not (user.get("is_owner") or user.get("is_partner")): return "not part of chat", 403
     body = request.get_json() or {}
@@ -957,30 +869,12 @@ def send_message():
 @app.route("/poll_messages")
 def poll_messages():
     since = int(request.args.get("since", 0))
-    username = session.get('username')
     msgs = fetch_messages(since)
-    # mark messages from others as read and notify senders via socket (simple two-person model)
-    if username:
-        # collect messages that are from other user and status < 2
-        to_notify = {}
-        conn = db_conn(); c = conn.cursor()
-        for m in msgs:
-            if m['sender'] != username and m.get('status',0) < 2:
-                c.execute("UPDATE messages SET status = 2 WHERE id = ?", (m['id'],))
-                to_notify.setdefault(m['sender'], []).append(m['id'])
-        conn.commit(); conn.close()
-        # emit read notification to senders
-        for sender, mids in to_notify.items():
-            sid = USER_SID.get(sender)
-            if sid:
-                socketio.emit('message_read', {'by': username, 'ids': mids}, room=sid)
-        # refresh msgs to include updated statuses
-        msgs = fetch_messages(since)
     return jsonify(msgs)
 
 @app.route("/edit_message", methods=["POST"])
 def route_edit_message():
-    username = session.get('username')
+    username = session.get('username'); 
     if not username: return "not signed in", 400
     body = request.get_json() or {}
     msg_id = body.get("id"); text = body.get("text","").strip()
@@ -990,7 +884,7 @@ def route_edit_message():
 
 @app.route("/delete_message", methods=["POST"])
 def route_delete_message():
-    username = session.get('username')
+    username = session.get('username'); 
     if not username: return "not signed in", 400
     body = request.get_json() or {}
     msg_id = body.get("id")
@@ -1000,7 +894,7 @@ def route_delete_message():
 
 @app.route("/react_message", methods=["POST"])
 def route_react_message():
-    username = session.get('username')
+    username = session.get('username'); 
     if not username: return "not signed in", 400
     body = request.get_json() or {}
     msg_id = body.get("id"); emoji = body.get("emoji","❤️")
@@ -1024,18 +918,20 @@ def upload_sticker():
 @app.route("/upload_file", methods=["POST"])
 def upload_file():
     if 'file' not in request.files: return jsonify({"error":"no file"}), 400
-    f = request.files['file']
+    f = request.files['file']; 
     if f.filename == '': return jsonify({"error":"empty filename"}), 400
     fn = secure_filename(f.filename)
     save_name = f"uploads/{secrets.token_hex(8)}_{fn}"; path = os.path.join(app.static_folder, save_name); f.save(path)
     url = url_for('static', filename=save_name)
-    attachments = [{"type":"image","url": url}]
+    ext = fn.rsplit(".",1)[-1].lower()
+    kind = "image" if ext in ALLOWED_IMAGE_EXT else "doc"
+    attachments = [{"type":kind,"url": url, "name": fn}]
     return jsonify({"status":"ok","attachments": attachments})
 
 @app.route("/upload_audio", methods=["POST"])
 def upload_audio():
     if 'file' not in request.files: return jsonify({"error":"no file"}), 400
-    f = request.files['file']
+    f = request.files['file']; 
     if f.filename == '': return jsonify({"error":"empty filename"}), 400
     fn = secure_filename(f.filename)
     save_name = f"uploads/{secrets.token_hex(8)}_{fn}"; path = os.path.join(app.static_folder, save_name); f.save(path)
@@ -1045,7 +941,7 @@ def upload_audio():
 
 @app.route("/typing", methods=["POST"])
 def route_typing():
-    username = session.get('username')
+    username = session.get('username'); 
     if not username: return "not signed in", 400
     touch_user_presence(username)
     return jsonify({"status":"ok"})
@@ -1060,7 +956,7 @@ def call_logs():
     rows = fetch_call_logs(50)
     return jsonify(rows)
 
-# -------------- Socket.IO handlers (calls & signalling & typing) -------------
+# socket handlers
 @socketio.on('identify')
 def on_identify(data):
     name = data.get('name')
@@ -1077,33 +973,6 @@ def on_disconnect():
             del USER_SID[u]
             emit('presence', {'user': u, 'online': False}, broadcast=True)
             break
-
-@socketio.on('typing')
-def on_typing(data):
-    name = data.get('from')
-    # forward to partner if present
-    partner = get_partner()
-    owner = get_owner()
-    target = None
-    if partner and partner.get('name') != name:
-        target = partner.get('name')
-    elif owner and owner.get('name') != name:
-        target = owner.get('name')
-    if target and target in USER_SID:
-        emit('typing', {'from': name}, room=USER_SID[target])
-
-@socketio.on('typing_stop')
-def on_typing_stop(data):
-    name = data.get('from')
-    partner = get_partner()
-    owner = get_owner()
-    target = None
-    if partner and partner.get('name') != name:
-        target = partner.get('name')
-    elif owner and owner.get('name') != name:
-        target = owner.get('name')
-    if target and target in USER_SID:
-        emit('typing_stop', {'from': name}, room=USER_SID[target])
 
 @socketio.on('call_outgoing')
 def on_call_outgoing(data):
@@ -1122,7 +991,8 @@ def on_call_accept(data):
     if not info: return
     update_call_started(call_id)
     sid = USER_SID.get(info['caller'])
-    if sid: emit('call_accepted', {'call_id': call_id, 'from': info['callee']}, room=sid)
+    if sid:
+        emit('call_accepted', {'call_id': call_id, 'from': info['callee']}, room=sid)
 
 @socketio.on('call_decline')
 def on_call_decline(data):
@@ -1142,28 +1012,26 @@ def on_call_end(data):
         sid = USER_SID.get(info['caller'])
         if sid: emit('call_ended', {'call_id': call_id}, room=sid)
 
-# WebRTC signalling passthrough (simple)
+# Simple WebRTC signaling passthrough
 @socketio.on('webrtc_offer')
 def on_webrtc_offer(data):
     to = data.get('to'); sid = USER_SID.get(to)
-    if sid:
-        emit('webrtc_offer', data, room=sid)
+    if sid: emit('webrtc_offer', data, room=sid)
 
 @socketio.on('webrtc_answer')
 def on_webrtc_answer(data):
     to = data.get('to'); sid = USER_SID.get(to)
-    if sid:
-        emit('webrtc_answer', data, room=sid)
+    if sid: emit('webrtc_answer', data, room=sid)
 
 @socketio.on('ice_candidate')
 def on_ice_candidate(data):
     to = data.get('to'); sid = USER_SID.get(to)
-    if sid:
-        emit('ice_candidate', data, room=sid)
+    if sid: emit('ice_candidate', data, room=sid)
 
 # ----- run -----
 if __name__ == "__main__":
     print("DB:", DB_PATH)
     pathlib.Path(os.path.join(app.static_folder,"uploads")).mkdir(parents=True, exist_ok=True)
     pathlib.Path(os.path.join(app.static_folder,"stickers")).mkdir(parents=True, exist_ok=True)
+    pathlib.Path(os.path.join(app.static_folder,"gifs")).mkdir(parents=True, exist_ok=True)
     socketio.run(app, host="0.0.0.0", port=PORT, debug=True)
