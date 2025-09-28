@@ -550,7 +550,7 @@ CHAT_HTML = r'''<!doctype html>
     <div class="composer-inner">
       <div id="attachmentPreview"></div>
       <div class="composer-main">
-        <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow">＋</button>
+        <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow" style="font-size: 1rem">＋</button>
         <div id="attachMenu" class="attach-menu">
           <label class="px-3 py-2 rounded bg-white border cursor-pointer">
             <input id="fileAttach" type="file" accept="image/*,video/*,audio/*" class="hidden" multiple /> Photo/Video
@@ -564,7 +564,7 @@ CHAT_HTML = r'''<!doctype html>
           <button id="stickerPickerBtn" class="px-3 py-2 rounded bg-white border">Stickers / GIFs</button>
         </div>
         <textarea id="msg" class="textarea flex-1" placeholder="Type a message..." maxlength="1200" style="width:100%"></textarea>
-        <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎤</button>
+        <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎙️</button>
         <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
       </div>
     </div>
