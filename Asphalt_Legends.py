@@ -24,6 +24,8 @@ HEADING_IMG = "/static/heading.png"  # place your heading image here
 MAX_MESSAGES = 80
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
 ALLOWED_VIDEO_EXT = {"mp4", "webm", "ogg"}
+ALLOWED_AUDIO_EXT = {"mp3", "wav", "ogg", "m4a", "webm"}
+
 
 # ensure static subfolders
 pathlib.Path(os.path.join(app.static_folder, "uploads")).mkdir(parents=True, exist_ok=True)
@@ -204,7 +206,7 @@ def react_message_db(msg_id, reactor, emoji):
 def save_call(call_id, caller, callee, is_video, status="ringing"):
     conn = db_conn(); c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO calls (id, caller, callee, is_video, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-              (call_id, caller, callee, 1 if is_video else 0, None, None, status))
+              (call_id, caller, callee, 1 if is_video else 0, int(time.time()), None, status))
     conn.commit(); conn.close()
 
 def update_call_started(call_id):
@@ -217,14 +219,14 @@ def update_call_ended(call_id):
     c.execute("UPDATE calls SET ended_at = ?, status = ? WHERE id = ?", (int(time.time()), "ended", call_id))
     conn.commit(); conn.close()
 
-def fetch_call_logs(limit=50):
+def fetch_call_log_by_id(call_id):
     conn = db_conn(); c = conn.cursor()
-    c.execute("SELECT id, caller, callee, is_video, started_at, ended_at, status FROM calls ORDER BY started_at DESC LIMIT ?", (limit,))
-    rows = c.fetchall(); conn.close()
-    out=[]
-    for r in rows:
-        out.append({"id": r[0], "caller": r[1], "callee": r[2], "is_video": bool(r[3]), "started_at": r[4], "ended_at": r[5], "status": r[6]})
-    return out
+    c.execute("SELECT id, caller, callee, is_video, started_at, ended_at, status FROM calls WHERE id = ? LIMIT 1", (call_id,))
+    r = c.fetchone(); conn.close()
+    if r:
+        return {"id": r[0], "caller": r[1], "callee": r[2], "is_video": bool(r[3]), "started_at": r[4], "ended_at": r[5], "status": r[6]}
+    return None
+
 
 # --------- crypto for shared passkey ----------
 PBKDF2_ITER = 200_000
@@ -403,19 +405,26 @@ CHAT_HTML = r'''<!doctype html>
   .msg-body{ display:flex; flex-direction:column;}
   .three-dot{ background: none; border: none; cursor:pointer; font-size:1.05rem; color:#f3f4f6; padding:6px 8px; border-radius:8px; background:#111827; box-shadow:0 6px 18px rgba(0,0,0,.25);}
   .menu{ position: absolute; background:#111827; color:#fff; padding:8px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.25); z-index:120; min-width:140px;}
-  .menu div{ padding:8px 10px; cursor:pointer; border-radius:6px;}
-  .menu div:hover{ background: rgba(255,255,255,0.06); }
+  .menu div, .menu form button{ width:100%; text-align:left; padding:8px 10px; cursor:pointer; border-radius:6px;}
+  .menu div:hover, .menu form button:hover{ background: rgba(255,255,255,0.06); }
   .attach-menu{ position: fixed; right:20px; bottom:84px; z-index:90; display:none; flex-direction:column; gap:8px; }
   .attach-menu button, .attach-menu label{ min-width:160px; text-align:left; }
-  .call-history{ position: fixed; right:20px; bottom:140px; z-index:90; display:none; background:white; border-radius:8px; padding:8px; box-shadow:0 8px 20px rgba(0,0,0,.12); max-height:50vh; overflow:auto;}
   .mic-active{ background:#10b981 !important; color:white !important; }
   .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
   .sticker{ width:120px; height:auto; margin-top:8px; }
   .textarea{ resize:none; min-height:44px; max-height:220px; overflow:auto; border-radius:12px; padding:8px; }
-  main{ max-width:900px; margin:0 auto; padding-bottom:110px; } /* padding-bottom so messages not hidden behind composer */
+  main{ max-width:900px; margin:0 auto; padding-bottom:110px; }
   .composer { position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom, 0); display:flex; justify-content:center; padding:12px; background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.8)); backdrop-filter: blur(6px); }
-  .composer-inner{ width:100%; max-width:900px; display:flex; gap:8px; align-items:flex-end; }
+  .composer-inner{ width:100%; max-width:900px; display:flex; flex-direction:column; gap:8px; }
+  .composer-main{ display:flex; gap:8px; align-items:flex-end; width: 100%; }
+  .system-message{ text-align:center; font-size:0.8rem; color:#6b7280; background:rgba(230,230,230,0.7); padding:4px 10px; border-radius:12px; margin:10px auto; display:table; }
   /* ---- NEW & MODIFIED STYLES ---- */
+  body.profile-modal-open .download-btn { opacity: 0; pointer-events: none; }
+  #attachmentPreview { padding: 8px; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; display: none; }
+  .preview-item { position: relative; display: inline-block; max-width: 120px; }
+  .preview-item img, .preview-item video { max-width: 100%; height: auto; border-radius: 8px; }
+  .preview-item-doc { background:#f3f4f6; padding:8px; border-radius:8px; font-size:0.8rem; }
+  .preview-remove-btn { position: absolute; top: -8px; right: -8px; background: #374151; color: white; border-radius: 999px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1rem; line-height: 1rem; border: none; }
   .media-container { position: relative; display: inline-block; width: 100%; }
   .media-container .download-btn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; border-radius: 999px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 1.2rem; transition: background .2s; z-index: 10; }
   .media-container .download-btn:hover { background: rgba(0,0,0,0.8); }
@@ -431,9 +440,11 @@ CHAT_HTML = r'''<!doctype html>
 </style>
 </head><body>
   <div class="top-right">
-    <button id="callHistoryBtn" class="px-2 py-1 rounded bg-gray-100">Call History</button>
     <button id="profileBtn" class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center">P</button>
-    <form method="post" action="{{ url_for('logout') }}" style="display:inline"><button class="px-3 py-1 rounded bg-gray-200">Logout</button></form>
+    <div id="profileMenu" class="menu" style="display:none; right:0; top:48px;">
+        <div id="viewProfileBtn">Profile</div>
+        <form method="post" action="{{ url_for('logout') }}"><button type="submit">Logout</button></form>
+    </div>
   </div>
 
   <header>
@@ -445,42 +456,36 @@ CHAT_HTML = r'''<!doctype html>
   </header>
 
   <main>
-    <div class="flex items-center justify-between mb-2">
-      <div>
-        <div class="text-lg font-semibold">{{ username }}</div>
-        <div class="text-xs text-gray-500">{{ user_status }}</div>
-      </div>
+    <div class="flex items-center justify-end mb-2">
       <div class="flex gap-2 items-center">
         <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
         <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
       </div>
     </div>
-
     <div id="messages" class="mb-3"></div>
   </main>
 
   <div class="composer">
     <div class="composer-inner">
-      <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow">＋</button>
-
-      <div id="attachMenu" class="attach-menu">
-        <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-          <input id="fileAttach" type="file" accept="image/*,video/*" class="hidden" /> Photo/Video
-        </label>
-        <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-          <input id="cameraAttach" type="file" accept="image/*,video/*" capture="environment" class="hidden" /> Camera
-        </label>
-        <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-          <input id="docAttach" type="file" class="hidden" /> Document
-        </label>
-        <button id="stickerPickerBtn" class="px-3 py-2 rounded bg-white border">Stickers / GIFs</button>
-        <button id="shareContactBtn" class="px-3 py-2 rounded bg-white border">Share Contact</button>
-        <button id="shareLocationBtn" class="px-3 py-2 rounded bg-white border">Share Location</button>
+      <div id="attachmentPreview"></div>
+      <div class="composer-main">
+        <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow">＋</button>
+        <div id="attachMenu" class="attach-menu">
+          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
+            <input id="fileAttach" type="file" accept="image/*,video/*" class="hidden" /> Photo/Video
+          </label>
+          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
+            <input id="cameraAttach" type="file" accept="image/*,video/*" capture="environment" class="hidden" /> Camera
+          </label>
+          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
+            <input id="docAttach" type="file" class="hidden" /> Document
+          </label>
+          <button id="stickerPickerBtn" class="px-3 py-2 rounded bg-white border">Stickers / GIFs</button>
+        </div>
+        <textarea id="msg" class="textarea flex-1" placeholder="Type a message..."></textarea>
+        <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎤</button>
+        <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
       </div>
-
-      <textarea id="msg" class="textarea flex-1" placeholder="Type a message..."></textarea>
-      <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎤</button>
-      <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
     </div>
   </div>
 
@@ -491,7 +496,7 @@ CHAT_HTML = r'''<!doctype html>
     </div>
   </div>
 
-  <div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-60">
+  <div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-[60]">
     <div class="bg-white rounded-lg p-4 w-96">
       <div class="flex items-center justify-between mb-3"><div><div class="text-lg font-bold">Profile</div></div><button id="closeProfile" class="text-gray-500">✕</button></div>
       <form id="profileForm" enctype="multipart/form-data">
@@ -504,9 +509,7 @@ CHAT_HTML = r'''<!doctype html>
     </div>
   </div>
 
-  <div id="callHistory" class="call-history"></div>
-
-  <div id="incomingCall" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:60; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
+  <div id="incomingCall" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
     <div id="incomingText">Incoming call</div>
     <div class="flex gap-2 mt-2"><button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button><button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button></div>
   </div>
@@ -519,13 +522,23 @@ let lastId = 0;
 let micRecording = false;
 let mediaRecorder = null;
 let mediaChunks = [];
-const attachMenu = document.getElementById('attachMenu');
-const stickerModal = document.getElementById('stickerModal');
-const stickerGrid = document.getElementById('stickerGrid');
+let stagedFile = null; // For attachment preview
+
+const attachMenu = byId('attachMenu');
+const stickerModal = byId('stickerModal');
+const stickerGrid = byId('stickerGrid');
+const profileMenu = byId('profileMenu');
+const profileModal = byId('profileModal');
 
 // helpers
-function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&','<':'<','>':'>','"':'"'}[c])); }
 function byId(id){ return document.getElementById(id); }
+function formatDuration(sec) {
+    const h = Math.floor(sec / 3600).toString().padStart(2, '0');
+    const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
+    const s = Math.floor(sec % 60).toString().padStart(2, '0');
+    return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
+}
 
 // auto-resize textarea
 const inputEl = byId('msg');
@@ -538,18 +551,21 @@ resizeTextarea();
 
 // hide menus on body click
 document.addEventListener('click', (ev)=>{
-  const attach = attachMenu;
-  const plus = byId('plusBtn');
-  if(attach && (attach.contains(ev.target) || plus.contains(ev.target))) { return; }
-  if(attach) attach.style.display = 'none';
-  document.querySelectorAll('.menu').forEach(n=>n.remove());
+  const isClickInside = (el) => el && el.contains(ev.target);
+  if (isClickInside(attachMenu) || isClickInside(byId('plusBtn'))) return;
+  if (isClickInside(profileMenu) || isClickInside(byId('profileBtn'))) return;
+  
+  attachMenu.style.display = 'none';
+  profileMenu.style.display = 'none';
+  document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
+
   if(stickerModal && !stickerModal.classList.contains('hidden')){
     const wrap = stickerModal.querySelector('div');
     if(!wrap.contains(ev.target)) { stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); }
   }
 });
 
-// NEW: Helper function to create attachment elements
+// Helper to create attachment elements for messages
 function createAttachmentElement(a) {
   const container = document.createElement('div');
   if (a.type === 'image' || a.type === 'video') {
@@ -613,7 +629,7 @@ async function poll(){
       const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
       menuBtn.onclick = (ev)=>{
         ev.stopPropagation();
-        document.querySelectorAll('.menu').forEach(n=>n.remove());
+        document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
         const menu = document.createElement('div'); menu.className='menu';
         const edit = document.createElement('div'); edit.innerText='Edit'; edit.onclick = async (e)=>{
           e.stopPropagation();
@@ -644,10 +660,10 @@ async function poll(){
       };
       body.appendChild(meta);
 
-      if(attachments.length && !hasText){ // Attachments-only (no bubble)
+      if(attachments.length && !hasText){ // Attachments-only
         const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
         if(!me){
-          const avatar = document.createElement('div'); avatar.style.width='34px'; avatar.style.height='34px'; avatar.style.borderRadius='999px'; avatar.style.background='#e5e7eb'; avatar.innerText=m.sender[0]||'?'; avatar.style.display='flex'; avatar.style.alignItems='center'; avatar.style.justifyContent='center';
+          const avatar = document.createElement('img'); avatar.src=`/avatar/${m.sender}`; avatar.className='avatar-sm';
           rowInner.appendChild(avatar);
         }
         const attContainer = document.createElement('div');
@@ -667,8 +683,8 @@ async function poll(){
       } else { // Bubble with text and/or inline attachments
         const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
         if(!me){
-          const avatar = document.createElement('div'); avatar.style.width='34px'; avatar.style.height='34px'; avatar.style.borderRadius='999px'; avatar.style.background='#e5e7eb'; avatar.innerText=m.sender[0]||'?'; avatar.style.display='flex'; avatar.style.alignItems='center'; avatar.style.justifyContent='center';
-          rowInner.appendChild(avatar);
+            const avatar = document.createElement('img'); avatar.src=`/avatar/${m.sender}`; avatar.className='avatar-sm';
+            rowInner.appendChild(avatar);
         }
         const msgContainer = document.createElement('div');
         const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
@@ -699,48 +715,106 @@ async function poll(){
     container.scrollTop = container.scrollHeight;
   }catch(e){ console.error(e); }
 }
-poll(); setInterval(poll, 1600);
+poll(); setInterval(poll, 2000);
 
-// send text
+// send message
 byId('sendBtn').addEventListener('click', async ()=>{
-  const text = inputEl.value.trim(); if(!text) return;
-  inputEl.value = ''; resizeTextarea();
-  await fetch('/send_message',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})});
-  await poll();
+  const text = inputEl.value.trim();
+  if(!text && !stagedFile) return;
+
+  const fd = new FormData();
+  fd.append('text', text);
+  if (stagedFile) {
+    fd.append('file', stagedFile, stagedFile.name);
+  }
+
+  try {
+    const r = await fetch('/send_composite_message', { method: 'POST', body: fd });
+    if (r.ok) {
+      inputEl.value = '';
+      resizeTextarea();
+      clearAttachmentPreview();
+      await poll();
+    } else {
+      alert('Failed to send message: ' + await r.text());
+    }
+  } catch (e) {
+    alert('Error sending message: ' + e.message);
+  }
 });
 
-// support Enter to send (Shift+Enter for newline)
 inputEl.addEventListener('keydown', async (e)=>{
   if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); byId('sendBtn').click(); }
 });
 
-// plus button opens attach menu
+// Attachment Preview Logic
+function setAttachmentPreview(file) {
+  stagedFile = file;
+  const previewContainer = byId('attachmentPreview');
+  previewContainer.innerHTML = '';
+  previewContainer.style.display = 'block';
+
+  const item = document.createElement('div');
+  item.className = 'preview-item';
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'preview-remove-btn';
+  removeBtn.innerHTML = '&times;';
+  removeBtn.onclick = clearAttachmentPreview;
+  item.appendChild(removeBtn);
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    if (file.type.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      item.appendChild(img);
+    } else if (file.type.startsWith('video/')) {
+      const vid = document.createElement('video');
+      vid.src = e.target.result;
+      vid.muted = true;
+      item.appendChild(vid);
+    } else if (file.type.startsWith('audio/')) {
+      const audio = document.createElement('audio');
+      audio.src = e.target.result;
+      audio.controls = true;
+      item.appendChild(audio);
+    } else {
+      const doc = document.createElement('div');
+      doc.className = 'preview-item-doc';
+      doc.textContent = file.name;
+      item.appendChild(doc);
+    }
+  };
+  reader.readAsDataURL(file);
+  previewContainer.appendChild(item);
+}
+
+function clearAttachmentPreview() {
+  stagedFile = null;
+  const previewContainer = byId('attachmentPreview');
+  previewContainer.innerHTML = '';
+  previewContainer.style.display = 'none';
+}
+
+function handleFileSelection(event) {
+    const file = event.target.files[0];
+    if (file) {
+        setAttachmentPreview(file);
+    }
+    attachMenu.style.display = 'none';
+    event.target.value = ''; // Reset input
+}
+
+byId('fileAttach').addEventListener('change', handleFileSelection);
+byId('cameraAttach').addEventListener('change', handleFileSelection);
+byId('docAttach').addEventListener('change', handleFileSelection);
+
 byId('plusBtn').addEventListener('click', (ev)=>{ ev.stopPropagation(); attachMenu.style.display = (attachMenu.style.display==='flex'?'none':'flex'); });
 
-// map camera input to file input when used on mobile
-byId('cameraAttach').addEventListener('change', async (e)=> document.getElementById('fileAttach').files = e.target.files);
-
-// file attachments
-byId('fileAttach').addEventListener('change', async (e)=>{
-  const f = e.target.files[0]; if(!f) return;
-  const fd = new FormData(); fd.append('file', f);
-  const r = await fetch('/upload_file',{method:'POST', body: fd}); const j = await r.json();
-  if(r.ok){ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:j.attachments})}); await poll(); }
-  e.target.value=''; attachMenu.style.display='none';
-});
-
-// doc
-byId('docAttach').addEventListener('change', async (e)=>{
-  const f = e.target.files[0]; if(!f) return;
-  const fd = new FormData(); fd.append('file', f);
-  const r = await fetch('/upload_file',{method:'POST', body: fd}); const j = await r.json();
-  if(r.ok){ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:j.attachments})}); await poll(); }
-  e.target.value=''; attachMenu.style.display='none';
-});
-
-// sticker picker: auto load stickers+gifs from server
+// sticker picker
 byId('stickerPickerBtn').addEventListener('click', async (ev)=>{
   ev.stopPropagation();
+  attachMenu.style.display = 'none';
   const res = await fetch('/stickers_list'); const arr = await res.json();
   stickerGrid.innerHTML = '';
   arr.forEach(url=>{
@@ -755,10 +829,6 @@ byId('stickerPickerBtn').addEventListener('click', async (ev)=>{
   stickerModal.classList.remove('hidden'); stickerModal.classList.add('flex');
 });
 
-// share contact & location
-byId('shareContactBtn').addEventListener('click', async ()=>{ const name = prompt('Contact name'); const phone = prompt('Phone'); if(!name||!phone) return; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`Contact: ${name} (${phone})`})}); await poll(); attachMenu.style.display='none'; });
-byId('shareLocationBtn').addEventListener('click', async ()=>{ if(!navigator.geolocation) return alert('Geolocation not supported'); navigator.geolocation.getCurrentPosition(async (pos)=>{ const lat=pos.coords.latitude, lon=pos.coords.longitude; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`My Location: https://maps.google.com/?q=${lat},${lon}`})}); await poll(); }, err=> alert('Location error: '+err.message)); attachMenu.style.display='none'; });
-
 // mic toggle
 const micBtn = byId('mic');
 micBtn.addEventListener('click', async ()=>{
@@ -771,13 +841,12 @@ micBtn.addEventListener('click', async ()=>{
       mediaRecorder.ondataavailable = e => mediaChunks.push(e.data);
       mediaRecorder.onstop = async ()=>{
         const blob = new Blob(mediaChunks, {type:'audio/webm'});
-        const fd = new FormData(); fd.append('file', blob, 'voice.webm');
-        const r = await fetch('/upload_audio', {method:'POST', body: fd}); const j = await r.json();
-        if(r.ok){ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'}, body: JSON.stringify({text:'', attachments:j.attachments})}); await poll(); }
+        const file = new File([blob], "voice_message.webm", { type: "audio/webm" });
+        setAttachmentPreview(file);
         stream.getTracks().forEach(t=>t.stop());
       };
       mediaRecorder.start();
-      micRecording = true; micBtn.classList.add('mic-active'); inputEl.placeholder = 'Listening...';
+      micRecording = true; micBtn.classList.add('mic-active'); inputEl.placeholder = 'Listening... Stop to preview.';
     }catch(e){ alert('Mic error: '+e.message); }
   } else {
     if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
@@ -785,19 +854,40 @@ micBtn.addEventListener('click', async ()=>{
   }
 });
 
-// profile modal
-byId('profileBtn').addEventListener('click', async ()=>{
-  const modal = byId('profileModal'); modal.classList.remove('hidden'); modal.classList.add('flex');
-  const r = await fetch('/profile_get'); if(r.ok){ const j = await r.json(); byId('profile_display_name').value = j.name || ''; byId('profile_status').value = j.status || ''; }
+// Profile menu & modal logic
+byId('profileBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    profileMenu.style.display = profileMenu.style.display === 'block' ? 'none' : 'block';
 });
-byId('closeProfile').addEventListener('click', ()=>{ const m=byId('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
-byId('profileCancel').addEventListener('click', ()=>{ const m=byId('profileModal'); m.classList.add('hidden'); m.classList.remove('flex'); });
+byId('viewProfileBtn').addEventListener('click', async ()=>{
+  profileMenu.style.display = 'none';
+  profileModal.classList.remove('hidden'); profileModal.classList.add('flex');
+  document.body.classList.add('profile-modal-open');
+  const r = await fetch('/profile_get');
+  if(r.ok){ const j = await r.json(); byId('profile_display_name').value = j.name || ''; byId('profile_status').value = j.status || ''; }
+});
+function closeProfileModal() {
+    profileModal.classList.add('hidden');
+    profileModal.classList.remove('flex');
+    document.body.classList.remove('profile-modal-open');
+}
+byId('closeProfile').addEventListener('click', closeProfileModal);
+byId('profileCancel').addEventListener('click', closeProfileModal);
 byId('profileForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const fd = new FormData(e.target); const r = await fetch('/profile_update',{method:'POST', body:fd}); const t = await r.text(); if(!r.ok){ byId('profileMsg').textContent = t; return; } byId('profileMsg').textContent='Saved'; setTimeout(()=> location.reload(), 400); });
 
-// call flow
+// Call flow
 let currentInvite = null;
 socket.on('connect', ()=> socket.emit('identify',{name: myName}));
 socket.on('incoming_call', (data)=>{ currentInvite = data.call_id; byId('incomingText').textContent = `${data.from} is calling (${data.isVideo ? 'video':'audio'})`; byId('incomingCall').style.display = 'block'; });
+socket.on('call_summary', (data) => {
+    const msgContainer = byId('messages');
+    const summary = document.createElement('div');
+    summary.className = 'system-message';
+    const icon = data.isVideo ? '📹' : '📞';
+    summary.innerHTML = `${icon} Call ended. Duration: ${formatDuration(data.duration)}`;
+    msgContainer.appendChild(summary);
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+});
 byId('declineCall')?.addEventListener('click', ()=>{ if(currentInvite) socket.emit('call_decline',{call_id: currentInvite}); byId('incomingCall').style.display='none'; currentInvite=null; });
 byId('acceptCall')?.addEventListener('click', async ()=>{ if(!currentInvite) return; socket.emit('call_accept',{call_id: currentInvite}); byId('incomingCall').style.display='none'; currentInvite=null; window.open('/chat','_blank'); });
 
@@ -809,22 +899,6 @@ async function initiateCall(isVideo){
   socket.emit('call_outgoing', {to: p.name, isVideo:isVideo, from: myName});
   alert('Calling ' + p.name + ' ...');
 }
-
-// call history
-byId('callHistoryBtn').addEventListener('click', async ()=>{
-  const el = byId('callHistory'); el.style.display = el.style.display==='block'?'none':'block';
-  if(el.style.display==='block'){
-    const r = await fetch('/call_logs'); const j = await r.json();
-    el.innerHTML = '<div class="font-semibold mb-2">Call History</div>';
-    for(const c of j){
-      const started = c.started_at ? new Date(c.started_at*1000).toLocaleString() : '-';
-      const ended = c.ended_at ? new Date(c.ended_at*1000).toLocaleString() : '-';
-      const line = document.createElement('div'); line.style.marginBottom='8px';
-      line.innerHTML = `<div><strong>${c.caller}</strong> → <strong>${c.callee}</strong> ${c.is_video? '📹':'📞'}</div><div class="text-xs text-gray-500">${c.status} · ${started} - ${ended}</div>`;
-      el.appendChild(line);
-    }
-  }
-});
 </script>
 </body></html>
 '''
@@ -938,26 +1012,46 @@ def chat():
     touch_user_presence(username)
     return render_template_string(CHAT_HTML, username=username, user_status=user.get('status',''), user_avatar=user.get('avatar',''), is_owner=is_owner, is_partner=is_partner, owner_name=owner_name, partner_name=partner_name, is_member=is_member, heading_img=HEADING_IMG)
 
-@app.route("/join_chat", methods=["POST"])
-def join_chat():
-    username = session.get('username'); 
-    if not username: return "not signed in", 400
-    user = load_user_by_name(username); 
-    if not user: return "no such user", 400
-    if user.get("is_owner") or user.get("is_partner"): return "already joined", 400
-    partner = get_partner()
-    if partner is None:
-        set_partner_by_name(username); return "joined"
-    if partner and partner.get("name") == username: return "joined"
-    return "chat already has a partner", 400
+# Route for sending messages that might have an attachment
+@app.route("/send_composite_message", methods=["POST"])
+def send_composite_message():
+    username = session.get('username')
+    if not username: return "not signed in", 401
+    
+    text = request.form.get('text', '').strip()
+    file = request.files.get('file')
+    attachments = []
 
+    if file and file.filename:
+        fn = secure_filename(file.filename)
+        save_name = f"uploads/{secrets.token_hex(8)}_{fn}"
+        path = os.path.join(app.static_folder, save_name)
+        file.save(path)
+        url = url_for('static', filename=save_name)
+        
+        ext = fn.rsplit(".", 1)[-1].lower() if "." in fn else ""
+        kind = "doc"
+        if ext in ALLOWED_IMAGE_EXT:
+            kind = "image"
+        elif ext in ALLOWED_VIDEO_EXT:
+            kind = "video"
+        elif ext in ALLOWED_AUDIO_EXT:
+            kind = "audio"
+        
+        attachments.append({"type": kind, "url": url, "name": fn})
+
+    if text or attachments:
+        save_message(username, text, attachments=attachments)
+        touch_user_presence(username)
+    
+    return jsonify({"status": "ok"})
+
+
+# Kept for sticker sending, which is URL-based
 @app.route("/send_message", methods=["POST"])
 def send_message():
     username = session.get('username'); 
     if not username: return "not signed in", 400
-    user = load_user_by_name(username); 
-    if not user: return "unknown user", 400
-    if not (user.get("is_owner") or user.get("is_partner")): return "not part of chat", 403
     body = request.get_json() or {}
     text = (body.get("text") or "").strip()
     attachments = body.get("attachments") or []
@@ -1000,63 +1094,10 @@ def route_react_message():
     if not ok: return err, 400
     touch_user_presence(username); return jsonify({"status":"ok"})
 
-# uploads
-@app.route("/upload_sticker", methods=["POST"])
-def upload_sticker():
-    if 'file' not in request.files: return jsonify({"error":"no file"}), 400
-    f = request.files['file']
-    if f.filename == '': return jsonify({"error":"empty filename"}), 400
-    fn = secure_filename(f.filename)
-    save_name = f"stickers/{secrets.token_hex(8)}_{fn}"
-    path = os.path.join(app.static_folder, save_name); f.save(path)
-    url = url_for('static', filename=save_name)
-    attachments = [{"type":"sticker","url": url}]
-    return jsonify({"status":"ok","attachments": attachments})
-
-@app.route("/upload_file", methods=["POST"])
-def upload_file():
-    if 'file' not in request.files: return jsonify({"error":"no file"}), 400
-    f = request.files['file']; 
-    if f.filename == '': return jsonify({"error":"empty filename"}), 400
-    fn = secure_filename(f.filename)
-    save_name = f"uploads/{secrets.token_hex(8)}_{fn}"; path = os.path.join(app.static_folder, save_name); f.save(path)
-    url = url_for('static', filename=save_name)
-    ext = fn.rsplit(".",1)[-1].lower() if "." in fn else ""
-    kind = "doc"
-    if ext in ALLOWED_IMAGE_EXT:
-        kind = "image"
-    elif ext in ALLOWED_VIDEO_EXT:
-        kind = "video"
-    attachments = [{"type":kind,"url": url, "name": fn}]
-    return jsonify({"status":"ok","attachments": attachments})
-
-@app.route("/upload_audio", methods=["POST"])
-def upload_audio():
-    if 'file' not in request.files: return jsonify({"error":"no file"}), 400
-    f = request.files['file']; 
-    if f.filename == '': return jsonify({"error":"empty filename"}), 400
-    fn = secure_filename(f.filename)
-    save_name = f"uploads/{secrets.token_hex(8)}_{fn}"; path = os.path.join(app.static_folder, save_name); f.save(path)
-    url = url_for('static', filename=save_name)
-    attachments = [{"type":"audio","url": url}]
-    return jsonify({"status":"ok","attachments": attachments})
-
-@app.route("/typing", methods=["POST"])
-def route_typing():
-    username = session.get('username'); 
-    if not username: return "not signed in", 400
-    touch_user_presence(username)
-    return jsonify({"status":"ok"})
-
 @app.route("/partner_info")
 def partner_info():
     p = get_partner()
     return jsonify(p or {})
-
-@app.route("/call_logs")
-def call_logs():
-    rows = fetch_call_logs(50)
-    return jsonify(rows)
 
 # socket handlers
 @socketio.on('identify')
@@ -1109,10 +1150,17 @@ def on_call_decline(data):
 def on_call_end(data):
     call_id = data.get('call_id')
     update_call_ended(call_id)
+    log = fetch_call_log_by_id(call_id)
+    if log and log.get('started_at') and log.get('ended_at'):
+        duration = log['ended_at'] - log['started_at']
+        socketio.emit('call_summary', {'duration': duration, 'isVideo': log['is_video']})
+
     info = CALL_INVITES.pop(call_id, None)
     if info:
-        sid = USER_SID.get(info['caller'])
-        if sid: emit('call_ended', {'call_id': call_id}, room=sid)
+        sid_caller = USER_SID.get(info.get('caller'))
+        sid_callee = USER_SID.get(info.get('callee'))
+        if sid_caller: emit('call_ended', {'call_id': call_id}, room=sid_caller)
+        if sid_callee: emit('call_ended', {'call_id': call_id}, room=sid_callee)
 
 # WebRTC signaling passthrough
 @socketio.on('webrtc_offer')
@@ -1133,7 +1181,4 @@ def on_ice_candidate(data):
 # ----- run -----
 if __name__ == "__main__":
     print("DB:", DB_PATH)
-    pathlib.Path(os.path.join(app.static_folder,"uploads")).mkdir(parents=True, exist_ok=True)
-    pathlib.Path(os.path.join(app.static_folder,"stickers")).mkdir(parents=True, exist_ok=True)
-    pathlib.Path(os.path.join(app.static_folder,"gifs")).mkdir(parents=True, exist_ok=True)
     socketio.run(app, host="0.0.0.0", port=PORT, debug=True)
