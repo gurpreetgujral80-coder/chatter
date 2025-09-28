@@ -23,6 +23,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
 HEADING_IMG = "/static/heading.png"  # place your heading image here
 MAX_MESSAGES = 80
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
+ALLOWED_VIDEO_EXT = {"mp4", "webm", "ogg"}
 
 # ensure static subfolders
 pathlib.Path(os.path.join(app.static_folder, "uploads")).mkdir(parents=True, exist_ok=True)
@@ -309,7 +310,7 @@ INDEX_HTML = r'''<!doctype html>
 </head><body class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-pink-50 p-4">
   <div class="max-w-3xl mx-auto">
     <header>
-      <img src="{{ heading_img }}" alt="heading" class="mx-auto" style="max-height:64px"/>
+      <img src="{{ heading_img }}" alt="heading" class="mx-auto" style="max-height:96px"/>
       <div class="heading mt-2"><div class="left">Asphalt</div><div class="right">Legends</div></div>
       <p class="text-xs text-gray-500 mt-2">Shared single passkey login. First user creates master passkey.</p>
     </header>
@@ -388,7 +389,7 @@ CHAT_HTML = r'''<!doctype html>
 <style>
   body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: linear-gradient(180deg, #eef2ff 0%, #fff0f6 100%); }
   header{ text-align:center; margin:12px 0 6px; }
-  header img{max-height:64px; display:block; margin:0 auto;}
+  header img{max-height:96px; display:block; margin:0 auto;}
   .heading{display:flex;justify-content:center;gap:8px;align-items:center;margin-top:6px;}
   .left{ color:#3730a3;font-weight:800;font-size:1.4rem;}
   .right{ color:#be185d;font-weight:800;font-size:1.4rem;margin-left:6px;}
@@ -409,15 +410,23 @@ CHAT_HTML = r'''<!doctype html>
   .call-history{ position: fixed; right:20px; bottom:140px; z-index:90; display:none; background:white; border-radius:8px; padding:8px; box-shadow:0 8px 20px rgba(0,0,0,.12); max-height:50vh; overflow:auto;}
   .mic-active{ background:#10b981 !important; color:white !important; }
   .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
-  .image-attachment{ border-radius:10px; display:block; max-width:86vw; margin-top:8px; }
   .sticker{ width:120px; height:auto; margin-top:8px; }
   .textarea{ resize:none; min-height:44px; max-height:220px; overflow:auto; border-radius:12px; padding:8px; }
   main{ max-width:900px; margin:0 auto; padding-bottom:110px; } /* padding-bottom so messages not hidden behind composer */
   .composer { position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom, 0); display:flex; justify-content:center; padding:12px; background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.8)); backdrop-filter: blur(6px); }
   .composer-inner{ width:100%; max-width:900px; display:flex; gap:8px; align-items:flex-end; }
-  .no-bubble-image{ display:block; max-width:86vw; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.08); }
+  /* ---- NEW & MODIFIED STYLES ---- */
+  .media-container { position: relative; display: inline-block; width: 100%; }
+  .media-container .download-btn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; border-radius: 999px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 1.2rem; transition: background .2s; z-index: 10; }
+  .media-container .download-btn:hover { background: rgba(0,0,0,0.8); }
+  .doc-link { display: inline-flex; align-items: center; gap: 8px; background: #f3f4f6; padding: 8px 12px; border-radius: 8px; text-decoration: none; color: #1f2937; margin-top:8px; }
+  .doc-link:hover { background: #e5e7eb; }
+  .doc-link span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+  .image-attachment, .video-attachment { border-radius: 10px; display: block; margin-top: 8px; width: 100%; max-width: 90vw; height: auto; }
+  .no-bubble-image, .no-bubble-video { display: block; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.08); width: 100%; max-width: 90vw; height: auto; }
   @media (min-width: 768px) {
-    .image-attachment { max-width:400px; }
+    .image-attachment, .video-attachment { max-width: 500px; }
+    .no-bubble-image, .no-bubble-video { max-width: 500px; }
   }
 </style>
 </head><body>
@@ -450,17 +459,16 @@ CHAT_HTML = r'''<!doctype html>
     <div id="messages" class="mb-3"></div>
   </main>
 
-  <!-- composer fixed bottom -->
   <div class="composer">
     <div class="composer-inner">
       <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow">＋</button>
 
       <div id="attachMenu" class="attach-menu">
         <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-          <input id="fileAttach" type="file" accept="image/*" class="hidden" /> Photo/Video
+          <input id="fileAttach" type="file" accept="image/*,video/*" class="hidden" /> Photo/Video
         </label>
         <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-          <input id="cameraAttach" type="file" accept="image/*" capture="environment" class="hidden" /> Camera
+          <input id="cameraAttach" type="file" accept="image/*,video/*" capture="environment" class="hidden" /> Camera
         </label>
         <label class="px-3 py-2 rounded bg-white border cursor-pointer">
           <input id="docAttach" type="file" class="hidden" /> Document
@@ -476,7 +484,6 @@ CHAT_HTML = r'''<!doctype html>
     </div>
   </div>
 
-  <!-- sticker modal -->
   <div id="stickerModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50">
     <div class="bg-white rounded-lg p-4 w-11/12 max-w-2xl">
       <div class="flex justify-between items-center mb-3"><div class="font-semibold">Stickers & GIFs</div><button id="closeSticker" class="text-gray-500">✕</button></div>
@@ -484,7 +491,6 @@ CHAT_HTML = r'''<!doctype html>
     </div>
   </div>
 
-  <!-- profile modal -->
   <div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-60">
     <div class="bg-white rounded-lg p-4 w-96">
       <div class="flex items-center justify-between mb-3"><div><div class="text-lg font-bold">Profile</div></div><button id="closeProfile" class="text-gray-500">✕</button></div>
@@ -498,10 +504,8 @@ CHAT_HTML = r'''<!doctype html>
     </div>
   </div>
 
-  <!-- call history -->
   <div id="callHistory" class="call-history"></div>
 
-  <!-- incoming call popup -->
   <div id="incomingCall" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:60; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
     <div id="incomingText">Incoming call</div>
     <div class="flex gap-2 mt-2"><button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button><button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button></div>
@@ -534,22 +538,59 @@ resizeTextarea();
 
 // hide menus on body click
 document.addEventListener('click', (ev)=>{
-  // if click inside attachMenu or plusBtn or stickerModal, ignore
   const attach = attachMenu;
   const plus = byId('plusBtn');
-  if(attach && (attach.contains(ev.target) || plus.contains(ev.target))) {
-    return;
-  }
-  // close attach menu
+  if(attach && (attach.contains(ev.target) || plus.contains(ev.target))) { return; }
   if(attach) attach.style.display = 'none';
-  // close any message menus
   document.querySelectorAll('.menu').forEach(n=>n.remove());
-  // close sticker modal if clicked outside modal content
   if(stickerModal && !stickerModal.classList.contains('hidden')){
     const wrap = stickerModal.querySelector('div');
     if(!wrap.contains(ev.target)) { stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); }
   }
 });
+
+// NEW: Helper function to create attachment elements
+function createAttachmentElement(a) {
+  const container = document.createElement('div');
+  if (a.type === 'image' || a.type === 'video') {
+    container.className = 'media-container mt-2';
+    const downloadLink = document.createElement('a');
+    downloadLink.href = a.url;
+    downloadLink.setAttribute('download', a.name || '');
+    downloadLink.className = 'download-btn';
+    downloadLink.innerHTML = '⤓';
+    downloadLink.title = 'Download';
+    container.appendChild(downloadLink);
+    let mediaEl;
+    if (a.type === 'image') {
+      mediaEl = document.createElement('img');
+      mediaEl.src = a.url;
+    } else { // video
+      mediaEl = document.createElement('video');
+      mediaEl.src = a.url;
+      mediaEl.controls = true;
+      mediaEl.playsInline = true;
+    }
+    container.appendChild(mediaEl);
+    return { element: container, mediaElement: mediaEl };
+  } else if (a.type === 'audio') {
+      const au = document.createElement('audio');
+      au.src = a.url;
+      au.controls = true;
+      au.className = 'mt-2';
+      container.appendChild(au);
+      return { element: container };
+  } else if (a.type === 'doc') {
+      const link = document.createElement('a');
+      link.href = a.url;
+      link.className = 'doc-link';
+      link.setAttribute('download', a.name || 'Document');
+      link.innerHTML = `<span>${escapeHtml(a.name || 'Document')}</span> ⤓`;
+      container.appendChild(link);
+      return { element: container };
+  }
+  return { element: null };
+}
 
 // fetch & render messages
 async function poll(){
@@ -563,18 +604,12 @@ async function poll(){
       const me = (m.sender === myName);
       const wrapper = document.createElement('div'); wrapper.className='msg-row';
       const body = document.createElement('div'); body.className='msg-body';
-
-      // meta (name/time/ticks) on top
       const meta = document.createElement('div'); meta.className='msg-meta-top';
       const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
       const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
       meta.appendChild(leftMeta); meta.appendChild(rightMeta);
-
-      // attachments-only (no bubble) — show image/sticker directly when no text
       const hasText = m.text && m.text.trim().length > 0;
       const attachments = (m.attachments || []);
-
-      // menu button (styled darker)
       const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
       menuBtn.onclick = (ev)=>{
         ev.stopPropagation();
@@ -600,7 +635,6 @@ async function poll(){
           await fetch('/react_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,emoji:'❤️'})});
           container.innerHTML=''; lastId=0; poll();
         };
-        // permissions: only show Edit if sender == me
         if(m.sender === myName) menu.appendChild(edit);
         menu.appendChild(del); menu.appendChild(react);
         document.body.appendChild(menu);
@@ -608,12 +642,9 @@ async function poll(){
         menu.style.left = (rect.left - 8) + 'px';
         menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
       };
-
       body.appendChild(meta);
 
-      // build content
-      // If attachments exist and no text: render attachments alone with no bubble
-      if(attachments.length && !hasText){
+      if(attachments.length && !hasText){ // Attachments-only (no bubble)
         const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
         if(!me){
           const avatar = document.createElement('div'); avatar.style.width='34px'; avatar.style.height='34px'; avatar.style.borderRadius='999px'; avatar.style.background='#e5e7eb'; avatar.innerText=m.sender[0]||'?'; avatar.style.display='flex'; avatar.style.alignItems='center'; avatar.style.justifyContent='center';
@@ -621,20 +652,19 @@ async function poll(){
         }
         const attContainer = document.createElement('div');
         attachments.forEach(a=>{
-          if(a.type==='image' || a.type==='sticker'){
-            const img = document.createElement('img'); img.src = a.url;
-            img.className = (a.type==='sticker' ? 'sticker' : 'no-bubble-image');
-            attContainer.appendChild(img);
-          } else if(a.type==='audio'){
-            const au = document.createElement('audio'); au.src = a.url; au.controls=true; attContainer.appendChild(au);
-          } else if(a.type==='doc'){
-            const link = document.createElement('a'); link.href = a.url; link.textContent = a.name || 'Document'; attContainer.appendChild(link);
+          if(a.type==='sticker'){
+            const img = document.createElement('img'); img.src = a.url; img.className = 'sticker'; attContainer.appendChild(img);
+          } else {
+            const { element, mediaElement } = createAttachmentElement(a);
+            if (element) {
+              if (mediaElement) { mediaElement.className = (a.type==='video' ? 'no-bubble-video' : 'no-bubble-image'); }
+              attContainer.appendChild(element);
+            }
           }
         });
         rowInner.appendChild(attContainer);
         body.appendChild(rowInner);
-      } else {
-        // normal bubble with text and inline attachments
+      } else { // Bubble with text and/or inline attachments
         const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
         if(!me){
           const avatar = document.createElement('div'); avatar.style.width='34px'; avatar.style.height='34px'; avatar.style.borderRadius='999px'; avatar.style.background='#e5e7eb'; avatar.innerText=m.sender[0]||'?'; avatar.style.display='flex'; avatar.style.alignItems='center'; avatar.style.justifyContent='center';
@@ -643,17 +673,16 @@ async function poll(){
         const msgContainer = document.createElement('div');
         const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
         bubble.innerHTML = hasText ? (escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'') ) : '';
-        // attachments inline (if both text+attachments)
         if(attachments.length){
           attachments.forEach(a=>{
-            if(a.type==='image'){
-              const el = document.createElement('img'); el.src = a.url; el.className = 'image-attachment'; bubble.appendChild(el);
-            } else if(a.type==='sticker'){
+            if(a.type==='sticker'){
               const el = document.createElement('img'); el.src = a.url; el.className = 'sticker'; bubble.appendChild(el);
-            } else if(a.type==='audio'){
-              const el = document.createElement('audio'); el.src = a.url; el.controls=true; bubble.appendChild(el);
-            } else if(a.type==='doc'){
-              const el = document.createElement('a'); el.href = a.url; el.textContent = a.name || 'Document'; bubble.appendChild(el);
+            } else {
+              const { element, mediaElement } = createAttachmentElement(a);
+              if (element) {
+                if (mediaElement) { mediaElement.className = (a.type === 'video' ? 'video-attachment' : 'image-attachment'); }
+                bubble.appendChild(element);
+              }
             }
           });
         }
@@ -663,7 +692,6 @@ async function poll(){
         rowInner.appendChild(msgContainer);
         body.appendChild(rowInner);
       }
-
       wrapper.appendChild(body);
       container.appendChild(wrapper);
       lastId = m.id;
@@ -729,7 +757,7 @@ byId('stickerPickerBtn').addEventListener('click', async (ev)=>{
 
 // share contact & location
 byId('shareContactBtn').addEventListener('click', async ()=>{ const name = prompt('Contact name'); const phone = prompt('Phone'); if(!name||!phone) return; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`Contact: ${name} (${phone})`})}); await poll(); attachMenu.style.display='none'; });
-byId('shareLocationBtn').addEventListener('click', async ()=>{ if(!navigator.geolocation) return alert('Geolocation not supported'); navigator.geolocation.getCurrentPosition(async (pos)=>{ const lat=pos.coords.latitude, lon=pos.coords.longitude; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`Location: https://maps.google.com/?q=${lat},${lon}`})}); await poll(); }, err=> alert('Location error: '+err.message)); attachMenu.style.display='none'; });
+byId('shareLocationBtn').addEventListener('click', async ()=>{ if(!navigator.geolocation) return alert('Geolocation not supported'); navigator.geolocation.getCurrentPosition(async (pos)=>{ const lat=pos.coords.latitude, lon=pos.coords.longitude; await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:`My Location: https://maps.google.com/?q=${lat},${lon}`})}); await poll(); }, err=> alert('Location error: '+err.message)); attachMenu.style.display='none'; });
 
 // mic toggle
 const micBtn = byId('mic');
@@ -993,8 +1021,12 @@ def upload_file():
     fn = secure_filename(f.filename)
     save_name = f"uploads/{secrets.token_hex(8)}_{fn}"; path = os.path.join(app.static_folder, save_name); f.save(path)
     url = url_for('static', filename=save_name)
-    ext = fn.rsplit(".",1)[-1].lower()
-    kind = "image" if ext in ALLOWED_IMAGE_EXT else "doc"
+    ext = fn.rsplit(".",1)[-1].lower() if "." in fn else ""
+    kind = "doc"
+    if ext in ALLOWED_IMAGE_EXT:
+        kind = "image"
+    elif ext in ALLOWED_VIDEO_EXT:
+        kind = "video"
     attachments = [{"type":kind,"url": url, "name": fn}]
     return jsonify({"status":"ok","attachments": attachments})
 
@@ -1105,4 +1137,3 @@ if __name__ == "__main__":
     pathlib.Path(os.path.join(app.static_folder,"stickers")).mkdir(parents=True, exist_ok=True)
     pathlib.Path(os.path.join(app.static_folder,"gifs")).mkdir(parents=True, exist_ok=True)
     socketio.run(app, host="0.0.0.0", port=PORT, debug=True)
-    
