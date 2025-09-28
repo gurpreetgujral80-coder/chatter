@@ -550,7 +550,7 @@ CHAT_HTML = r'''<!doctype html>
     <div class="composer-inner">
       <div id="attachmentPreview"></div>
       <div class="composer-main">
-        <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow" style="font-size: 1rem">＋</button>
+        <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow" style="font-size: 3rem">＋</button>
         <div id="attachMenu" class="attach-menu">
           <label class="px-3 py-2 rounded bg-white border cursor-pointer">
             <input id="fileAttach" type="file" accept="image/*,video/*,audio/*" class="hidden" multiple /> Photo/Video
