@@ -404,7 +404,7 @@ CHAT_HTML = r'''<!doctype html>
   }
   header{ 
     text-align:center; 
-    margin:12px auto 6px; 
+    margin: -8px auto 6px; 
     max-width:900px;
   }
   header img{max-height:96px; display:block; margin:0 auto;}
@@ -414,7 +414,7 @@ CHAT_HTML = r'''<!doctype html>
   .top-right{ 
     position: absolute; 
     right: 12px; 
-    top: 50%; /* Center vertically within the header container */
+    top: 15%; /* Center vertically within the header container */
     transform: translateY(-50%); 
     display:flex; 
     gap:8px; 
@@ -490,8 +490,7 @@ CHAT_HTML = r'''<!doctype html>
     padding-right: 10px;
     display: flex; 
     align-items: center; 
-    justify-content: flex-end; /* Align right */
-    padding-bottom: 8px;
+    justify-content: flex-end;
   }
 
 
@@ -516,6 +515,13 @@ CHAT_HTML = r'''<!doctype html>
 </style>
 </head><body>
 <div class="fixed-header-container">
+  <div class="call-buttons-container">
+      <div class="flex gap-2 items-center">
+          <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
+          <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
+        </div>
+      </div>
+  </div>
   <div class="top-right">
     <button id="profileBtn" class="rounded-full bg-indigo-600 text-white flex items-center justify-center">P</button>
     <div id="profileMenu" class="menu" style="display:none; right:0; top:48px;">
@@ -531,14 +537,6 @@ CHAT_HTML = r'''<!doctype html>
       <div class="right">Legends</div>
     </div>
   </header>
-  
-  <div class="call-buttons-container">
-    <div class="flex gap-2 items-center">
-      <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
-      <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
-    </div>
-  </div>
-</div>
 
   <main>
     <div id="messages" class="mb-3"></div>
