@@ -612,7 +612,7 @@ const profileMenu = byId('profileMenu');
 const profileModal = byId('profileModal');
 
 // helpers
-function escapeHtml(s){ return String(s||'').replace(/[&<>\"]/g, c=>({'&':'&','<':'<','>':'>' ,'"':'"'}[c])); }
+function escapeHtml(s){ return String(s||'').replace(/[&<>\"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function byId(id){ return document.getElementById(id); }
 function formatDuration(sec) { const h = Math.floor(sec / 3600).toString().padStart(2, '0'); const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0'); const s = Math.floor(sec % 60).toString().padStart(2, '0'); return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`; }
 
