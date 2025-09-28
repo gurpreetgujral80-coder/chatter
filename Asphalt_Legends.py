@@ -482,18 +482,6 @@ CHAT_HTML = r'''<!doctype html>
     font-weight: 600;
   }
 
-  /* Call buttons container for centering on wider screens */
-  .call-buttons-container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding-left: 10px;
-    padding-right: 10px;
-    display: flex; 
-    align-items: center; 
-    justify-content: flex-end;
-  }
-
-
   @media (min-width: 768px) {
     .image-attachment, .video-attachment { max-width: 500px; }
     .no-bubble-image, .no-bubble-video { max-width: 500px; }
@@ -515,13 +503,11 @@ CHAT_HTML = r'''<!doctype html>
 </style>
 </head><body>
 <div class="fixed-header-container">
-  <div class="call-buttons-container">
-      <div class="flex gap-2 items-center">
-          <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
-          <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
-        </div>
-      </div>
-  </div>
+  <div class="flex gap-2 items-center">
+      <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
+      <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
+    </div>
+  </div>
   <div class="top-right">
     <button id="profileBtn" class="rounded-full bg-indigo-600 text-white flex items-center justify-center">P</button>
     <div id="profileMenu" class="menu" style="display:none; right:0; top:48px;">
