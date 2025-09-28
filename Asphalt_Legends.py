@@ -389,207 +389,207 @@ CHAT_HTML = r'''<!doctype html>
 <title>Asphalt Legends — Chat</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: linear-gradient(180deg, #eef2ff 0%, #fff0f6 100%); }
-  
-  /* --- FIXED HEADER STYLES --- */
-  .fixed-header-container { 
-    position: fixed; 
-    top: 0; 
-    left: 0; 
-    right: 0; 
-    z-index: 50; 
-    background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); 
-    backdrop-filter: blur(4px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  }
-  header{ 
-    text-align:center; 
-    margin: -8px auto 6px; 
-    max-width:900px;
-  }
-  header img{max-height:96px; display:block; margin:0 auto;}
-  .heading{display:flex;justify-content:center;gap:8px;align-items:center;margin-top:-15px;}
-  .left{ color:#3730a3;font-weight:800;font-size:1.4rem;}
-  .right{ color:#be185d;font-weight:800;font-size:1.4rem;margin-left:6px;}
-  .top-right{ 
-    position: absolute; 
-    right: 12px; 
-    top: 15%; /* Center vertically within the header container */
-    transform: translateY(-50%); 
-    display:flex; 
-    gap:8px; 
-    align-items:center;
-  }
-  
-  /* --- MAIN CONTENT & CHAT BUBBLES --- */
-  .avatar-sm{width:36px;height:36px;border-radius:999px;object-fit:cover;}
-  .bubble{ padding:10px 12px; border-radius:12px; display:inline-block; max-width:72%; word-break:break-word; white-space:pre-wrap;}
-  .me{ background: linear-gradient(90deg,#dcf8c6,#e6ffe6); border-bottom-right-radius:3px;}
-  .them{ background:#fff; border-bottom-left-radius:3px;}
-  .meta{ font-size:.75rem; color:#6b7280; margin-bottom:4px;}
-  .msg-row{ margin-bottom:10px; display:flex; gap:8px; align-items:flex-start;}
-  
-  /* 2. GAP FOR MOBILE */
-  @media (max-width: 767px) {
-    .msg-row { margin-left: 10px; } /* Small gap from left edge on mobile */
-    .bubble { max-width: 85%; }
-  }
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: linear-gradient(180deg, #eef2ff 0%, #fff0f6 100%); }
+  
+  /* --- FIXED HEADER STYLES --- */
+  .fixed-header-container { 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    right: 0; 
+    z-index: 50; 
+    background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); 
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+  header{ 
+    text-align:center; 
+    margin: -8px auto 6px; 
+    max-width:900px;
+  }
+  header img{max-height:96px; display:block; margin:0 auto;}
+  .heading{display:flex;justify-content:center;gap:8px;align-items:center;margin-top:-15px;}
+  .left{ color:#3730a3;font-weight:800;font-size:1.4rem;}
+  .right{ color:#be185d;font-weight:800;font-size:1.4rem;margin-left:6px;}
+  .top-right{ 
+    position: absolute; 
+    right: 12px; 
+    top: 15%; /* Center vertically within the header container */
+    transform: translateY(-50%); 
+    display:flex; 
+    gap:8px; 
+    align-items:center;
+  }
+  
+  /* --- MAIN CONTENT & CHAT BUBBLES --- */
+  .avatar-sm{width:36px;height:36px;border-radius:999px;object-fit:cover;}
+  .bubble{ padding:10px 12px; border-radius:12px; display:inline-block; max-width:72%; word-break:break-word; white-space:pre-wrap;}
+  .me{ background: linear-gradient(90deg,#dcf8c6,#e6ffe6); border-bottom-left-radius:3px;} /* MODIFIED: Corner for left alignment */
+  .them{ background:#fff; border-bottom-left-radius:3px;}
+  .meta{ font-size:.75rem; color:#6b7280; margin-bottom:4px;}
+  .msg-row{ margin-bottom:10px; display:flex; gap:8px; align-items:flex-start; margin-left: 10px;} /* MODIFIED: Added default left margin */
+  
+  /* 2. GAP FOR MOBILE (ensured) */
+  @media (max-width: 767px) {
+    .msg-row { margin-left: 10px; } /* Small gap from left edge on mobile */
+    .bubble { max-width: 85%; }
+  }
 
-  .msg-body{ display:flex; flex-direction:column;}
-  .three-dot{ background: none; border: none; cursor:pointer; font-size:1.05rem; color: #000000; padding: 1px 8px; border-radius:8px; background: rgba(255, 255, 255, 0.06);}
-  .menu{ position: absolute; background: #ffffff; color: #000000; padding:8px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.25); z-index:120; min-width:140px;}
-  .menu div, .menu form button{ width:100%; text-align:left; padding:8px 10px; cursor:pointer; border-radius:6px;}
-  .menu div:hover, .menu form button:hover{ background: #f3f4f6; } /* Adjusted hover color */
-  .attach-menu{ position: fixed; right:20px; bottom:84px; z-index:90; display:none; flex-direction:column; gap:8px; }
-  .attach-menu button, .attach-menu label{ min-width:160px; text-align:left; }
-  .mic-active{ background:#10b981 !important; color:white !important; }
-  .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
-  .sticker{ width:120px; height:auto; margin-top:8px; }
-  .textarea{ resize:none; min-height:44px; max-height:220px; overflow:auto; border-radius:12px; padding:8px; }
-  main{ 
-    max-width:900px; 
-    margin:0 auto; 
-    padding-top: 150px; /* Space for the fixed header content */
-    padding-bottom:110px; 
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-  .composer { position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom, 0); display:flex; justify-content:center; padding:12px; background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.8)); backdrop-filter: blur(6px); z-index: 50; }
-  .composer-inner{ width:100%; max-width:900px; display:flex; flex-direction:column; gap:8px; }
-  .composer-main{ display:flex; gap:8px; align-items:flex-end; width: 100%; }
-  .system-message{ text-align:center; font-size:0.8rem; color:#6b7280; background:rgba(230,230,230,0.7); padding:4px 10px; border-radius:12px; margin:10px auto; display:table; }
-  /* ---- NEW & MODIFIED STYLES ---- */
-  body.profile-modal-open .download-btn { opacity: 0; pointer-events: none; }
-  #attachmentPreview { padding: 8px; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; display: none; }
-  .preview-item { position: relative; display: inline-block; max-width: 120px; }
-  .preview-item img, .preview-item video { max-width: 100%; height: auto; border-radius: 8px; }
-  .preview-item-doc { background:#f3f4f6; padding:8px; border-radius:8px; font-size:0.8rem; }
-  .preview-remove-btn { position: absolute; top: -8px; right: -8px; background: #374151; color: white; border-radius: 999px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1rem; line-height: 1rem; border: none; }
-  .media-container { position: relative; display: inline-block; width: 100%; }
-  .media-container .download-btn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; border-radius: 999px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 1.2rem; transition: background .2s; z-index: 10; }
-  .media-container .download-btn:hover { background: rgba(0,0,0,0.8); }
-  .doc-link { display: inline-flex; align-items: center; gap: 8px; background: #f3f4f6; padding: 8px 12px; border-radius: 8px; text-decoration: none; color: #1f2937; margin-top:8px; }
-  .doc-link:hover { background: #e5e7eb; }
-  .doc-link span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
-  .image-attachment, .video-attachment { border-radius: 10px; display: block; margin-top: 8px; width: 100%; max-width: 90vw; height: auto; }
-  .no-bubble-image, .no-bubble-video { display: block; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.08); width: 100%; max-width: 90vw; height: auto; }
-  
-  /* 5. RECTANGULAR PROFILE ICON */
-  #profileBtn {
-    width: 50px; /* Wider */
-    height: 32px; /* Shorter */
-    border-radius: 8px; /* Rounded corners */
-    font-weight: 600;
-  }
+  .msg-body{ display:flex; flex-direction:column; align-items:flex-start;} /* MODIFIED: Ensure message body is left-aligned */
+  .three-dot{ background: none; border: none; cursor:pointer; font-size:1.05rem; color: #000000; padding: 1px 8px; border-radius:8px; background: rgba(255, 255, 255, 0.06);}
+  .menu{ position: absolute; background: #ffffff; color: #000000; padding:8px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.25); z-index:120; min-width:140px;}
+  .menu div, .menu form button{ width:100%; text-align:left; padding:8px 10px; cursor:pointer; border-radius:6px;}
+  .menu div:hover, .menu form button:hover{ background: #f3f4f6; } /* Adjusted hover color */
+  .attach-menu{ position: fixed; right:20px; bottom:84px; z-index:90; display:none; flex-direction:column; gap:8px; }
+  .attach-menu button, .attach-menu label{ min-width:160px; text-align:left; }
+  .mic-active{ background:#10b981 !important; color:white !important; }
+  .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
+  .sticker{ width:120px; height:auto; margin-top:8px; }
+  .textarea{ resize:none; min-height:44px; max-height:220px; overflow:auto; border-radius:12px; padding:8px; }
+  main{ 
+    max-width:900px; 
+    margin:0 auto; 
+    padding-top: 150px; /* Space for the fixed header content */
+    padding-bottom:110px; 
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .composer { position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom, 0); display:flex; justify-content:center; padding:12px; background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.8)); backdrop-filter: blur(6px); z-index: 50; }
+  .composer-inner{ width:100%; max-width:900px; display:flex; flex-direction:column; gap:8px; }
+  .composer-main{ display:flex; gap:8px; align-items:flex-end; width: 100%; }
+  .system-message{ text-align:center; font-size:0.8rem; color:#6b7280; background:rgba(230,230,230,0.7); padding:4px 10px; border-radius:12px; margin:10px auto; display:table; }
+  /* ---- NEW & MODIFIED STYLES ---- */
+  body.profile-modal-open .download-btn { opacity: 0; pointer-events: none; }
+  #attachmentPreview { padding: 8px; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; display: none; }
+  .preview-item { position: relative; display: inline-block; max-width: 120px; }
+  .preview-item img, .preview-item video { max-width: 100%; height: auto; border-radius: 8px; }
+  .preview-item-doc { background:#f3f4f6; padding:8px; border-radius:8px; font-size:0.8rem; }
+  .preview-remove-btn { position: absolute; top: -8px; right: -8px; background: #374151; color: white; border-radius: 999px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1rem; line-height: 1rem; border: none; }
+  .media-container { position: relative; display: inline-block; width: 100%; }
+  .media-container .download-btn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; border-radius: 999px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 1.2rem; transition: background .2s; z-index: 10; }
+  .media-container .download-btn:hover { background: rgba(0,0,0,0.8); }
+  .doc-link { display: inline-flex; align-items: center; gap: 8px; background: #f3f4f6; padding: 8px 12px; border-radius: 8px; text-decoration: none; color: #1f2937; margin-top:8px; }
+  .doc-link:hover { background: #e5e7eb; }
+  .doc-link span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+  .image-attachment, .video-attachment { border-radius: 10px; display: block; margin-top: 8px; width: 100%; max-width: 90vw; height: auto; }
+  .no-bubble-image, .no-bubble-video { display: block; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.08); width: 100%; max-width: 90vw; height: auto; }
+  
+  /* 5. RECTANGULAR PROFILE ICON */
+  #profileBtn {
+    width: 50px; /* Wider */
+    height: 32px; /* Shorter */
+    border-radius: 8px; /* Rounded corners */
+    font-weight: 600;
+  }
 
-  /* Call buttons container for centering on wider screens */
-  .call-buttons-container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding-left: 10px;
-    padding-right: 10px;
-    display: flex; 
-    align-items: center; 
-    justify-content: flex-end;
-  }
+  /* Call buttons container for centering on wider screens */
+  .call-buttons-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding-left: 10px;
+    padding-right: 10px;
+    display: flex; 
+    align-items: center; 
+    justify-content: flex-end;
+  }
 
 
-  @media (min-width: 768px) {
-    .image-attachment, .video-attachment { max-width: 500px; }
-    .no-bubble-image, .no-bubble-video { max-width: 500px; }
-    .call-buttons-container { justify-content: flex-end; }
-  }
+  @media (min-width: 768px) {
+    .image-attachment, .video-attachment { max-width: 500px; }
+    .no-bubble-image, .no-bubble-video { max-width: 500px; }
+    .call-buttons-container { justify-content: flex-end; }
+  }
 
-  /* 3. IPAD PRO STYLING (or any larger tablet) */
-  @media (min-width: 1024px) {
-    body { font-size: 1.1rem; }
-    .bubble { padding: 12px 16px; border-radius: 14px; max-width: 60%; }
-    .left, .right { font-size: 1.6rem; }
-    header img { max-height: 110px; }
-    .msg-meta-top { font-size: 0.8rem; }
-    .avatar-sm { width: 44px; height: 44px; }
-    main { padding-top: 170px; } /* Adjust padding for bigger header */
-    #profileBtn { width: 60px; height: 36px; border-radius: 10px; font-size: 1.1rem; }
-    .composer { padding: 16px 12px; }
-  }
+  /* 3. IPAD PRO STYLING (or any larger tablet) */
+  @media (min-width: 1024px) {
+    body { font-size: 1.1rem; }
+    .bubble { padding: 12px 16px; border-radius: 14px; max-width: 60%; }
+    .left, .right { font-size: 1.6rem; }
+    header img { max-height: 110px; }
+    .msg-meta-top { font-size: 0.8rem; }
+    .avatar-sm { width: 44px; height: 44px; }
+    main { padding-top: 170px; } /* Adjust padding for bigger header */
+    #profileBtn { width: 60px; height: 36px; border-radius: 10px; font-size: 1.1rem; }
+    .composer { padding: 16px 12px; }
+  }
 </style>
 </head><body>
 <div class="fixed-header-container">
-  <div class="call-buttons-container">
-      <div class="flex gap-2 items-center">
-          <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
-          <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
-        </div>
-      </div>
-  </div>
-  <div class="top-right">
-    <button id="profileBtn" class="rounded-full bg-indigo-600 text-white flex items-center justify-center">P</button>
-    <div id="profileMenu" class="menu" style="display:none; right:0; top:48px;">
-        <div id="viewProfileBtn">Profile</div>
-        <form method="post" action="{{ url_for('logout') }}"><button type="submit">Logout</button></form>
-    </div>
-  </div>
+  <div class="call-buttons-container">
+      <div class="flex gap-2 items-center">
+          <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
+          <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
+        </div>
+      </div>
+  </div>
+  <div class="top-right">
+    <button id="profileBtn" class="rounded-full bg-indigo-600 text-white flex items-center justify-center">P</button>
+    <div id="profileMenu" class="menu" style="display:none; right:0; top:48px;">
+        <div id="viewProfileBtn">Profile</div>
+        <form method="post" action="{{ url_for('logout') }}"><button type="submit">Logout</button></form>
+    </div>
+  </div>
 
-  <header>
-    <img src="{{ heading_img }}" alt="heading"/>
-    <div class="heading">
-      <div class="left">Asphalt</div>
-      <div class="right">Legends</div>
-    </div>
-  </header>
+  <header>
+    <img src="{{ heading_img }}" alt="heading"/>
+    <div class="heading">
+      <div class="left">Asphalt</div>
+      <div class="right">Legends</div>
+    </div>
+  </header>
 
-  <main>
-    <div id="messages" class="mb-3"></div>
-  </main>
+  <main>
+    <div id="messages" class="mb-3"></div>
+  </main>
 
-  <div class="composer">
-    <div class="composer-inner">
-      <div id="attachmentPreview"></div>
-      <div class="composer-main">
-        <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow">＋</button>
-        <div id="attachMenu" class="attach-menu">
-          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-            <input id="fileAttach" type="file" accept="image/*,video/*" class="hidden" /> Photo/Video
-          </label>
-          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-            <input id="cameraAttach" type="file" accept="image/*,video/*" capture="environment" class="hidden" /> Camera
-          </label>
-          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-            <input id="docAttach" type="file" class="hidden" /> Document
-          </label>
-          <button id="stickerPickerBtn" class="px-3 py-2 rounded bg-white border">Stickers / GIFs</button>
-        </div>
-        <textarea id="msg" class="textarea flex-1" placeholder="Type a message..."></textarea>
-        <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎤</button>
-        <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
-      </div>
-    </div>
-  </div>
+  <div class="composer">
+    <div class="composer-inner">
+      <div id="attachmentPreview"></div>
+      <div class="composer-main">
+        <button id="plusBtn" class="px-3 py-2 rounded bg-white shadow">＋</button>
+        <div id="attachMenu" class="attach-menu">
+          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
+            <input id="fileAttach" type="file" accept="image/*,video/*" class="hidden" /> Photo/Video
+          </label>
+          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
+            <input id="cameraAttach" type="file" accept="image/*,video/*" capture="environment" class="hidden" /> Camera
+          </label>
+          <label class="px-3 py-2 rounded bg-white border cursor-pointer">
+            <input id="docAttach" type="file" class="hidden" /> Document
+          </label>
+          <button id="stickerPickerBtn" class="px-3 py-2 rounded bg-white border">Stickers / GIFs</button>
+        </div>
+        <textarea id="msg" class="textarea flex-1" placeholder="Type a message..."></textarea>
+        <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎤</button>
+        <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
+      </div>
+    </div>
+  </div>
 
-  <div id="stickerModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50">
-    <div class="bg-white rounded-lg p-4 w-11/12 max-w-2xl">
-      <div class="flex justify-between items-center mb-3"><div class="font-semibold">Stickers & GIFs</div><button id="closeSticker" class="text-gray-500">✕</button></div>
-      <div id="stickerGrid" class="grid grid-cols-4 gap-3"></div>
-    </div>
-  </div>
+  <div id="stickerModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50">
+    <div class="bg-white rounded-lg p-4 w-11/12 max-w-2xl">
+      <div class="flex justify-between items-center mb-3"><div class="font-semibold">Stickers & GIFs</div><button id="closeSticker" class="text-gray-500">✕</button></div>
+      <div id="stickerGrid" class="grid grid-cols-4 gap-3"></div>
+    </div>
+  </div>
 
-  <div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-[60]">
-    <div class="bg-white rounded-lg p-4 w-96">
-      <div class="flex items-center justify-between mb-3"><div><div class="text-lg font-bold">Profile</div></div><button id="closeProfile" class="text-gray-500">✕</button></div>
-      <form id="profileForm" enctype="multipart/form-data">
-        <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name" class="w-full p-2 border rounded" value="{{ username }}" /></div>
-        <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status" class="w-full p-2 border rounded" value="{{ user_status }}" /></div>
-        <div class="mb-2"><label class="text-xs">Avatar</label><input id="profile_avatar" name="avatar" type="file" accept="image/*" class="w-full" /></div>
-        <div class="flex gap-2"><button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button><button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button></div>
-        <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
-      </form>
-    </div>
-  </div>
+  <div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-[60]">
+    <div class="bg-white rounded-lg p-4 w-96">
+      <div class="flex items-center justify-between mb-3"><div><div class="text-lg font-bold">Profile</div></div><button id="closeProfile" class="text-gray-500">✕</button></div>
+      <form id="profileForm" enctype="multipart/form-data">
+        <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name" class="w-full p-2 border rounded" value="{{ username }}" /></div>
+        <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status" class="w-full p-2 border rounded" value="{{ user_status }}" /></div>
+        <div class="mb-2"><label class="text-xs">Avatar</label><input id="profile_avatar" name="avatar" type="file" accept="image/*" class="w-full" /></div>
+        <div class="flex gap-2"><button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button><button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button></div>
+        <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
+      </form>
+    </div>
+  </div>
 
-  <div id="incomingCall" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
-    <div id="incomingText">Incoming call</div>
-    <div class="flex gap-2 mt-2"><button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button><button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button></div>
-  </div>
+  <div id="incomingCall" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
+    <div id="incomingText">Incoming call</div>
+    <div class="flex gap-2 mt-2"><button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button><button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button></div>
+  </div>
 
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
@@ -611,342 +611,322 @@ const profileModal = byId('profileModal');
 function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&','<':'<','>':'>','"':'"'}[c])); }
 function byId(id){ return document.getElementById(id); }
 function formatDuration(sec) {
-    const h = Math.floor(sec / 3600).toString().padStart(2, '0');
-    const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
-    const s = Math.floor(sec % 60).toString().padStart(2, '0');
-    return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
+    const h = Math.floor(sec / 3600).toString().padStart(2, '0');
+    const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
+    const s = Math.floor(sec % 60).toString().padStart(2, '0');
+    return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 }
 
 // auto-resize textarea
 const inputEl = byId('msg');
 function resizeTextarea(){
-  inputEl.style.height = 'auto';
-  inputEl.style.height = Math.min(220, inputEl.scrollHeight) + 'px';
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(220, inputEl.scrollHeight) + 'px';
 }
 inputEl.addEventListener('input', resizeTextarea);
 resizeTextarea();
 
 // hide menus on body click
 document.addEventListener('click', (ev)=>{
-  const isClickInside = (el) => el && el.contains(ev.target);
-  if (isClickInside(attachMenu) || isClickInside(byId('plusBtn'))) return;
-  if (isClickInside(profileMenu) || isClickInside(byId('profileBtn'))) return;
-  
-  attachMenu.style.display = 'none';
-  profileMenu.style.display = 'none';
-  document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
+  const isClickInside = (el) => el && el.contains(ev.target);
+  if (isClickInside(attachMenu) || isClickInside(byId('plusBtn'))) return;
+  if (isClickInside(profileMenu) || isClickInside(byId('profileBtn'))) return;
+  
+  attachMenu.style.display = 'none';
+  profileMenu.style.display = 'none';
+  document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
 
-  if(stickerModal && !stickerModal.classList.contains('hidden')){
-    const wrap = stickerModal.querySelector('div');
-    if(!wrap.contains(ev.target)) { stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); }
-  }
+  if(stickerModal && !stickerModal.classList.contains('hidden')){
+    const wrap = stickerModal.querySelector('div');
+    if(!wrap.contains(ev.target)) { stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); }
+  }
 });
 
 // Helper to create attachment elements for messages
 function createAttachmentElement(a) {
-  const container = document.createElement('div');
-  if (a.type === 'image' || a.type === 'video') {
-    container.className = 'media-container mt-2';
-    const downloadLink = document.createElement('a');
-    downloadLink.href = a.url;
-    downloadLink.setAttribute('download', a.name || '');
-    downloadLink.className = 'download-btn';
-    downloadLink.innerHTML = '⤓';
-    downloadLink.title = 'Download';
-    container.appendChild(downloadLink);
-    let mediaEl;
-    if (a.type === 'image') {
-      mediaEl = document.createElement('img');
-      mediaEl.src = a.url;
-    } else { // video
-      mediaEl = document.createElement('video');
-      mediaEl.src = a.url;
-      mediaEl.controls = true;
-      mediaEl.playsInline = true;
-    }
-    container.appendChild(mediaEl);
-    return { element: container, mediaElement: mediaEl };
-  } else if (a.type === 'audio') {
-      const au = document.createElement('audio');
-      au.src = a.url;
-      au.controls = true;
-      au.className = 'mt-2';
-      container.appendChild(au);
-      return { element: container };
-  } else if (a.type === 'doc') {
-      const link = document.createElement('a');
-      link.href = a.url;
-      link.className = 'doc-link';
-      link.setAttribute('download', a.name || 'Document');
-      link.innerHTML = `<span>${escapeHtml(a.name || 'Document')}</span> ⤓`;
-      container.appendChild(link);
-      return { element: container };
-  }
-  return { element: null };
+  const container = document.createElement('div');
+  if (a.type === 'image' || a.type === 'video') {
+    container.className = 'media-container mt-2';
+    const downloadLink = document.createElement('a');
+    downloadLink.href = a.url;
+    downloadLink.setAttribute('download', a.name || '');
+    downloadLink.className = 'download-btn';
+    downloadLink.innerHTML = '⤓';
+    downloadLink.title = 'Download';
+    container.appendChild(downloadLink);
+    let mediaEl;
+    if (a.type === 'image') {
+      mediaEl = document.createElement('img');
+      mediaEl.src = a.url;
+    } else { // video
+      mediaEl = document.createElement('video');
+      mediaEl.src = a.url;
+      mediaEl.controls = true;
+      mediaEl.playsInline = true;
+    }
+    container.appendChild(mediaEl);
+    return { element: container, mediaElement: mediaEl };
+  } else if (a.type === 'audio') {
+      const au = document.createElement('audio');
+      au.src = a.url;
+      au.controls = true;
+      au.className = 'mt-2';
+      container.appendChild(au);
+      return { element: container };
+  } else if (a.type === 'doc') {
+      const link = document.createElement('a');
+      link.href = a.url;
+      link.className = 'doc-link';
+      link.setAttribute('download', a.name || 'Document');
+      link.innerHTML = `<span>${escapeHtml(a.name || 'Document')}</span> ⤓`;
+      container.appendChild(link);
+      return { element: container };
+  }
+  return { element: null };
 }
 
 // fetch & render messages
 async function poll(){
-  try{
-    const resp = await fetch('/poll_messages?since=' + lastId);
-    if(!resp.ok) return;
-    const data = await resp.json();
-    if(!data.length) return;
-    const container = document.getElementById('messages');
-    for(const m of data){
-      const me = (m.sender === myName);
-      const wrapper = document.createElement('div'); 
-      wrapper.className='msg-row' + (me ? ' justify-end' : ''); /* Align 'me' messages to the right */
-      
-      const body = document.createElement('div'); 
-      body.className='msg-body';
-      if(me) body.style.alignItems = 'flex-end'; /* Align text/meta inside my message body to the right */
-      
-      const meta = document.createElement('div'); meta.className='msg-meta-top';
-      const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
-      const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
-      
-      meta.appendChild(leftMeta); meta.appendChild(rightMeta);
-      
-      const hasText = m.text && m.text.trim().length > 0;
-      const attachments = (m.attachments || []);
-      
-      const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
-      menuBtn.onclick = (ev)=>{
-        ev.stopPropagation();
-        document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
-        const menu = document.createElement('div'); menu.className='menu';
-        const edit = document.createElement('div'); edit.innerText='Edit'; edit.onclick = async (e)=>{
-          e.stopPropagation();
-          const newText = prompt('Edit message text', m.text || '');
-          if(newText !== null){
-            await fetch('/edit_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,text:newText})});
-            container.innerHTML=''; lastId=0; poll();
-          }
-        };
-        const del = document.createElement('div'); del.innerText='Delete'; del.onclick = async (e)=>{
-          e.stopPropagation();
-          if(confirm('Delete this message?')){
-            await fetch('/delete_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id})});
-            container.innerHTML=''; lastId=0; poll();
-          }
-        };
-        const react = document.createElement('div'); react.innerText='React ❤️'; react.onclick = async (e)=>{
-          e.stopPropagation();
-          await fetch('/react_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,emoji:'❤️'})});
-          container.innerHTML=''; lastId=0; poll();
-        };
-        if(m.sender === myName) menu.appendChild(edit);
-        menu.appendChild(del); menu.appendChild(react);
-        document.body.appendChild(menu);
-        const rect = menuBtn.getBoundingClientRect();
-        
-        // Position the menu near the button
-        menu.style.position = 'fixed'; // Use fixed positioning for the menu
-        menu.style.top = (rect.bottom + 5) + 'px';
-        
-        if (me) {
-            // My messages: position menu to the left of the button
-            menu.style.left = 'auto';
-            menu.style.right = (window.innerWidth - rect.right) + 'px';
-        } else {
-            // Other's messages: position menu to the right of the button
-            menu.style.right = 'auto';
-            menu.style.left = rect.left + 'px';
-        }
-      };
-      body.appendChild(meta);
+  try{
+    const resp = await fetch('/poll_messages?since=' + lastId);
+    if(!resp.ok) return;
+    const data = await resp.json();
+    if(!data.length) return;
+    const container = document.getElementById('messages');
+    for(const m of data){
+      const me = (m.sender === myName);
+      const wrapper = document.createElement('div'); 
+      wrapper.className='msg-row'; /* MODIFIED: Removed 'justify-end' */
+      
+      const body = document.createElement('div'); 
+      body.className='msg-body';
+      /* REMOVED: if(me) body.style.alignItems = 'flex-end'; */
+      
+      const meta = document.createElement('div'); meta.className='msg-meta-top';
+      const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
+      const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+      
+      meta.appendChild(leftMeta); meta.appendChild(rightMeta);
+      
+      const hasText = m.text && m.text.trim().length > 0;
+      const attachments = (m.attachments || []);
+      
+      const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
+      menuBtn.onclick = (ev)=>{
+        ev.stopPropagation();
+        document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
+        const menu = document.createElement('div'); menu.className='menu';
+        const edit = document.createElement('div'); edit.innerText='Edit'; edit.onclick = async (e)=>{
+          e.stopPropagation();
+          const newText = prompt('Edit message text', m.text || '');
+          if(newText !== null){
+            await fetch('/edit_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,text:newText})});
+            container.innerHTML=''; lastId=0; poll();
+          }
+        };
+        const del = document.createElement('div'); del.innerText='Delete'; del.onclick = async (e)=>{
+          e.stopPropagation();
+          if(confirm('Delete this message?')){
+            await fetch('/delete_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id})});
+            container.innerHTML=''; lastId=0; poll();
+          }
+        };
+        const react = document.createElement('div'); react.innerText='React ❤️'; react.onclick = async (e)=>{
+          e.stopPropagation();
+          await fetch('/react_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,emoji:'❤️'})});
+          container.innerHTML=''; lastId=0; poll();
+        };
+        if(m.sender === myName) menu.appendChild(edit);
+        menu.appendChild(del); menu.appendChild(react);
+        document.body.appendChild(menu);
+        const rect = menuBtn.getBoundingClientRect();
+        
+        // Position the menu near the button
+        menu.style.position = 'fixed'; // Use fixed positioning for the menu
+        menu.style.top = (rect.bottom + 5) + 'px';
+        
+        // All messages are left-aligned, so position the menu right of the button
+        menu.style.right = 'auto';
+        menu.style.left = rect.left + 'px';
+      };
+      body.appendChild(meta);
 
-      if(attachments.length && !hasText){ // Attachments-only
-        const rowInner = document.createElement('div'); 
-        rowInner.style.display='flex'; 
-        rowInner.style.gap='8px'; 
-        rowInner.style.alignItems='flex-start';
-        
-        if(me) rowInner.style.flexDirection = 'row-reverse'; // Flip avatar and content for 'me' messages
+      if(attachments.length && !hasText){ // Attachments-only
+        const rowInner = document.createElement('div'); 
+        rowInner.style.display='flex'; 
+        rowInner.style.gap='8px'; 
+        rowInner.style.alignItems='flex-start';
+        
+        /* REMOVED: if(me) rowInner.style.flexDirection = 'row-reverse'; */
 
-        if(!me){
-          const avatar = document.createElement('img'); avatar.src=`/avatar/${m.sender}`; avatar.className='avatar-sm';
-          rowInner.appendChild(avatar);
-        }
-        
-        const attContainer = document.createElement('div');
-        if (me) attContainer.style.textAlign = 'right'; /* Right align media for my messages */
+        /* ADDED AVATAR FOR ALL LEFT-ALIGNED MESSAGES, INCLUDING ME */
+        const avatar = document.createElement('img'); avatar.src=`/avatar/${m.sender}`; avatar.className='avatar-sm';
+        rowInner.appendChild(avatar);
+        
+        const attContainer = document.createElement('div');
+        /* REMOVED: if (me) attContainer.style.textAlign = 'right'; */
 
-        attachments.forEach(a=>{
-          if(a.type==='sticker'){
-            const img = document.createElement('img'); img.src = a.url; img.className = 'sticker'; attContainer.appendChild(img);
-          } else {
-            const { element, mediaElement } = createAttachmentElement(a);
-            if (element) {
-              if (mediaElement) { mediaElement.className = (a.type==='video' ? 'no-bubble-video' : 'no-bubble-image'); }
-              attContainer.appendChild(element);
-            }
-          }
-        });
-        
-        rowInner.appendChild(attContainer);
-        
-        if(me) {
-            // Only add the menu button for 'me' attachments-only
-            const menuContainer = document.createElement('div'); 
-            menuContainer.appendChild(menuBtn);
-            rowInner.appendChild(menuContainer);
-        } else {
-             // For others' messages, place the menu button separately to the right of the media
-             const menuContainer = document.createElement('div'); 
-             menuContainer.appendChild(menuBtn);
-             rowInner.appendChild(menuContainer);
-        }
+        attachments.forEach(a=>{
+          if(a.type==='sticker'){
+            const img = document.createElement('img'); img.src = a.url; img.className = 'sticker'; attContainer.appendChild(img);
+          } else {
+            const { element, mediaElement } = createAttachmentElement(a);
+            if (element) {
+              if (mediaElement) { mediaElement.className = (a.type==='video' ? 'no-bubble-video' : 'no-bubble-image'); }
+              attContainer.appendChild(element);
+            }
+          }
+        });
+        
+        rowInner.appendChild(attContainer);
+        
+        // Menu button always on the right side of the content
+        const menuContainer = document.createElement('div'); 
+        menuContainer.appendChild(menuBtn);
+        rowInner.appendChild(menuContainer);
 
-        body.appendChild(rowInner);
+        body.appendChild(rowInner);
 
-      } else { // Bubble with text and/or inline attachments
-        const rowInner = document.createElement('div'); 
-        rowInner.style.display='flex'; 
-        rowInner.style.gap='8px'; 
-        rowInner.style.alignItems='flex-start';
-        if(me) rowInner.style.flexDirection = 'row-reverse'; // Flip avatar and content for 'me' messages
+      } else { // Bubble with text and/or inline attachments
+        const rowInner = document.createElement('div'); 
+        rowInner.style.display='flex'; 
+        rowInner.style.gap='8px'; 
+        rowInner.style.alignItems='flex-start';
+        /* REMOVED: if(me) rowInner.style.flexDirection = 'row-reverse'; */
 
-        if(!me){
-            const avatar = document.createElement('img'); avatar.src=`/avatar/${m.sender}`; avatar.className='avatar-sm';
-            rowInner.appendChild(avatar);
-        }
-        
-        const msgContainer = document.createElement('div');
-        
-        const topRow = document.createElement('div'); 
-        topRow.style.display='flex'; 
-        topRow.style.justifyContent='flex-end'; /* 1. PUSH MENU TO RIGHT OF BUBBLE */
-        topRow.style.alignItems='flex-start';
-        topRow.style.gap = '8px';
-        
-        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
-        bubble.innerHTML = hasText ? (escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'') ) : '';
-        
-        if(attachments.length){
-          attachments.forEach(a=>{
-            if(a.type==='sticker'){
-              const el = document.createElement('img'); el.src = a.url; el.className = 'sticker'; bubble.appendChild(el);
-            } else {
-              const { element, mediaElement } = createAttachmentElement(a);
-              if (element) {
-                if (mediaElement) { mediaElement.className = (a.type === 'video' ? 'video-attachment' : 'image-attachment'); }
-                bubble.appendChild(element);
-              }
-            }
-          });
-        }
-        
-        // 1. Placing the menu button to the right of the bubble
-        if (me) {
-            topRow.appendChild(menuBtn);
-            topRow.appendChild(bubble);
-        } else {
-            topRow.appendChild(bubble);
-            topRow.appendChild(menuBtn);
-        }
-        
-        msgContainer.appendChild(topRow);
-        rowInner.appendChild(msgContainer);
-        body.appendChild(rowInner);
-      }
-      
-      wrapper.appendChild(body);
-      container.appendChild(wrapper);
-      lastId = m.id;
-    }
-    container.scrollTop = container.scrollHeight;
-  }catch(e){ console.error(e); }
+        /* ADDED AVATAR FOR ALL LEFT-ALIGNED MESSAGES, INCLUDING ME */
+        const avatar = document.createElement('img'); avatar.src=`/avatar/${m.sender}`; avatar.className='avatar-sm';
+        rowInner.appendChild(avatar);
+        
+        const msgContainer = document.createElement('div');
+        
+        const topRow = document.createElement('div'); 
+        topRow.style.display='flex'; 
+        topRow.style.justifyContent='flex-start'; /* MODIFIED: was flex-end */
+        topRow.style.alignItems='flex-start';
+        topRow.style.gap = '8px';
+        
+        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
+        bubble.innerHTML = hasText ? (escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'') ) : '';
+        
+        if(attachments.length){
+          attachments.forEach(a=>{
+            if(a.type==='sticker'){
+              const el = document.createElement('img'); el.src = a.url; el.className = 'sticker'; bubble.appendChild(el);
+            } else {
+              const { element, mediaElement } = createAttachmentElement(a);
+              if (element) {
+                if (mediaElement) { mediaElement.className = (a.type === 'video' ? 'video-attachment' : 'image-attachment'); }
+                bubble.appendChild(element);
+              }
+            }
+          });
+        }
+        
+        // Placing the menu button to the right of the bubble
+        topRow.appendChild(bubble); /* MODIFIED: Bubble is always first (left) */
+        topRow.appendChild(menuBtn); /* MODIFIED: Menu is always second (right) */
+        
+        msgContainer.appendChild(topRow);
+        rowInner.appendChild(msgContainer);
+        body.appendChild(rowInner);
+      }
+      
+      wrapper.appendChild(body);
+      container.appendChild(wrapper);
+      lastId = m.id;
+    }
+    container.scrollTop = container.scrollHeight;
+  }catch(e){ console.error(e); }
 }
 poll(); setInterval(poll, 2000);
 
 // send message
 byId('sendBtn').addEventListener('click', async ()=>{
-  const text = inputEl.value.trim();
-  if(!text && !stagedFile) return;
+  const text = inputEl.value.trim();
+  if(!text && !stagedFile) return;
 
-  const fd = new FormData();
-  fd.append('text', text);
-  if (stagedFile) {
-    fd.append('file', stagedFile, stagedFile.name);
-  }
+  const fd = new FormData();
+  fd.append('text', text);
+  if (stagedFile) {
+    fd.append('file', stagedFile, stagedFile.name);
+  }
 
-  try {
-    const r = await fetch('/send_composite_message', { method: 'POST', body: fd });
-    if (r.ok) {
-      inputEl.value = '';
-      resizeTextarea();
-      clearAttachmentPreview();
-      await poll();
-    } else {
-      alert('Failed to send message: ' + await r.text());
-    }
-  } catch (e) {
-    alert('Error sending message: ' + e.message);
-  }
+  try {
+    const r = await fetch('/send_composite_message', { method: 'POST', body: fd });
+    if (r.ok) {
+      inputEl.value = '';
+      resizeTextarea();
+      clearAttachmentPreview();
+      await poll();
+    } else {
+      alert('Failed to send message: ' + await r.text());
+    }
+  } catch (e) {
+    alert('Error sending message: ' + e.message);
+  }
 });
 
 inputEl.addEventListener('keydown', async (e)=>{
-  if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); byId('sendBtn').click(); }
+  if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); byId('sendBtn').click(); }
 });
 
 // Attachment Preview Logic
 function setAttachmentPreview(file) {
-  stagedFile = file;
-  const previewContainer = byId('attachmentPreview');
-  previewContainer.innerHTML = '';
-  previewContainer.style.display = 'block';
+  stagedFile = file;
+  const previewContainer = byId('attachmentPreview');
+  previewContainer.innerHTML = '';
+  previewContainer.style.display = 'block';
 
-  const item = document.createElement('div');
-  item.className = 'preview-item';
-  const removeBtn = document.createElement('button');
-  removeBtn.className = 'preview-remove-btn';
-  removeBtn.innerHTML = '&times;';
-  removeBtn.onclick = clearAttachmentPreview;
-  item.appendChild(removeBtn);
+  const item = document.createElement('div');
+  item.className = 'preview-item';
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'preview-remove-btn';
+  removeBtn.innerHTML = '&times;';
+  removeBtn.onclick = clearAttachmentPreview;
+  item.appendChild(removeBtn);
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    if (file.type.startsWith('image/')) {
-      const img = document.createElement('img');
-      img.src = e.target.result;
-      item.appendChild(img);
-    } else if (file.type.startsWith('video/')) {
-      const vid = document.createElement('video');
-      vid.src = e.target.result;
-      vid.muted = true;
-      item.appendChild(vid);
-    } else if (file.type.startsWith('audio/')) {
-      const audio = document.createElement('audio');
-      audio.src = e.target.result;
-      audio.controls = true;
-      item.appendChild(audio);
-    } else {
-      const doc = document.createElement('div');
-      doc.className = 'preview-item-doc';
-      doc.textContent = file.name;
-      item.appendChild(doc);
-    }
-  };
-  reader.readAsDataURL(file);
-  previewContainer.appendChild(item);
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    if (file.type.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      item.appendChild(img);
+    } else if (file.type.startsWith('video/')) {
+      const vid = document.createElement('video');
+      vid.src = e.target.result;
+      vid.muted = true;
+      item.appendChild(vid);
+    } else if (file.type.startsWith('audio/')) {
+      const audio = document.createElement('audio');
+      audio.src = e.target.result;
+      audio.controls = true;
+      item.appendChild(audio);
+    } else {
+      const doc = document.createElement('div');
+      doc.className = 'preview-item-doc';
+      doc.textContent = file.name;
+      item.appendChild(doc);
+    }
+  };
+  reader.readAsDataURL(file);
+  previewContainer.appendChild(item);
 }
 
 function clearAttachmentPreview() {
-  stagedFile = null;
-  const previewContainer = byId('attachmentPreview');
-  previewContainer.innerHTML = '';
-  previewContainer.style.display = 'none';
+  stagedFile = null;
+  const previewContainer = byId('attachmentPreview');
+  previewContainer.innerHTML = '';
+  previewContainer.style.display = 'none';
 }
 
 function handleFileSelection(event) {
-    const file = event.target.files[0];
-    if (file) {
-        setAttachmentPreview(file);
-    }
-    attachMenu.style.display = 'none';
-    event.target.value = ''; // Reset input
+    const file = event.target.files[0];
+    if (file) {
+        setAttachmentPreview(file);
+    }
+    attachMenu.style.display = 'none';
+    event.target.value = ''; // Reset input
 }
 
 byId('fileAttach').addEventListener('change', handleFileSelection);
@@ -957,63 +937,63 @@ byId('plusBtn').addEventListener('click', (ev)=>{ ev.stopPropagation(); attachMe
 
 // sticker picker
 byId('stickerPickerBtn').addEventListener('click', async (ev)=>{
-  ev.stopPropagation();
-  attachMenu.style.display = 'none';
-  const res = await fetch('/stickers_list'); const arr = await res.json();
-  stickerGrid.innerHTML = '';
-  arr.forEach(url=>{
-    const img = document.createElement('img'); img.src = url; img.className='sticker cursor-pointer';
-    img.onclick = async (e)=>{
-      await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:[{type:'sticker', url}]})});
-      stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex');
-      await poll();
-    };
-    stickerGrid.appendChild(img);
-  });
-  stickerModal.classList.remove('hidden'); stickerModal.classList.add('flex');
+  ev.stopPropagation();
+  attachMenu.style.display = 'none';
+  const res = await fetch('/stickers_list'); const arr = await res.json();
+  stickerGrid.innerHTML = '';
+  arr.forEach(url=>{
+    const img = document.createElement('img'); img.src = url; img.className='sticker cursor-pointer';
+    img.onclick = async (e)=>{
+      await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:[{type:'sticker', url}]})});
+      stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex');
+      await poll();
+    };
+    stickerGrid.appendChild(img);
+  });
+  stickerModal.classList.remove('hidden'); stickerModal.classList.add('flex');
 });
 
 // mic toggle
 const micBtn = byId('mic');
 micBtn.addEventListener('click', async ()=>{
-  if(!micRecording){
-    if(!navigator.mediaDevices) return alert('Media not supported');
-    try{
-      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
-      mediaRecorder = new MediaRecorder(stream);
-      mediaChunks = [];
-      mediaRecorder.ondataavailable = e => mediaChunks.push(e.data);
-      mediaRecorder.onstop = async ()=>{
-        const blob = new Blob(mediaChunks, {type:'audio/webm'});
-        const file = new File([blob], "voice_message.webm", { type: "audio/webm" });
-        setAttachmentPreview(file);
-        stream.getTracks().forEach(t=>t.stop());
-      };
-      mediaRecorder.start();
-      micRecording = true; micBtn.classList.add('mic-active'); inputEl.placeholder = 'Listening... Stop to preview.';
-    }catch(e){ alert('Mic error: '+e.message); }
-  } else {
-    if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    micRecording = false; micBtn.classList.remove('mic-active'); inputEl.placeholder = 'Type a message...';
-  }
+  if(!micRecording){
+    if(!navigator.mediaDevices) return alert('Media not supported');
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      mediaRecorder = new MediaRecorder(stream);
+      mediaChunks = [];
+      mediaRecorder.ondataavailable = e => mediaChunks.push(e.data);
+      mediaRecorder.onstop = async ()=>{
+        const blob = new Blob(mediaChunks, {type:'audio/webm'});
+        const file = new File([blob], "voice_message.webm", { type: "audio/webm" });
+        setAttachmentPreview(file);
+        stream.getTracks().forEach(t=>t.stop());
+      };
+      mediaRecorder.start();
+      micRecording = true; micBtn.classList.add('mic-active'); inputEl.placeholder = 'Listening... Stop to preview.';
+    }catch(e){ alert('Mic error: '+e.message); }
+  } else {
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    micRecording = false; micBtn.classList.remove('mic-active'); inputEl.placeholder = 'Type a message...';
+  }
 });
 
 // Profile menu & modal logic
 byId('profileBtn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    profileMenu.style.display = profileMenu.style.display === 'block' ? 'none' : 'block';
+    e.stopPropagation();
+    profileMenu.style.display = profileMenu.style.display === 'block' ? 'none' : 'block';
 });
 byId('viewProfileBtn').addEventListener('click', async ()=>{
-  profileMenu.style.display = 'none';
-  profileModal.classList.remove('hidden'); profileModal.classList.add('flex');
-  document.body.classList.add('profile-modal-open');
-  const r = await fetch('/profile_get');
-  if(r.ok){ const j = await r.json(); byId('profile_display_name').value = j.name || ''; byId('profile_status').value = j.status || ''; }
+  profileMenu.style.display = 'none';
+  profileModal.classList.remove('hidden'); profileModal.classList.add('flex');
+  document.body.classList.add('profile-modal-open');
+  const r = await fetch('/profile_get');
+  if(r.ok){ const j = await r.json(); byId('profile_display_name').value = j.name || ''; byId('profile_status').value = j.status || ''; }
 });
 function closeProfileModal() {
-    profileModal.classList.add('hidden');
-    profileModal.classList.remove('flex');
-    document.body.classList.remove('profile-modal-open');
+    profileModal.classList.add('hidden');
+    profileModal.classList.remove('flex');
+    document.body.classList.remove('profile-modal-open');
 }
 byId('closeProfile').addEventListener('click', closeProfileModal);
 byId('profileCancel').addEventListener('click', closeProfileModal);
@@ -1024,13 +1004,13 @@ let currentInvite = null;
 socket.on('connect', ()=> socket.emit('identify',{name: myName}));
 socket.on('incoming_call', (data)=>{ currentInvite = data.call_id; byId('incomingText').textContent = `${data.from} is calling (${data.isVideo ? 'video':'audio'})`; byId('incomingCall').style.display = 'block'; });
 socket.on('call_summary', (data) => {
-    const msgContainer = byId('messages');
-    const summary = document.createElement('div');
-    summary.className = 'system-message';
-    const icon = data.isVideo ? '📹' : '📞';
-    summary.innerHTML = `${icon} Call ended. Duration: ${formatDuration(data.duration)}`;
-    msgContainer.appendChild(summary);
-    msgContainer.scrollTop = msgContainer.scrollHeight;
+    const msgContainer = byId('messages');
+    const summary = document.createElement('div');
+    summary.className = 'system-message';
+    const icon = data.isVideo ? '📹' : '📞';
+    summary.innerHTML = `${icon} Call ended. Duration: ${formatDuration(data.duration)}`;
+    msgContainer.appendChild(summary);
+    msgContainer.scrollTop = msgContainer.scrollHeight;
 });
 byId('declineCall')?.addEventListener('click', ()=>{ if(currentInvite) socket.emit('call_decline',{call_id: currentInvite}); byId('incomingCall').style.display='none'; currentInvite=null; });
 byId('acceptCall')?.addEventListener('click', async ()=>{ if(!currentInvite) return; socket.emit('call_accept',{call_id: currentInvite}); byId('incomingCall').style.display='none'; currentInvite=null; window.open('/chat','_blank'); });
@@ -1038,10 +1018,10 @@ byId('acceptCall')?.addEventListener('click', async ()=>{ if(!currentInvite) ret
 byId('callAudio').addEventListener('click', ()=> initiateCall(false));
 byId('callVideo').addEventListener('click', ()=> initiateCall(true));
 async function initiateCall(isVideo){
-  const resp = await fetch('/partner_info'); const p = await resp.json();
-  if(!p || !p.name) return alert('No partner yet');
-  socket.emit('call_outgoing', {to: p.name, isVideo:isVideo, from: myName});
-  alert('Calling ' + p.name + ' ...');
+  const resp = await fetch('/partner_info'); const p = await resp.json();
+  if(!p || !p.name) return alert('No partner yet');
+  socket.emit('call_outgoing', {to: p.name, isVideo:isVideo, from: myName});
+  alert('Calling ' + p.name + ' ...');
 }
 </script>
 </body></html>
