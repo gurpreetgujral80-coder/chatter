@@ -403,6 +403,7 @@ CHAT_HTML = r'''<!doctype html>
 <title>Asphalt Legends — Chat</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
+  :root{--glass-bg: rgba(255,255,255,0.5); --accent:#6366f1}
   body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: linear-gradient(180deg, #eef2ff 0%, #fff0f6 100%); }
   
   /* --- FIXED HEADER STYLES --- */
@@ -412,30 +413,27 @@ CHAT_HTML = r'''<!doctype html>
     left: 0; 
     right: 0; 
     z-index: 50; 
-    background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.82)); 
-    backdrop-filter: blur(6px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    padding: 8px 0; /* Reduced vertical space */
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(4px) saturate(120%);
+    padding: 6px 0;
   }
   header{ 
     text-align:center; 
-    margin:4px auto 4px; 
+    margin: -6px auto 4px; 
     max-width:900px;
   }
-  header img{max-height:64px; display:block; margin:0 auto;} /* Smaller heading image */
+  header img{max-height:56px; display:block; margin:0 auto;} /* Smaller heading image */
   .heading{display:flex;justify-content:center;gap:8px;align-items:center;margin-top:-6px;}
-  .left{ color:#3730a3;font-weight:800;font-size:1.1rem;}
-  .right{ color:#be185d;font-weight:800;font-size:1.1rem;margin-left:6px;}
+  .left{ color:#3730a3;font-weight:800;font-size:1.05rem;}
+  .right{ color:#be185d;font-weight:800;font-size:1.05rem;margin-left:6px;}
 
   /* Top-left call buttons */
   .top-left{ 
     position: absolute; 
     left: 12px; 
-    top: 50%; /* Center vertically within the header container */
-    transform: translateY(-50%); 
-    display:flex; 
-    gap:8px; 
-    align-items:center;
+    top: 50%;
+    transform: translateY(-50%);
+    display:flex; gap:8px; align-items:center;
   }
   
   /* Top-right profile (full name) */
@@ -444,70 +442,50 @@ CHAT_HTML = r'''<!doctype html>
     right: 12px; 
     top: 50%;
     transform: translateY(-50%);
-    display:flex; 
-    gap:8px; 
-    align-items:center;
+    display:flex; gap:8px; align-items:center;
   }
-  .profile-name {
-    font-weight:700;
-    background: rgba(99,102,241,0.95);
-    color: white;
-    padding: 6px 10px;
-    border-radius: 12px;
-    box-shadow: 0 6px 18px rgba(99,102,241,0.12);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap:8px;
-  }
+  .profile-name { font-weight:700; background: var(--accent); color: white; padding: 6px 10px; border-radius: 12px; box-shadow: 0 6px 18px rgba(99,102,241,0.12); cursor: pointer; display:inline-flex; align-items:center; gap:8px; }
 
   /* --- MAIN CONTENT & CHAT BUBBLES --- */
-  .bubble{ padding:10px 12px; border-radius:12px; display:inline-block; word-break:break-word; white-space:pre-wrap; background-clip:padding-box;}
-  .me{ background: linear-gradient(90deg,#f7fbff,#f2f8ff); border-bottom-right-radius:6px;}
-  .them{ background:#fff; border-bottom-left-radius:6px;}
-  .meta{ font-size:.75rem; color:#6b7280; margin-bottom:6px;}
-  .msg-row{ margin-bottom:10px; display:flex; gap:8px; align-items:flex-start;}
-  
-  /* Responsive bubble widths and auto-sizing */
-  .bubble { max-width: min(780px, 74%); }
+  .bubble{ padding:10px 12px; border-radius:12px; display:inline-block; word-break:break-word; white-space:pre-wrap; background-clip:padding-box; }
+  .me{ background: linear-gradient(90deg,#f7fbff,#f2f8ff); border-bottom-right-radius:6px; }
+  .them{ background:#ffffff; border-bottom-left-radius:6px; }
+  .meta{ font-size:.75rem; color:#6b7280; margin-bottom:6px; }
+  .msg-row{ margin-bottom:10px; display:flex; gap:8px; align-items:flex-start; }
+
+  /* responsive: smaller messages on phone */
+  .bubble { max-width: min(720px, 72%); font-size: 1rem; }
   @media (max-width: 767px) {
-    .bubble { max-width: calc(100% - 40px); }
+    .bubble { max-width: calc(100% - 48px); font-size: 0.9rem; padding:8px 10px; }
+    .sticker{ width:84px; }
+    .preview-item { max-width:72px; }
+    .image-attachment, .video-attachment { max-width: 240px; }
+  }
+  @media (min-width: 768px) {
+    .bubble { font-size: 1rem; }
+    .image-attachment, .video-attachment { max-width: 420px; }
   }
 
-  /* 2. GAP FOR MOBILE */
-  @media (max-width: 767px) {
-    .msg-row { margin-left: 6px; } /* Small gap from left edge on mobile */
-    .bubble { max-width: calc(100% - 40px); }
-  }
-
-  .msg-body{ display:flex; flex-direction:column;}
+  .msg-body{ display:flex; flex-direction:column; }
   .three-dot{ background: none; border: none; cursor:pointer; font-size:1.05rem; color: #111827; padding: 1px 8px; border-radius:8px; }
-  .menu{ position: absolute; background: #ffffff; color: #000000; padding:8px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.25); z-index:120; min-width:140px;}
-  .menu div, .menu form button{ width:100%; text-align:left; padding:8px 10px; cursor:pointer; border-radius:6px;}
+  .menu{ position: absolute; background: #ffffff; color: #000000; padding:8px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.25); z-index:120; min-width:140px; }
+  .menu div, .menu form button{ width:100%; text-align:left; padding:8px 10px; cursor:pointer; border-radius:6px; }
   .menu div:hover, .menu form button:hover{ background: #f3f4f6; }
   .attach-menu{ position: fixed; right:20px; bottom:84px; z-index:90; display:none; flex-direction:column; gap:8px; }
   .attach-menu button, .attach-menu label{ min-width:160px; text-align:left; }
   .mic-active{ background:#10b981 !important; color:white !important; }
-  .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
-  .sticker{ width:100px; height:auto; margin-top:8px; }
+  .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; }
 
   /* Textarea / composer tweaks */
-  .textarea{ resize:none; min-height:44px; max-height:120px; overflow:auto; border-radius:8px; padding:12px; border:1px solid rgba(15,23,42,0.06); }
-  .textarea[disabled]{ opacity:0.6 }
+  .textarea{ resize:none; min-height:44px; max-height:140px; overflow:auto; border-radius:10px; padding:12px; border:1px solid rgba(15,23,42,0.06); background: rgba(255,255,255,0.6); backdrop-filter: blur(6px); }
 
-  main{ 
-    max-width:900px; 
-    margin:0 auto; 
-    padding-top: 110px; /* Space for the fixed header content */
-    padding-bottom:110px; 
-    padding-left: 10px;
-    padding-right: 10px;
-  }
+  main{ max-width:920px; margin:0 auto; padding-top: 110px; padding-bottom:140px; padding-left: 10px; padding-right: 10px; }
 
   /* Composer: liquid glass rectangular rounded */
-  .composer { position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom, 0); display:flex; justify-content:center; padding:16px; backdrop-filter: blur(8px) saturate(140%); z-index: 50; }
-  .composer-inner{ width:100%; max-width:900px; display:flex; flex-direction:column; gap:8px; }
-  .composer-main{ display:flex; gap:8px; align-items:center; width: 100%; background: rgba(255,255,255,0.55); border-radius:16px; padding:10px; border: 1px solid rgba(255,255,255,0.35); box-shadow: 0 6px 18px rgba(2,6,23,0.06); }
+  .composer { position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom, 0); display:flex; justify-content:center; padding:14px; z-index: 50; }
+  .composer-inner{ width:100%; max-width:920px; display:flex; flex-direction:column; gap:8px; }
+  .composer-main{ display:flex; gap:8px; align-items:center; width: 100%; background: var(--glass-bg); border-radius:18px; padding:10px; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 6px 30px rgba(2,6,23,0.06); }
+  .composer-main .flex-1{ min-width:0; }
 
   .system-message{ text-align:center; font-size:0.8rem; color:#6b7280; background:rgba(230,230,230,0.7); padding:4px 10px; border-radius:12px; margin:10px auto; display:table; }
   #attachmentPreview { padding: 8px; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; display: none; }
@@ -527,15 +505,14 @@ CHAT_HTML = r'''<!doctype html>
   /* Hide avatars (remove left box) */
   .avatar-sm { display:none; }
 
-  @media (min-width: 768px) {
-    .image-attachment, .video-attachment { max-width: 420px; }
-    .no-bubble-image, .no-bubble-video { max-width: 420px; }
-  }
+  /* uploading overlay & spinner */
+  .uploading-overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0.25); border-radius:10px; }
+  .spinner{ width:36px; height:36px; border-radius:50%; border:4px solid rgba(255,255,255,0.25); border-top-color: white; animation: spin 1s linear infinite; }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
 
   @media (min-width: 1024px) {
     body { font-size: 1.02rem; }
     .bubble { padding: 12px 16px; border-radius: 12px; max-width: 60%; }
-    .left, .right { font-size: 1.2rem; }
     header img { max-height: 86px; }
     main { padding-top: 130px; }
     .composer { padding: 14px 12px; }
@@ -586,7 +563,7 @@ CHAT_HTML = r'''<!doctype html>
           </label>
           <button id="stickerPickerBtn" class="px-3 py-2 rounded bg-white border">Stickers / GIFs</button>
         </div>
-        <textarea id="msg" class="textarea flex-1" placeholder="Type a message..." maxlength="800"></textarea>
+        <textarea id="msg" class="textarea flex-1" placeholder="Type a message..." maxlength="1200" style="width:100%"></textarea>
         <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎤</button>
         <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
       </div>
@@ -637,37 +614,19 @@ const profileModal = byId('profileModal');
 // helpers
 function escapeHtml(s){ return String(s||'').replace(/[&<>\"]/g, c=>({'&':'&','<':'<','>':'>' ,'"':'"'}[c])); }
 function byId(id){ return document.getElementById(id); }
-function formatDuration(sec) {
-    const h = Math.floor(sec / 3600).toString().padStart(2, '0');
-    const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
-    const s = Math.floor(sec % 60).toString().padStart(2, '0');
-    return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
-}
+function formatDuration(sec) { const h = Math.floor(sec / 3600).toString().padStart(2, '0'); const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0'); const s = Math.floor(sec % 60).toString().padStart(2, '0'); return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`; }
 
-// auto-resize textarea
+// auto-resize textarea & dynamic width
 const inputEl = byId('msg');
-function resizeTextarea(){
-  inputEl.style.height = 'auto';
-  inputEl.style.height = Math.min(120, inputEl.scrollHeight) + 'px';
-}
+function resizeTextarea(){ inputEl.style.height = 'auto'; inputEl.style.height = Math.min(140, inputEl.scrollHeight) + 'px'; adjustTextareaWidth(); }
+function adjustTextareaWidth(){ const parent = inputEl.parentElement; if(!parent) return; const reserve = 140; const maxW = Math.max(120, parent.clientWidth - reserve); if(!inputEl.value.includes('
+')){ inputEl.style.width = Math.min(maxW, inputEl.scrollWidth + 28) + 'px'; } else { inputEl.style.width = '100%'; } }
 inputEl.addEventListener('input', resizeTextarea);
+window.addEventListener('resize', ()=>{ resizeTextarea(); });
 resizeTextarea();
 
 // hide menus on body click
-document.addEventListener('click', (ev)=>{
-  const isClickInside = (el) => el && el.contains(ev.target);
-  if (isClickInside(attachMenu) || isClickInside(byId('plusBtn'))) return;
-  if (isClickInside(profileMenu) || isClickInside(byId('profileBtn'))) return;
-  
-  attachMenu.style.display = 'none';
-  profileMenu.style.display = 'none';
-  document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
-
-  if(stickerModal && !stickerModal.classList.contains('hidden')){
-    const wrap = stickerModal.querySelector('div');
-    if(!wrap.contains(ev.target)) { stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); }
-  }
-});
+document.addEventListener('click', (ev)=>{ const isClickInside = (el) => el && el.contains(ev.target); if (isClickInside(attachMenu) || isClickInside(byId('plusBtn'))) return; if (isClickInside(profileMenu) || isClickInside(byId('profileBtn'))) return; attachMenu.style.display = 'none'; profileMenu.style.display = 'none'; document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove()); if(stickerModal && !stickerModal.classList.contains('hidden')){ const wrap = stickerModal.querySelector('div'); if(!wrap.contains(ev.target)) { stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); } } });
 
 // Helper to create attachment elements for messages
 function createAttachmentElement(a) {
@@ -675,41 +634,19 @@ function createAttachmentElement(a) {
   if (a.type === 'image' || a.type === 'video') {
     container.className = 'media-container mt-2';
     const downloadLink = document.createElement('a');
-    downloadLink.href = a.url;
-    downloadLink.setAttribute('download', a.name || '');
-    downloadLink.className = 'download-btn';
-    downloadLink.innerHTML = '⤓';
-    downloadLink.title = 'Download';
-    container.appendChild(downloadLink);
+    downloadLink.href = a.url; downloadLink.setAttribute('download', a.name || ''); downloadLink.className = 'download-btn'; downloadLink.innerHTML = '⤓'; downloadLink.title = 'Download'; container.appendChild(downloadLink);
     let mediaEl;
     if (a.type === 'image') {
-      mediaEl = document.createElement('img');
-      mediaEl.src = a.url;
-      mediaEl.className = 'image-attachment';
+      mediaEl = document.createElement('img'); mediaEl.src = a.url; mediaEl.className = 'image-attachment';
     } else { // video
-      mediaEl = document.createElement('video');
-      mediaEl.src = a.url;
-      mediaEl.controls = true;
-      mediaEl.playsInline = true;
-      mediaEl.className = 'video-attachment';
+      mediaEl = document.createElement('video'); mediaEl.src = a.url; mediaEl.controls = true; mediaEl.playsInline = true; mediaEl.className = 'video-attachment';
     }
     container.appendChild(mediaEl);
     return { element: container, mediaElement: mediaEl };
   } else if (a.type === 'audio') {
-      const au = document.createElement('audio');
-      au.src = a.url;
-      au.controls = true;
-      au.className = 'mt-2';
-      container.appendChild(au);
-      return { element: container };
+      const au = document.createElement('audio'); au.src = a.url; au.controls = true; au.className = 'mt-2'; container.appendChild(au); return { element: container };
   } else if (a.type === 'doc') {
-      const link = document.createElement('a');
-      link.href = a.url;
-      link.className = 'doc-link';
-      link.setAttribute('download', a.name || 'Document');
-      link.innerHTML = `<span>${escapeHtml(a.name || 'Document')}</span> ⤓`;
-      container.appendChild(link);
-      return { element: container };
+      const link = document.createElement('a'); link.href = a.url; link.className = 'doc-link'; link.setAttribute('download', a.name || 'Document'); link.innerHTML = `<span>${escapeHtml(a.name || 'Document')}</span> ⤓`; container.appendChild(link); return { element: container };
   }
   return { element: null };
 }
@@ -719,191 +656,104 @@ async function poll(){
   try{
     const resp = await fetch('/poll_messages?since=' + lastId);
     if(!resp.ok) return;
-    const data = await resp.json();
-    if(!data.length) return;
+    const data = await resp.json(); if(!data.length) return;
     const container = document.getElementById('messages');
     for(const m of data){
       const me = (m.sender === myName);
-      const wrapper = document.createElement('div'); 
-      wrapper.className = 'msg-row' + (me ? ' justify-start' : '');
-      
-      const body = document.createElement('div'); 
-      body.className='msg-body';
-      if(me) body.style.alignItems = 'flex-start';
-      
-      const meta = document.createElement('div'); meta.className='msg-meta-top';
-      const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
-      const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
-      meta.appendChild(leftMeta); meta.appendChild(rightMeta);
-      
-      const hasText = m.text && m.text.trim().length > 0;
-      const attachments = (m.attachments || []);
-      
-      const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
-      menuBtn.onclick = (ev)=>{
-        ev.stopPropagation();
-        document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
-        const menu = document.createElement('div'); menu.className='menu';
-        const edit = document.createElement('div'); edit.innerText='Edit'; edit.onclick = async (e)=>{
-          e.stopPropagation();
-          const newText = prompt('Edit message text', m.text || '');
-          if(newText !== null){
-            await fetch('/edit_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,text:newText})});
-            container.innerHTML=''; lastId=0; poll();
-          }
-        };
-        const del = document.createElement('div'); del.innerText='Delete'; del.onclick = async (e)=>{
-          e.stopPropagation();
-          if(confirm('Delete this message?')){
-            await fetch('/delete_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id})});
-            container.innerHTML=''; lastId=0; poll();
-          }
-        };
-        const react = document.createElement('div'); react.innerText='React ❤️'; react.onclick = async (e)=>{
-          e.stopPropagation();
-          await fetch('/react_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,emoji:'❤️'})});
-          container.innerHTML=''; lastId=0; poll();
-        };
-        if(m.sender === myName) menu.appendChild(edit);
-        menu.appendChild(del); menu.appendChild(react);
-        document.body.appendChild(menu);
-        const rect = menuBtn.getBoundingClientRect();
-        menu.style.position = 'fixed';
-        menu.style.top = (rect.bottom + 5) + 'px';
-        menu.style.left = (rect.left) + 'px';
-        menu.style.right = 'auto';
-      };
+      const wrapper = document.createElement('div'); wrapper.className = 'msg-row' + (me ? ' justify-start' : '');
+      const body = document.createElement('div'); body.className='msg-body'; if(me) body.style.alignItems = 'flex-start';
+      const meta = document.createElement('div'); meta.className='msg-meta-top'; const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`; const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : ''; meta.appendChild(leftMeta); meta.appendChild(rightMeta);
+      const hasText = m.text && m.text.trim().length > 0; const attachments = (m.attachments || []);
+      const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯'; menuBtn.onclick = (ev)=>{ ev.stopPropagation(); document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove()); const menu = document.createElement('div'); menu.className='menu'; const edit = document.createElement('div'); edit.innerText='Edit'; edit.onclick = async (e)=>{ e.stopPropagation(); const newText = prompt('Edit message text', m.text || ''); if(newText !== null){ await fetch('/edit_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,text:newText})}); container.innerHTML=''; lastId=0; poll(); } }; const del = document.createElement('div'); del.innerText='Delete'; del.onclick = async (e)=>{ e.stopPropagation(); if(confirm('Delete this message?')){ await fetch('/delete_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id})}); container.innerHTML=''; lastId=0; poll(); } }; const react = document.createElement('div'); react.innerText='React ❤️'; react.onclick = async (e)=>{ e.stopPropagation(); await fetch('/react_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,emoji:'❤️'})}); container.innerHTML=''; lastId=0; poll(); }; if(m.sender === myName) menu.appendChild(edit); menu.appendChild(del); menu.appendChild(react); document.body.appendChild(menu); const rect = menuBtn.getBoundingClientRect(); menu.style.position = 'fixed'; menu.style.top = (rect.bottom + 5) + 'px'; menu.style.left = (rect.left) + 'px'; menu.style.right = 'auto'; };
       body.appendChild(meta);
 
-      if(attachments.length && !hasText){ // Attachments-only
-        const rowInner = document.createElement('div'); 
-        rowInner.style.display='flex'; 
-        rowInner.style.gap='8px'; 
-        rowInner.style.alignItems='flex-start';
-        rowInner.style.flexDirection = 'row';
-
-        const attContainer = document.createElement('div');
-        attContainer.style.textAlign = 'left';
-
-        attachments.forEach(a=>{
-          if(a.type==='sticker'){
-            const img = document.createElement('img'); img.src = a.url; img.className = 'sticker'; attContainer.appendChild(img);
-          } else {
-            const { element, mediaElement } = createAttachmentElement(a);
-            if (element) { attContainer.appendChild(element); }
-          }
-        });
-        
-        rowInner.appendChild(attContainer);
-        const menuContainer = document.createElement('div'); menuContainer.appendChild(menuBtn); rowInner.appendChild(menuContainer);
-        body.appendChild(rowInner);
-
-      } else { // Bubble with text and/or inline attachments
-        const rowInner = document.createElement('div'); 
-        rowInner.style.display='flex'; 
-        rowInner.style.gap='8px'; 
-        rowInner.style.alignItems='flex-start';
-        rowInner.style.flexDirection = 'row';
-        
-        const msgContainer = document.createElement('div');
-        const topRow = document.createElement('div'); 
-        topRow.style.display='flex'; 
-        topRow.style.justifyContent='flex-start';
-        topRow.style.alignItems='flex-start';
-        topRow.style.gap = '8px';
-        
-        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
-        bubble.innerHTML = hasText ? (escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'') ) : '';
-        
-        if(attachments.length){
-          attachments.forEach(a=>{
-            if(a.type==='sticker'){
-              const el = document.createElement('img'); el.src = a.url; el.className = 'sticker'; bubble.appendChild(el);
-            } else {
-              const { element, mediaElement } = createAttachmentElement(a);
-              if (element) { bubble.appendChild(element); }
-            }
-          });
-        }
-        
-        topRow.appendChild(bubble);
-        topRow.appendChild(menuBtn);
-        msgContainer.appendChild(topRow);
-        rowInner.appendChild(msgContainer);
-        body.appendChild(rowInner);
+      if(attachments.length && !hasText){
+        const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start'; rowInner.style.flexDirection = 'row'; const attContainer = document.createElement('div'); attContainer.style.textAlign = 'left'; attachments.forEach(a=>{ if(a.type==='sticker'){ const img = document.createElement('img'); img.src = a.url; img.className = 'sticker'; attContainer.appendChild(img); } else { const { element, mediaElement } = createAttachmentElement(a); if (element) { attContainer.appendChild(element); } } }); rowInner.appendChild(attContainer); const menuContainer = document.createElement('div'); menuContainer.appendChild(menuBtn); rowInner.appendChild(menuContainer); body.appendChild(rowInner);
+      } else {
+        const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start'; rowInner.style.flexDirection = 'row'; const msgContainer = document.createElement('div'); const topRow = document.createElement('div'); topRow.style.display='flex'; topRow.style.justifyContent='flex-start'; topRow.style.alignItems='flex-start'; topRow.style.gap = '8px'; const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them'); bubble.innerHTML = hasText ? (escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'') ) : '';
+        if(attachments.length){ attachments.forEach(a=>{ if(a.type==='sticker'){ const el = document.createElement('img'); el.src = a.url; el.className = 'sticker'; bubble.appendChild(el); } else { const { element, mediaElement } = createAttachmentElement(a); if (element) { bubble.appendChild(element); } } }); }
+        topRow.appendChild(bubble); topRow.appendChild(menuBtn); msgContainer.appendChild(topRow); rowInner.appendChild(msgContainer); body.appendChild(rowInner);
       }
-      
-      wrapper.appendChild(body);
-      container.appendChild(wrapper);
-      lastId = m.id;
+      wrapper.appendChild(body); container.appendChild(wrapper); lastId = m.id;
     }
     container.scrollTop = container.scrollHeight;
   }catch(e){ console.error(e); }
 }
 poll(); setInterval(poll, 2000);
 
-// send message (support multiple files)
+// send message (support multiple files) with optimistic UI for uploads
 byId('sendBtn').addEventListener('click', async ()=>{
   const text = inputEl.value.trim();
   if(!text && stagedFiles.length===0) return;
 
-  const fd = new FormData();
-  fd.append('text', text);
-  stagedFiles.forEach((f,i)=> fd.append('file', f, f.name)); // append multiple files with same name
+  // create optimistic/pending message in UI
+  const container = byId('messages');
+  const tempId = 'temp-' + Date.now();
+  const wrapper = document.createElement('div'); wrapper.className = 'msg-row justify-start'; wrapper.dataset.tempId = tempId;
+  const body = document.createElement('div'); body.className = 'msg-body';
+  const topRow = document.createElement('div'); topRow.style.display='flex'; topRow.style.gap='8px'; topRow.style.alignItems='flex-start';
+  const bubble = document.createElement('div'); bubble.className = 'bubble me';
+  if(text) bubble.appendChild(document.createTextNode(text));
 
-  try {
-    const r = await fetch('/send_composite_message', { method: 'POST', body: fd });
-    if (r.ok) {
-      inputEl.value = '';
-      resizeTextarea();
-      clearAttachmentPreview();
-      await poll();
+  // attach previews (use object URLs) and overlay spinner
+  const tempObjectUrls = [];
+  stagedFiles.forEach((file)=>{
+    if(file.type.startsWith('image/')){
+      const img = document.createElement('img'); const url = URL.createObjectURL(file); tempObjectUrls.push(url); img.src = url; img.className = 'image-attachment'; bubble.appendChild(img);
+    } else if(file.type.startsWith('video/')){
+      const wrap = document.createElement('div'); wrap.style.position='relative'; wrap.style.display='inline-block';
+      const vid = document.createElement('video'); const url = URL.createObjectURL(file); tempObjectUrls.push(url); vid.src = url; vid.muted = true; vid.controls = true; vid.className = 'video-attachment'; wrap.appendChild(vid);
+      const overlay = document.createElement('div'); overlay.className = 'uploading-overlay'; overlay.innerHTML = '<div class="spinner"></div>'; wrap.appendChild(overlay);
+      bubble.appendChild(wrap);
+    } else if(file.type.startsWith('audio/')){
+      const au = document.createElement('audio'); const url = URL.createObjectURL(file); tempObjectUrls.push(url); au.src = url; au.controls = true; bubble.appendChild(au);
     } else {
-      alert('Failed to send message: ' + await r.text());
+      const d = document.createElement('div'); d.className='preview-item-doc'; d.textContent = file.name; bubble.appendChild(d);
     }
-  } catch (e) {
-    alert('Error sending message: ' + e.message);
+  });
+
+  topRow.appendChild(bubble); body.appendChild(topRow); wrapper.appendChild(body); container.appendChild(wrapper); container.scrollTop = container.scrollHeight;
+
+  // prepare form data
+  const fd = new FormData(); fd.append('text', text);
+  stagedFiles.forEach((f)=> fd.append('file', f, f.name));
+
+  try{
+    const r = await fetch('/send_composite_message', { method: 'POST', body: fd });
+    if(r.ok){
+      // remove optimistic
+      const el = document.querySelector('[data-temp-id="'+tempId+'"]'); if(el) el.remove();
+      inputEl.value = ''; resizeTextarea(); clearAttachmentPreview(); await poll();
+    } else {
+      const err = await r.text(); alert('Failed to send: '+err);
+      // mark as failed: remove spinner overlays
+      document.querySelectorAll('[data-temp-id="'+tempId+'"] .uploading-overlay').forEach(o=>{ o.style.background='rgba(255,0,0,0.35)'; o.innerHTML='!'; });
+    }
+  }catch(e){ alert('Error sending: '+e.message); document.querySelectorAll('[data-temp-id="'+tempId+'"] .uploading-overlay').forEach(o=>{ o.style.background='rgba(255,0,0,0.35)'; o.innerHTML='!'; }); }
+  finally{ // revoke object urls
+    tempObjectUrls.forEach(u=> URL.revokeObjectURL(u));
   }
 });
 
+// send on Enter
 inputEl.addEventListener('keydown', async (e)=>{ if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); byId('sendBtn').click(); } });
 
 // Attachment Preview Logic (multiple)
 function setAttachmentPreview(files) {
   stagedFiles = Array.from(files || []);
-  const previewContainer = byId('attachmentPreview');
-  previewContainer.innerHTML = '';
-  previewContainer.style.display = stagedFiles.length ? 'block' : 'none';
+  const previewContainer = byId('attachmentPreview'); previewContainer.innerHTML = ''; previewContainer.style.display = stagedFiles.length ? 'block' : 'none';
 
   stagedFiles.forEach((file, idx)=>{
-    const item = document.createElement('div');
-    item.className = 'preview-item';
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'preview-remove-btn';
-    removeBtn.innerHTML = '×';
-    removeBtn.onclick = (e)=>{ e.stopPropagation(); stagedFiles.splice(idx,1); setAttachmentPreview(stagedFiles); };
+    const item = document.createElement('div'); item.className = 'preview-item';
+    const removeBtn = document.createElement('button'); removeBtn.className = 'preview-remove-btn'; removeBtn.innerHTML = '×'; removeBtn.onclick = (e)=>{ e.stopPropagation(); stagedFiles.splice(idx,1); setAttachmentPreview(stagedFiles); };
     item.appendChild(removeBtn);
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      if (file.type.startsWith('image/')) {
-        const img = document.createElement('img');
-        img.src = e.target.result;
-        item.appendChild(img);
-      } else if (file.type.startsWith('video/')) {
-        const vid = document.createElement('video');
-        vid.src = e.target.result;
-        vid.muted = true; vid.controls = true;
-        item.appendChild(vid);
-      } else if (file.type.startsWith('audio/')) {
-        const audio = document.createElement('audio');
-        audio.src = e.target.result;
-        audio.controls = true; item.appendChild(audio);
-      } else {
-        const doc = document.createElement('div');
-        doc.className = 'preview-item-doc';
-        doc.textContent = file.name; item.appendChild(doc);
-      }
+      if (file.type.startsWith('image/')) { const img = document.createElement('img'); img.src = e.target.result; item.appendChild(img); }
+      else if (file.type.startsWith('video/')) { const vid = document.createElement('video'); vid.src = e.target.result; vid.muted = true; vid.controls = true; item.appendChild(vid); }
+      else if (file.type.startsWith('audio/')) { const audio = document.createElement('audio'); audio.src = e.target.result; audio.controls = true; item.appendChild(audio); }
+      else { const doc = document.createElement('div'); doc.className = 'preview-item-doc'; doc.textContent = file.name; item.appendChild(doc); }
     };
     reader.readAsDataURL(file);
     previewContainer.appendChild(item);
@@ -921,16 +771,11 @@ byId('docAttach').addEventListener('change', handleFileSelection);
 byId('plusBtn').addEventListener('click', (ev)=>{ ev.stopPropagation(); attachMenu.style.display = (attachMenu.style.display==='flex'?'none':'flex'); });
 
 // sticker picker
-byId('stickerPickerBtn').addEventListener('click', async (ev)=>{
-  ev.stopPropagation(); attachMenu.style.display = 'none'; const res = await fetch('/stickers_list'); const arr = await res.json(); stickerGrid.innerHTML = '';
-  arr.forEach(url=>{ const img = document.createElement('img'); img.src = url; img.className='sticker cursor-pointer'; img.onclick = async ()=>{ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:[{type:'sticker', url}]})}); stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); await poll(); }; stickerGrid.appendChild(img); });
-  stickerModal.classList.remove('hidden'); stickerModal.classList.add('flex');
-});
+byId('stickerPickerBtn').addEventListener('click', async (ev)=>{ ev.stopPropagation(); attachMenu.style.display = 'none'; const res = await fetch('/stickers_list'); const arr = await res.json(); stickerGrid.innerHTML = ''; arr.forEach(url=>{ const img = document.createElement('img'); img.src = url; img.className='sticker cursor-pointer'; img.onclick = async ()=>{ await fetch('/send_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({text:'', attachments:[{type:'sticker', url}]})}); stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); await poll(); }; stickerGrid.appendChild(img); }); stickerModal.classList.remove('hidden'); stickerModal.classList.add('flex'); });
 
 // mic toggle
 const micBtn = byId('mic');
-micBtn.addEventListener('click', async ()=>{
-  if(!micRecording){ if(!navigator.mediaDevices) return alert('Media not supported'); try{ const stream = await navigator.mediaDevices.getUserMedia({ audio:true }); mediaRecorder = new MediaRecorder(stream); mediaChunks = []; mediaRecorder.ondataavailable = e => mediaChunks.push(e.data); mediaRecorder.onstop = async ()=>{ const blob = new Blob(mediaChunks, {type:'audio/webm'}); const file = new File([blob], "voice_message.webm", { type: "audio/webm" }); setAttachmentPreview([file]); stream.getTracks().forEach(t=>t.stop()); }; mediaRecorder.start(); micRecording = true; micBtn.classList.add('mic-active'); inputEl.placeholder = 'Listening... Stop to preview.'; }catch(e){ alert('Mic error: '+e.message); } } else { if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); micRecording = false; micBtn.classList.remove('mic-active'); inputEl.placeholder = 'Type a message...'; } });
+micBtn.addEventListener('click', async ()=>{ if(!micRecording){ if(!navigator.mediaDevices) return alert('Media not supported'); try{ const stream = await navigator.mediaDevices.getUserMedia({ audio:true }); mediaRecorder = new MediaRecorder(stream); mediaChunks = []; mediaRecorder.ondataavailable = e => mediaChunks.push(e.data); mediaRecorder.onstop = async ()=>{ const blob = new Blob(mediaChunks, {type:'audio/webm'}); const file = new File([blob], "voice_message.webm", { type: "audio/webm" }); setAttachmentPreview([file]); stream.getTracks().forEach(t=>t.stop()); }; mediaRecorder.start(); micRecording = true; micBtn.classList.add('mic-active'); inputEl.placeholder = 'Listening... Stop to preview.'; }catch(e){ alert('Mic error: '+e.message); } } else { if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); micRecording = false; micBtn.classList.remove('mic-active'); inputEl.placeholder = 'Type a message...'; } });
 
 // Profile menu & modal logic
 byId('profileBtn').addEventListener('click', (e) => { e.stopPropagation(); profileMenu.style.display = profileMenu.style.display === 'block' ? 'none' : 'block'; });
