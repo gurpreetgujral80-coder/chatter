@@ -619,8 +619,7 @@ function formatDuration(sec) { const h = Math.floor(sec / 3600).toString().padSt
 // auto-resize textarea & dynamic width
 const inputEl = byId('msg');
 function resizeTextarea(){ inputEl.style.height = 'auto'; inputEl.style.height = Math.min(140, inputEl.scrollHeight) + 'px'; adjustTextareaWidth(); }
-function adjustTextareaWidth(){ const parent = inputEl.parentElement; if(!parent) return; const reserve = 140; const maxW = Math.max(120, parent.clientWidth - reserve); if(!inputEl.value.includes('
-')){ inputEl.style.width = Math.min(maxW, inputEl.scrollWidth + 28) + 'px'; } else { inputEl.style.width = '100%'; } }
+function adjustTextareaWidth(){ const parent = inputEl.parentElement; if(!parent) return; const reserve = 140; const maxW = Math.max(120, parent.clientWidth - reserve); if(!inputEl.value.includes('/n')){ inputEl.style.width = Math.min(maxW, inputEl.scrollWidth + 28) + 'px'; } else { inputEl.style.width = '100%'; } }
 inputEl.addEventListener('input', resizeTextarea);
 window.addEventListener('resize', ()=>{ resizeTextarea(); });
 resizeTextarea();
