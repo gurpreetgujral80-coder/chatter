@@ -503,10 +503,9 @@ CHAT_HTML = r'''<!doctype html>
 </style>
 </head><body>
 <div class="fixed-header-container">
-  <div class="flex gap-2 items-center">
-      <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
-      <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
-    </div>
+  <div style="postion: fixed; right: 3.5rem; top: 1rem;">
+      <button id="callAudio" class="px-3 py-1 rounded bg-white shadow" style="postion: fixed; right: 3.5rem; top: 1rem;">📞</button>
+      <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📽️</button>
   </div>
   <div class="top-right">
     <button id="profileBtn" class="rounded-full bg-indigo-600 text-white flex items-center justify-center">P</button>
