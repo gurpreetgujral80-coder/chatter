@@ -390,31 +390,71 @@ CHAT_HTML = r'''<!doctype html>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: linear-gradient(180deg, #eef2ff 0%, #fff0f6 100%); }
-  header{ text-align:center; margin:12px 0 6px; }
+  
+  /* --- FIXED HEADER STYLES --- */
+  .fixed-header-container { 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    right: 0; 
+    z-index: 50; 
+    background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); 
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+  header{ 
+    text-align:center; 
+    margin:12px auto 6px; 
+    max-width:900px;
+  }
   header img{max-height:96px; display:block; margin:0 auto;}
-  .heading{display:flex;justify-content:center;gap:8px;align-items:center;margin-top:6px;}
+  .heading{display:flex;justify-content:center;gap:8px;align-items:center;margin-top:-15px;}
   .left{ color:#3730a3;font-weight:800;font-size:1.4rem;}
   .right{ color:#be185d;font-weight:800;font-size:1.4rem;margin-left:6px;}
-  .top-right{ position: absolute; right: 12px; top: 8px; display:flex; gap:8px; align-items:center;}
+  .top-right{ 
+    position: absolute; 
+    right: 12px; 
+    top: 50%; /* Center vertically within the header container */
+    transform: translateY(-50%); 
+    display:flex; 
+    gap:8px; 
+    align-items:center;
+  }
+  
+  /* --- MAIN CONTENT & CHAT BUBBLES --- */
   .avatar-sm{width:36px;height:36px;border-radius:999px;object-fit:cover;}
   .bubble{ padding:10px 12px; border-radius:12px; display:inline-block; max-width:72%; word-break:break-word; white-space:pre-wrap;}
   .me{ background: linear-gradient(90deg,#dcf8c6,#e6ffe6); border-bottom-right-radius:3px;}
   .them{ background:#fff; border-bottom-left-radius:3px;}
   .meta{ font-size:.75rem; color:#6b7280; margin-bottom:4px;}
   .msg-row{ margin-bottom:10px; display:flex; gap:8px; align-items:flex-start;}
+  
+  /* 2. GAP FOR MOBILE */
+  @media (max-width: 767px) {
+    .msg-row { margin-left: 10px; } /* Small gap from left edge on mobile */
+    .bubble { max-width: 85%; }
+  }
+
   .msg-body{ display:flex; flex-direction:column;}
-  .three-dot{ background: none; border: none; cursor:pointer; font-size:1.05rem; color:#f3f4f6; padding:6px 8px; border-radius:8px; background:#111827; box-shadow:0 6px 18px rgba(0,0,0,.25);}
-  .menu{ position: absolute; background:#111827; color:#fff; padding:8px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.25); z-index:120; min-width:140px;}
+  .three-dot{ background: none; border: none; cursor:pointer; font-size:1.05rem; color: #000000; padding: 1px 8px; border-radius:8px; background: rgba(255, 255, 255, 0.06);}
+  .menu{ position: absolute; background: #ffffff; color: #000000; padding:8px; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.25); z-index:120; min-width:140px;}
   .menu div, .menu form button{ width:100%; text-align:left; padding:8px 10px; cursor:pointer; border-radius:6px;}
-  .menu div:hover, .menu form button:hover{ background: rgba(255,255,255,0.06); }
+  .menu div:hover, .menu form button:hover{ background: #f3f4f6; } /* Adjusted hover color */
   .attach-menu{ position: fixed; right:20px; bottom:84px; z-index:90; display:none; flex-direction:column; gap:8px; }
   .attach-menu button, .attach-menu label{ min-width:160px; text-align:left; }
   .mic-active{ background:#10b981 !important; color:white !important; }
   .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
   .sticker{ width:120px; height:auto; margin-top:8px; }
   .textarea{ resize:none; min-height:44px; max-height:220px; overflow:auto; border-radius:12px; padding:8px; }
-  main{ max-width:900px; margin:0 auto; padding-bottom:110px; }
-  .composer { position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom, 0); display:flex; justify-content:center; padding:12px; background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.8)); backdrop-filter: blur(6px); }
+  main{ 
+    max-width:900px; 
+    margin:0 auto; 
+    padding-top: 150px; /* Space for the fixed header content */
+    padding-bottom:110px; 
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .composer { position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom, 0); display:flex; justify-content:center; padding:12px; background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.8)); backdrop-filter: blur(6px); z-index: 50; }
   .composer-inner{ width:100%; max-width:900px; display:flex; flex-direction:column; gap:8px; }
   .composer-main{ display:flex; gap:8px; align-items:flex-end; width: 100%; }
   .system-message{ text-align:center; font-size:0.8rem; color:#6b7280; background:rgba(230,230,230,0.7); padding:4px 10px; border-radius:12px; margin:10px auto; display:table; }
@@ -433,14 +473,51 @@ CHAT_HTML = r'''<!doctype html>
   .doc-link span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
   .image-attachment, .video-attachment { border-radius: 10px; display: block; margin-top: 8px; width: 100%; max-width: 90vw; height: auto; }
   .no-bubble-image, .no-bubble-video { display: block; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.08); width: 100%; max-width: 90vw; height: auto; }
+  
+  /* 5. RECTANGULAR PROFILE ICON */
+  #profileBtn {
+    width: 50px; /* Wider */
+    height: 32px; /* Shorter */
+    border-radius: 8px; /* Rounded corners */
+    font-weight: 600;
+  }
+
+  /* Call buttons container for centering on wider screens */
+  .call-buttons-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding-left: 10px;
+    padding-right: 10px;
+    display: flex; 
+    align-items: center; 
+    justify-content: flex-end; /* Align right */
+    padding-bottom: 8px;
+  }
+
+
   @media (min-width: 768px) {
     .image-attachment, .video-attachment { max-width: 500px; }
     .no-bubble-image, .no-bubble-video { max-width: 500px; }
+    .call-buttons-container { justify-content: flex-end; }
+  }
+
+  /* 3. IPAD PRO STYLING (or any larger tablet) */
+  @media (min-width: 1024px) {
+    body { font-size: 1.1rem; }
+    .bubble { padding: 12px 16px; border-radius: 14px; max-width: 60%; }
+    .left, .right { font-size: 1.6rem; }
+    header img { max-height: 110px; }
+    .msg-meta-top { font-size: 0.8rem; }
+    .avatar-sm { width: 44px; height: 44px; }
+    main { padding-top: 170px; } /* Adjust padding for bigger header */
+    #profileBtn { width: 60px; height: 36px; border-radius: 10px; font-size: 1.1rem; }
+    .composer { padding: 16px 12px; }
   }
 </style>
 </head><body>
+<div class="fixed-header-container">
   <div class="top-right">
-    <button id="profileBtn" class="rounded-full bg-indigo-600 text-white w-10 h-10 flex items-center justify-center">P</button>
+    <button id="profileBtn" class="rounded-full bg-indigo-600 text-white flex items-center justify-center">P</button>
     <div id="profileMenu" class="menu" style="display:none; right:0; top:48px;">
         <div id="viewProfileBtn">Profile</div>
         <form method="post" action="{{ url_for('logout') }}"><button type="submit">Logout</button></form>
@@ -454,14 +531,16 @@ CHAT_HTML = r'''<!doctype html>
       <div class="right">Legends</div>
     </div>
   </header>
+  
+  <div class="call-buttons-container">
+    <div class="flex gap-2 items-center">
+      <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
+      <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
+    </div>
+  </div>
+</div>
 
   <main>
-    <div class="flex items-center justify-end mb-2">
-      <div class="flex gap-2 items-center">
-        <button id="callAudio" class="px-3 py-1 rounded bg-white shadow">📞</button>
-        <button id="callVideo" class="px-3 py-1 rounded bg-white shadow">📹</button>
-      </div>
-    </div>
     <div id="messages" class="mb-3"></div>
   </main>
 
@@ -618,14 +697,22 @@ async function poll(){
     const container = document.getElementById('messages');
     for(const m of data){
       const me = (m.sender === myName);
-      const wrapper = document.createElement('div'); wrapper.className='msg-row';
-      const body = document.createElement('div'); body.className='msg-body';
+      const wrapper = document.createElement('div'); 
+      wrapper.className='msg-row' + (me ? ' justify-end' : ''); /* Align 'me' messages to the right */
+      
+      const body = document.createElement('div'); 
+      body.className='msg-body';
+      if(me) body.style.alignItems = 'flex-end'; /* Align text/meta inside my message body to the right */
+      
       const meta = document.createElement('div'); meta.className='msg-meta-top';
       const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
       const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+      
       meta.appendChild(leftMeta); meta.appendChild(rightMeta);
+      
       const hasText = m.text && m.text.trim().length > 0;
       const attachments = (m.attachments || []);
+      
       const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
       menuBtn.onclick = (ev)=>{
         ev.stopPropagation();
@@ -655,18 +742,39 @@ async function poll(){
         menu.appendChild(del); menu.appendChild(react);
         document.body.appendChild(menu);
         const rect = menuBtn.getBoundingClientRect();
-        menu.style.left = (rect.left - 8) + 'px';
-        menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+        
+        // Position the menu near the button
+        menu.style.position = 'fixed'; // Use fixed positioning for the menu
+        menu.style.top = (rect.bottom + 5) + 'px';
+        
+        if (me) {
+            // My messages: position menu to the left of the button
+            menu.style.left = 'auto';
+            menu.style.right = (window.innerWidth - rect.right) + 'px';
+        } else {
+            // Other's messages: position menu to the right of the button
+            menu.style.right = 'auto';
+            menu.style.left = rect.left + 'px';
+        }
       };
       body.appendChild(meta);
 
       if(attachments.length && !hasText){ // Attachments-only
-        const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
+        const rowInner = document.createElement('div'); 
+        rowInner.style.display='flex'; 
+        rowInner.style.gap='8px'; 
+        rowInner.style.alignItems='flex-start';
+        
+        if(me) rowInner.style.flexDirection = 'row-reverse'; // Flip avatar and content for 'me' messages
+
         if(!me){
           const avatar = document.createElement('img'); avatar.src=`/avatar/${m.sender}`; avatar.className='avatar-sm';
           rowInner.appendChild(avatar);
         }
+        
         const attContainer = document.createElement('div');
+        if (me) attContainer.style.textAlign = 'right'; /* Right align media for my messages */
+
         attachments.forEach(a=>{
           if(a.type==='sticker'){
             const img = document.createElement('img'); img.src = a.url; img.className = 'sticker'; attContainer.appendChild(img);
@@ -678,17 +786,46 @@ async function poll(){
             }
           }
         });
+        
         rowInner.appendChild(attContainer);
+        
+        if(me) {
+            // Only add the menu button for 'me' attachments-only
+            const menuContainer = document.createElement('div'); 
+            menuContainer.appendChild(menuBtn);
+            rowInner.appendChild(menuContainer);
+        } else {
+             // For others' messages, place the menu button separately to the right of the media
+             const menuContainer = document.createElement('div'); 
+             menuContainer.appendChild(menuBtn);
+             rowInner.appendChild(menuContainer);
+        }
+
         body.appendChild(rowInner);
+
       } else { // Bubble with text and/or inline attachments
-        const rowInner = document.createElement('div'); rowInner.style.display='flex'; rowInner.style.gap='8px'; rowInner.style.alignItems='flex-start';
+        const rowInner = document.createElement('div'); 
+        rowInner.style.display='flex'; 
+        rowInner.style.gap='8px'; 
+        rowInner.style.alignItems='flex-start';
+        if(me) rowInner.style.flexDirection = 'row-reverse'; // Flip avatar and content for 'me' messages
+
         if(!me){
             const avatar = document.createElement('img'); avatar.src=`/avatar/${m.sender}`; avatar.className='avatar-sm';
             rowInner.appendChild(avatar);
         }
+        
         const msgContainer = document.createElement('div');
+        
+        const topRow = document.createElement('div'); 
+        topRow.style.display='flex'; 
+        topRow.style.justifyContent='flex-end'; /* 1. PUSH MENU TO RIGHT OF BUBBLE */
+        topRow.style.alignItems='flex-start';
+        topRow.style.gap = '8px';
+        
         const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
         bubble.innerHTML = hasText ? (escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'') ) : '';
+        
         if(attachments.length){
           attachments.forEach(a=>{
             if(a.type==='sticker'){
@@ -702,12 +839,21 @@ async function poll(){
             }
           });
         }
-        const topRow = document.createElement('div'); topRow.style.display='flex'; topRow.style.justifyContent='space-between'; topRow.style.alignItems='flex-start';
-        topRow.appendChild(bubble); topRow.appendChild(menuBtn);
+        
+        // 1. Placing the menu button to the right of the bubble
+        if (me) {
+            topRow.appendChild(menuBtn);
+            topRow.appendChild(bubble);
+        } else {
+            topRow.appendChild(bubble);
+            topRow.appendChild(menuBtn);
+        }
+        
         msgContainer.appendChild(topRow);
         rowInner.appendChild(msgContainer);
         body.appendChild(rowInner);
       }
+      
       wrapper.appendChild(body);
       container.appendChild(wrapper);
       lastId = m.id;
