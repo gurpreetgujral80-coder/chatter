@@ -7,7 +7,6 @@ import json
 import hashlib
 import hmac
 import pathlib
-import base64
 from flask import (
     Flask, render_template_string, request, jsonify, session,
     redirect, url_for, send_from_directory, abort
@@ -21,7 +20,7 @@ app.secret_key = os.urandom(32)
 PORT = int(os.environ.get("PORT", 5004))
 DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
 HEADING_IMG = "/static/heading.png"  # place your heading image here
-MAX_MESSAGES = 80
+MAX_MESSAGES = 120
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
 ALLOWED_VIDEO_EXT = {"mp4", "webm", "ogg"}
 ALLOWED_AUDIO_EXT = {"mp3", "wav", "ogg", "m4a", "webm"}
@@ -30,6 +29,7 @@ ALLOWED_AUDIO_EXT = {"mp3", "wav", "ogg", "m4a", "webm"}
 pathlib.Path(os.path.join(app.static_folder, "uploads")).mkdir(parents=True, exist_ok=True)
 pathlib.Path(os.path.join(app.static_folder, "stickers")).mkdir(parents=True, exist_ok=True)
 pathlib.Path(os.path.join(app.static_folder, "gifs")).mkdir(parents=True, exist_ok=True)
+pathlib.Path(os.path.join(app.static_folder, "generated")).mkdir(parents=True, exist_ok=True)
 
 # SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
@@ -192,11 +192,13 @@ def react_message_db(msg_id, reactor, emoji):
     if not r:
         conn.close(); return False, "no message"
     reactions = json.loads(r[0] or "[]")
-    # toggle user's reaction for that emoji: if same emoji by user exists, remove it; else add
+    # toggle: remove if same exists from same user else add
     found = False
     for rec in list(reactions):
         if rec.get("emoji") == emoji and rec.get("user") == reactor:
-            reactions.remove(rec); found = True; break
+            reactions.remove(rec)
+            found = True
+            break
     if not found:
         reactions.append({"emoji": emoji, "user": reactor})
     c.execute("UPDATE messages SET reactions = ? WHERE id = ?", (json.dumps(reactions), msg_id))
@@ -283,7 +285,38 @@ def avatar_svg(name):
     except Exception:
         abort(404)
 
-# ---------- Helpers for listing stickers/gifs ----------
+# ---------- Generated stickers (programmatic) ----------
+def ensure_generated_stickers():
+    """Create a handful of SVG stickers/avatars if they don't exist yet."""
+    gen_dir = os.path.join(app.static_folder, "generated")
+    os.makedirs(gen_dir, exist_ok=True)
+    # create 12 simple SVG emoji-like stickers and some avatar variations
+    for i, emoji in enumerate(["😀","😂","😍","😎","🤩","😅","😢","🤔","😴","😡","🤝","🎉"]):
+        fn = f"emoji_{i}.svg"
+        p = os.path.join(gen_dir, fn)
+        if not os.path.exists(p):
+            svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256">
+  <rect width="100%" height="100%" rx="24" fill="white"/>
+  <text x="50%" y="55%" font-size="120" dominant-baseline="middle" text-anchor="middle">{emoji}</text>
+</svg>'''
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(svg)
+    # make some avatar SVGs (initials style) for a few example names
+    sample_names = ["Ace Racer","ProGamer","Lucky Luke","Maya","Tommy"]
+    for i, name in enumerate(sample_names):
+        initials, color = initials_and_color(name)
+        fn = f"avatar_{i}.svg"
+        p = os.path.join(gen_dir, fn)
+        if not os.path.exists(p):
+            svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256">
+  <rect width="100%" height="100%" rx="24" fill="{color}" />
+  <text x="50%" y="55%" font-size="72" dominant-baseline="middle" text-anchor="middle" fill="#fff">{initials}</text>
+</svg>'''
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(svg)
+
+ensure_generated_stickers()
+
 def list_static_folder(sub):
     folder = os.path.join(app.static_folder, sub)
     if not os.path.isdir(folder): return []
@@ -383,121 +416,116 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
 </body></html>
 '''
 
-# --------- CHAT HTML ----------
+# ---- CHAT HTML updated (contains sticker panel, emoji picker, floating plus button, reaction animation, composer shift) ----
 CHAT_HTML = r'''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Asphalt Legends — Chat</title>
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  :root{--glass-bg: rgba(255,255,255,0.5); --accent: #6366f1; --profile-fg: #fff; --download-bg:#000;}
-  html,body{height:100%;}
-  body{
-    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-    margin:0;
-    background: url("/static/IMG_5939.jpeg") no-repeat center center fixed;
-    background-size: cover;
-    background-attachment: fixed;
-    background-position: center;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-  }
+  :root{--glass-bg: rgba(255,255,255,0.55); --accent:#6366f1; --profile-fg:#fff; --download-bg:#000;}
+  html,body{height:100%; margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; -webkit-font-smoothing:antialiased;}
+  body{ background: url("/static/IMG_5939.jpeg") no-repeat center center fixed; background-size: cover; background-attachment: fixed; background-position: center; }
 
-  /* --- FIXED HEADER STYLES --- */
-  .fixed-header-container {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 60;
-    background: rgba(255,255,255,0.45);
-    backdrop-filter: blur(6px) saturate(120%);
-    padding: 6px 0;
-    box-shadow: 0 2px 12px rgba(2,6,23,0.06);
-  }
-  header{ text-align:center; margin:-6px auto 4px; max-width:980px; position:relative; }
+  /* header */
+  .fixed-header-container{ position:fixed; top:0; left:0; right:0; z-index:60; background:rgba(255,255,255,0.5); backdrop-filter:blur(6px); padding:8px 0; box-shadow:0 2px 12px rgba(0,0,0,0.06);}
+  header{ max-width:980px; margin:0 auto; position:relative; text-align:center; padding:2px 12px; }
   header img{ max-height:56px; display:block; margin:0 auto; object-fit:contain; }
-  .heading{ display:flex; justify-content:center; gap:8px; align-items:center; margin-top:-6px; }
-  .left{ color:#3730a3; font-weight:800; font-size:1.05rem; }
-  .right{ color:#be185d; font-weight:800; font-size:1.05rem; margin-left:6px; }
+  .heading{ display:flex; justify-content:center; gap:8px; align-items:center; font-weight:800; }
+  .left{ color:#3730a3 } .right{ color:#be185d }
 
-  /* Top-left call buttons */
-  .top-left{
-    position:absolute; left:12px; top:12px; display:flex; gap:8px; align-items:center;
-  }
-  .top-left button{ display:inline-flex; align-items:center; justify-content:center; min-width:34px; min-height:34px; border-radius:10px; padding:6px; box-shadow:0 6px 18px rgba(2,6,23,0.06); background:rgba(255,255,255,0.9); }
+  /* top-left / top-right */
+  .top-left{ position:absolute; left:12px; top:12px; display:flex; gap:8px; }
+  .top-right{ position:absolute; right:12px; top:12px; display:flex; gap:8px; align-items:center; max-width:40vw; }
+  .profile-name{ background:var(--accent); color:var(--profile-fg); padding:6px 10px; border-radius:999px; font-weight:700; display:inline-flex; align-items:center; gap:8px; max-width:40vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-  /* Top-right profile (full name) - responsive */
-  .top-right{
-    position:absolute; right:12px; top:12px; display:flex; gap:8px; align-items:center;
-  }
-  .profile-name {
-    font-weight:700; color:var(--profile-fg); background:var(--accent); padding:6px 10px; border-radius:14px;
-    box-shadow:0 10px 30px rgba(99,102,241,0.12); display:inline-flex; align-items:center; gap:8px;
-    max-width: calc(40vw);
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  @media (max-width:520px){
-    .top-left{ left:8px; top:10px; }
-    .top-right{ right:8px; top:10px; }
-    .profile-name{ max-width: 46vw; padding:6px 8px; font-size:0.9rem; border-radius:12px; }
-  }
+  /* main */
+  main{ max-width:980px; margin:0 auto; padding-top:112px; padding-left:12px; padding-right:12px; padding-bottom:220px; min-height:calc(100vh - 260px); }
+  #messages{ display:block; }
 
-  /* --- MAIN CONTENT & CHAT BUBBLES --- */
-  main{ max-width:980px; margin:0 auto; padding-top: 96px; padding-bottom:170px; padding-left:12px; padding-right:12px; min-height:calc(100vh - 260px); }
-  .msg-row{ margin-bottom:12px; display:flex; gap:8px; align-items:flex-start; }
+  /* bubble layout */
+  .msg-row{ margin-bottom:12px; display:flex; gap:10px; align-items:flex-start; }
   .msg-row.justify-end{ justify-content:flex-end; }
   .msg-row.justify-start{ justify-content:flex-start; }
-  .msg-body{ display:flex; flex-direction:column; align-items:flex-start; min-width:0; }
-  .bubble{ position:relative; padding:10px 14px; border-radius:12px; display:inline-block; word-break:break-word; white-space:pre-wrap; background-clip:padding-box; box-shadow: 0 6px 18px rgba(2,6,23,0.04); }
-  .me{ background: #dcfce7; border-bottom-right-radius:6px; align-self:flex-end; }
-  .them{ background: rgba(255,255,255,0.95); border-bottom-left-radius:6px; }
-  .bubble .three-dot { position:absolute; top:8px; right:8px; background:transparent; border:none; font-size:1.05rem; padding:4px; cursor:pointer; color:#111827; border-radius:6px; }
-  .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; width:100%; }
-  .bubble { max-width: min(780px, 72%); font-size:1rem; }
-  @media (max-width:767px){ .bubble{ max-width: calc(100% - 56px); font-size:0.92rem; padding:9px 12px; } .image-attachment, .video-attachment{ max-width: 220px; } .preview-item { max-width:72px; } main{ padding-top:92px; padding-bottom:150px; } }
-  @media (min-width:1024px){ main{ padding-top:120px; } .bubble{ max-width:60%; padding:12px 16px; } }
+  .msg-body{ display:flex; flex-direction:column; min-width:0; }
+  .bubble{ position:relative; padding:12px 16px; border-radius:14px; background:rgba(255,255,255,0.95); box-shadow:0 8px 24px rgba(0,0,0,0.06); max-width:72%; word-break:break-word; white-space:pre-wrap; transition:all .18s ease; }
+  .me{ background:#dcfce7; align-self:flex-end; }
+  .them{ background:rgba(255,255,255,0.95); align-self:flex-start; }
+  .bubble .three-dot { position:absolute; top:8px; right:8px; background:transparent; color:#111827; border:none; font-size:1.1rem; padding:6px; border-radius:8px; cursor:pointer; }
+  .bubble .three-dot-box{ position:absolute; top:6px; right:6px; background:white; color:#111827; border-radius:8px; padding:4px 6px; box-shadow:0 8px 20px rgba(0,0,0,0.08); cursor:pointer; }
+
+  /* ensure three-dot doesn't overlap text: add right padding */
+  .bubble { padding-right:48px; }
+
+  /* attachments */
+  .media-container{ position:relative; display:block; margin-top:8px; width:100%; max-width:420px; }
+  .media-container img.thumb, .media-container img.image-attachment{ width:100%; border-radius:10px; display:block; }
+  .media-container video.video-attachment{ width:100%; border-radius:10px; display:block; }
+  .play-overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .play-circle{ width:64px; height:64px; border-radius:999px; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; color:white; font-size:24px; }
+
+  .download-btn{ position:absolute; top:10px; right:10px; width:36px; height:36px; border-radius:999px; display:flex; align-items:center; justify-content:center; color:white; background:var(--download-bg); box-shadow:0 8px 20px rgba(0,0,0,0.2); text-decoration:none; z-index:10; }
+
+  .doc-link{ display:inline-flex; gap:10px; padding:8px 12px; border-radius:10px; background:white; box-shadow:0 6px 18px rgba(0,0,0,0.04); margin-top:8px; text-decoration:none; color:#111827; }
 
   /* reaction pills */
-  .reaction-row{ margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
-  .reaction-pill{ display:inline-flex; align-items:center; gap:6px; background: rgba(0,0,0,0.06); padding:4px 8px; border-radius:999px; font-size:0.86rem; color:#111827; box-shadow:0 4px 12px rgba(2,6,23,0.04); }
-  .reaction-pill.me{ background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.2); }
+  .reaction-row{ margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .reaction-pill{ display:inline-flex; align-items:center; gap:6px; padding:6px 8px; border-radius:999px; background:rgba(0,0,0,0.06); font-size:0.9rem; transition:transform .22s cubic-bezier(.2,.9,.2,1), opacity .22s; transform-origin:center; }
+  .reaction-pill.me{ background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.18); }
+  .reaction-pill.pop{ animation: pop .26s ease; }
+  @keyframes pop{ 0%{ transform: scale(.6); opacity:0 } 60%{ transform: scale(1.08); opacity:1 } 100%{ transform: scale(1); } }
 
-  /* attachments & previews */
-  #attachmentPreview{ padding:8px; border-bottom:1px solid rgba(0,0,0,0.06); display:none; }
-  .preview-item{ position:relative; display:inline-block; margin-right:8px; vertical-align:top; max-width:90px; }
-  .preview-item img, .preview-item video{ max-width:100%; border-radius:8px; display:block; }
-  .preview-item-doc{ background:#f3f4f6; padding:8px; border-radius:8px; font-size:0.78rem; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .media-container{ position:relative; display:inline-block; width:100%; max-width:420px; }
-  .media-container img.thumb{ display:block; width:100%; border-radius:10px; }
-  .media-container .play-overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
-  .media-container .play-overlay .play-circle{ width:56px; height:56px; background: rgba(0,0,0,0.6); border-radius:999px; display:flex; align-items:center; justify-content:center; color:white; font-size:22px; }
-  .download-btn{ position:absolute; top:8px; right:8px; width:36px; height:36px; border-radius:999px; display:flex; align-items:center; justify-content:center; text-decoration:none; color:white; background:var(--download-bg); font-size:1.05rem; z-index:10; box-shadow:0 6px 18px rgba(0,0,0,0.2); }
-  .doc-link{ display:inline-flex; align-items:center; gap:10px; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,0.04); margin-top:8px; text-decoration:none; color:#111827; }
-
-  /* composer */
-  .composer{ position:fixed; left:0; right:0; bottom:env(safe-area-inset-bottom,0); display:flex; justify-content:center; padding:14px; z-index:70; }
+  /* composer and floating plus */
+  .composer{ position:fixed; left:0; right:0; bottom:env(safe-area-inset-bottom, 12px); display:flex; justify-content:center; z-index:80; padding:12px; transition: transform .22s; }
+  .composer.shift-up{ transform: translateY(-260px); } /* adjusted when sticker panel opens */
   .composer-inner{ width:100%; max-width:980px; display:flex; flex-direction:column; gap:8px; }
-  .composer-main{ display:flex; gap:8px; align-items:center; width:100%; background:var(--glass-bg); border-radius:18px; padding:8px; border:1px solid rgba(255,255,255,0.35); box-shadow:0 6px 30px rgba(2,6,23,0.06); }
-  .plus-btn{ width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; font-size:18px; padding:4px; background:white; box-shadow:0 6px 18px rgba(2,6,23,0.06); border:none; cursor:pointer; }
-  .textarea{ resize:none; min-height:44px; max-height:140px; overflow:auto; border-radius:12px; padding:12px; border:1px solid rgba(15,23,42,0.06); background: rgba(255,255,255,0.6); backdrop-filter: blur(6px); min-width:120px; flex:1; }
-  .preview-remove-btn{ position:absolute; top:-8px; right:-8px; background:#374151; color:#fff; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:999px; border:none; cursor:pointer; }
-  .uploading-overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0.25); border-radius:10px; }
-  .spinner{ width:36px; height:36px; border-radius:50%; border:4px solid rgba(255,255,255,0.2); border-top-color:#fff; animation:spin 1s linear infinite; }
-  @keyframes spin{ to{ transform:rotate(360deg); } }
-  #stickerGrid img{ width:100%; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,0.06); }
-  .system-message{ text-align:center; font-size:0.8rem; color:#6b7280; background:rgba(230,230,230,0.7); padding:6px 12px; border-radius:12px; margin:12px auto; display:inline-block; }
+  .composer-main{ display:flex; gap:8px; align-items:center; width:100%; background:var(--glass-bg); border-radius:18px; padding:8px; border:1px solid rgba(255,255,255,0.6); box-shadow:0 8px 30px rgba(0,0,0,0.06); }
+  .textarea{ flex:1; min-height:44px; max-height:140px; border-radius:12px; padding:12px; border:1px solid rgba(0,0,0,0.05); background:rgba(255,255,255,0.8); }
+  .mic-btn{ width:44px; height:44px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:white; }
+  .send-btn{ padding:8px 14px; border-radius:8px; background:#059669; color:white; border:none; }
+
+  .plus-floating{ position:fixed; right:20px; bottom:90px; z-index:85; width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:#fff; box-shadow:0 10px 28px rgba(0,0,0,0.12); border:none; font-size:20px; }
+
+  /* attach menu near plus */
+  .attach-menu{ position:fixed; right:20px; bottom:146px; z-index:86; display:none; background:white; border-radius:10px; box-shadow:0 22px 48px rgba(0,0,0,0.16); padding:8px; min-width:180px; }
+
+  /* sticker panel (bottom sheet) */
+  .sticker-panel{ position:fixed; left:0; right:0; bottom:0; z-index:90; background:rgba(255,255,255,0.98); box-shadow:0 -18px 40px rgba(0,0,0,0.18); border-top-left-radius:16px; border-top-right-radius:16px; padding:12px; transform: translateY(100%); transition: transform .24s ease; max-height:52vh; overflow:auto; }
+  .sticker-panel.open{ transform: translateY(0); }
+  .sticker-tabs{ display:flex; gap:8px; margin-bottom:8px; }
+  .sticker-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap:8px; }
+
+  /* emoji picker (used for reactions) */
+  .emoji-picker{ position:fixed; z-index:9999; padding:8px; background:white; border-radius:10px; box-shadow:0 18px 44px rgba(0,0,0,0.18); display:grid; grid-template-columns: repeat(8, 1fr); gap:6px; width:auto; }
+
+  /* small helpers */
+  .menu{ position:fixed; background:white; padding:8px; border-radius:10px; box-shadow:0 18px 44px rgba(0,0,0,0.18); z-index:120; min-width:140px; }
+  .menu div, .menu button{ width:100%; text-align:left; padding:8px 10px; cursor:pointer; border-radius:8px; border:none; background:transparent; }
+  .menu div:hover{ background:#f3f4f6; }
+
+  /* responsive tweaks */
+  @media (max-width:640px){
+    .media-container{ max-width:320px; }
+    .plus-floating{ right:12px; bottom:92px; width:42px; height:42px; }
+    .attach-menu{ right:12px; bottom:146px; min-width:150px; }
+    .bubble{ max-width: calc(100% - 56px); padding-right:56px; }
+    .composer.shift-up{ transform: translateY(-46vh); } /* taller on small screens */
+    .sticker-grid{ grid-template-columns: repeat(4, 1fr); }
+  }
 </style>
 </head><body>
 <div class="fixed-header-container">
   <div class="top-left">
-    <button id="callAudio">📞</button>
-    <button id="callVideo">📹</button>
+    <button id="callAudioBtn">📞</button>
+    <button id="callVideoBtn">📹</button>
   </div>
-
   <div class="top-right">
     <div id="profileBtn" class="profile-name">{{ username }}</div>
-    <div id="profileMenu" class="menu" style="display:none; position: absolute; right:0; top:48px;">
-        <div id="viewProfileBtn">Profile</div>
-        <form method="post" action="{{ url_for('logout') }}"><button type="submit">Logout</button></form>
+    <div id="profileMenu" class="menu" style="display:none; right:0; top:48px;">
+      <div id="viewProfileBtn">Profile</div>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit">Logout</button></form>
     </div>
   </div>
-
   <header>
     <img src="{{ heading_img }}" alt="heading"/>
     <div class="heading"><div class="left">Asphalt</div><div class="right">Legends</div></div>
@@ -505,249 +533,182 @@ CHAT_HTML = r'''<!doctype html>
 </div>
 
 <main>
-  <div id="messages" class="mb-6"></div>
+  <div id="messages"></div>
 </main>
 
-<div class="composer">
-  <div class="composer-inner">
-    <div id="attachmentPreview"></div>
-    <div class="composer-main">
-      <button id="plusBtn" class="plus-btn">＋</button>
-      <div id="attachMenu" class="attach-menu" style="display:none;">
-        <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-          <input id="fileAttach" type="file" accept="image/*,video/*,audio/*" class="hidden" multiple /> Photo/Video
-        </label>
-        <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-          <input id="cameraAttach" type="file" accept="image/*,video/*" capture="environment" class="hidden" multiple /> Camera
-        </label>
-        <label class="px-3 py-2 rounded bg-white border cursor-pointer">
-          <input id="docAttach" type="file" class="hidden" multiple /> Document
-        </label>
-        <button id="stickerPickerBtn" class="px-3 py-2 rounded bg-white border">Stickers / GIFs</button>
-      </div>
+<!-- floating plus -->
+<button id="plusFloating" class="plus-floating">＋</button>
+<div id="attachMenu" class="attach-menu">
+  <label style="display:block; padding:6px; cursor:pointer;"><input id="fileAttach" type="file" accept="image/*,video/*,audio/*" hidden multiple/> Photo/Video</label>
+  <label style="display:block; padding:6px; cursor:pointer;"><input id="cameraAttach" type="file" accept="image/*,video/*" capture="environment" hidden multiple/> Camera</label>
+  <label style="display:block; padding:6px; cursor:pointer;"><input id="docAttach" type="file" hidden multiple/> Document</label>
+  <div id="openStickersBtn" style="padding:6px; cursor:pointer;">Stickers / GIFs</div>
+</div>
 
+<!-- sticker panel bottom sheet -->
+<div id="stickerPanel" class="sticker-panel" aria-hidden="true">
+  <div class="sticker-tabs">
+    <button class="tab-btn" data-tab="stickers">Stickers</button>
+    <button class="tab-btn" data-tab="gifs">GIFs</button>
+    <button class="tab-btn" data-tab="avatars">Avatars</button>
+  </div>
+  <div id="stickerContent" class="sticker-grid"></div>
+</div>
+
+<!-- composer -->
+<div id="composer" class="composer">
+  <div class="composer-inner">
+    <div id="attachmentPreview" style="display:none; padding:8px;"></div>
+    <div class="composer-main">
       <textarea id="msg" class="textarea" placeholder="Type a message..." maxlength="1200"></textarea>
-      <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎙️</button>
-      <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
+      <button id="mic" class="mic-btn">🎙️</button>
+      <button id="sendBtn" class="send-btn">Send</button>
     </div>
   </div>
 </div>
 
-<div id="stickerModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50">
-  <div class="bg-white rounded-lg p-4 w-11/12 max-w-2xl">
-    <div class="flex justify-between items-center mb-3"><div class="font-semibold">Stickers & GIFs</div><button id="closeSticker" class="text-gray-500">✕</button></div>
-    <div id="stickerGrid" class="grid grid-cols-4 gap-3"></div>
-  </div>
-</div>
+<!-- emoji picker template container -->
+<div id="emojiContainer" style="display:none;"></div>
 
-<div id="profileModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-[60]">
-  <div class="bg-white rounded-lg p-4 w-96">
-    <div class="flex items-center justify-between mb-3"><div><div class="text-lg font-bold">Profile</div></div><button id="closeProfile" class="text-gray-500">✕</button></div>
-    <form id="profileForm" enctype="multipart/form-data">
-      <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name" class="w-full p-2 border rounded" value="{{ username }}" /></div>
-      <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status" class="w-full p-2 border rounded" value="{{ user_status }}" /></div>
-      <div class="mb-2"><label class="text-xs">Avatar</label><input id="profile_avatar" name="avatar" type="file" accept="image/*" class="w-full" /></div>
-      <div class="flex gap-2"><button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button><button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button></div>
-      <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
-    </form>
-  </div>
-</div>
+<!-- sticker modal fallback (not used as bottom sheet) -->
+<div id="stickerModal" style="display:none;"></div>
 
+<!-- incoming call -->
 <div id="incomingCall" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
   <div id="incomingText">Incoming call</div>
-  <div class="flex gap-2 mt-2"><button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button><button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button></div>
+  <div style="display:flex; gap:8px; margin-top:8px;"><button id="acceptCall" style="background:#059669;color:white;padding:6px;border-radius:6px;border:none;">Accept</button><button id="declineCall" style="background:#ef4444;color:white;padding:6px;border-radius:6px;border:none;">Decline</button></div>
 </div>
 
-<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
 const socket = io();
 let myName = "{{ username }}";
 let lastId = 0;
+let stagedFiles = [];
 let micRecording = false;
 let mediaRecorder = null;
 let mediaChunks = [];
-let stagedFiles = []; // For multiple attachment previews
+const messagesEl = document.getElementById('messages');
+const msgInput = document.getElementById('msg');
+const composerEl = document.getElementById('composer');
+const stickerPanel = document.getElementById('stickerPanel');
+const stickerContent = document.getElementById('stickerContent');
+const attachMenu = document.getElementById('attachMenu');
+const plusFloating = document.getElementById('plusFloating');
 
 function byId(id){ return document.getElementById(id); }
-const attachMenu = byId('attachMenu');
-const stickerModal = byId('stickerModal');
-const stickerGrid = byId('stickerGrid');
-const profileMenu = byId('profileMenu');
-const profileModal = byId('profileModal');
-const messagesEl = byId('messages');
-const inputEl = byId('msg');
-
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
 
-/* Profile contrast sampling — best-effort (same-origin) */
-async function sampleBackgroundLuminance(src){
-  return new Promise((resolve)=>{
-    try{
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = src;
-      img.onload = ()=>{
-        const w = 40, h = 40;
-        const c = document.createElement('canvas'); c.width = w; c.height = h;
-        const ctx = c.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        const data = ctx.getImageData(0,0,w,h).data;
-        let r=0,g=0,b=0,count=0;
-        for(let i=0;i<data.length;i+=4){ r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++; }
-        r/=count; g/=count; b/=count;
-        const lum = (0.2126*r + 0.7152*g + 0.0722*b)/255;
-        resolve(lum);
-      };
-      img.onerror = ()=> resolve(null);
-    }catch(e){ resolve(null); }
-  });
-}
-async function adjustProfileContrast(){
-  const style = window.getComputedStyle(document.body).backgroundImage;
-  const m = /url\(["']?(.*?)["']?\)/.exec(style);
-  if(!m) return;
-  const src = m[1];
-  const lum = await sampleBackgroundLuminance(src);
-  if(lum==null){ document.documentElement.style.setProperty('--profile-fg','#fff'); return; }
-  if(lum < 0.55) document.documentElement.style.setProperty('--profile-fg','#fff');
-  else document.documentElement.style.setProperty('--profile-fg','#111827');
-}
-window.addEventListener('load', adjustProfileContrast);
-window.addEventListener('resize', adjustProfileContrast);
+/* -- Emoji picker (lots of emojis) -- */
+const EMOJI_LIST = ["👍","❤️","😂","😮","😢","👏","🔥","🎉","💯","😅","🤩","😍","🙂","🙃","😉","🤔","😴","😎","🤪","🤝","🤘","🤟","😇","😬","😱","😤","🤯","🥳","💥","🌟","✨","🎯","🍕","🍔","🍟","🍺","☕","🏁","🏎️","🛞","🏆"];
 
-/* Video thumbnail helpers */
+function showEmojiPickerForMessage(msgId, rect){
+  // remove existing
+  document.querySelectorAll('.emoji-picker').forEach(n=>n.remove());
+  const picker = document.createElement('div');
+  picker.className = 'emoji-picker';
+  EMOJI_LIST.forEach(e=>{
+    const b = document.createElement('button');
+    b.style.fontSize='20px'; b.style.padding='6px'; b.style.border='none'; b.style.background='transparent'; b.style.cursor='pointer';
+    b.innerText = e;
+    b.onclick = async (ev) => {
+      ev.stopPropagation();
+      try {
+        await fetch('/react_message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: msgId, emoji: e })});
+      } catch(err) { console.error(err); }
+      picker.remove();
+      messagesEl.innerHTML=''; lastId = 0; poll();
+    };
+    picker.appendChild(b);
+  });
+  document.body.appendChild(picker);
+  const left = Math.max(8, rect.left);
+  const top = rect.bottom + 8;
+  picker.style.left = left + 'px';
+  picker.style.top = top + 'px';
+}
+
+/* -- Video thumbnail helpers (client side) -- */
 function createVideoThumbnailFromUrl(url, seekTo = 0.5){
   return new Promise((resolve)=>{
     try{
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
-      video.src = url;
-      video.muted = true;
-      video.playsInline = true;
+      video.src = url; video.muted = true; video.playsInline = true;
       video.addEventListener('loadeddata', ()=>{
         const t = Math.min(seekTo, Math.max(0, video.duration*0.2 || 0.5));
         function seekHandler(){
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth || 320;
-          canvas.height = video.videoHeight || 180;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataURL = canvas.toDataURL('image/png');
-          video.remove();
-          resolve(dataURL);
+          try{
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth || 320;
+            canvas.height = video.videoHeight || 180;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataURL = canvas.toDataURL('image/png');
+            video.remove();
+            resolve(dataURL);
+          }catch(e){ video.remove(); resolve(null); }
         }
         if(video.readyState >= 2){ video.currentTime = t; }
         else { video.addEventListener('canplay', ()=> video.currentTime = t, { once:true }); }
         video.addEventListener('seeked', seekHandler, { once:true });
-        setTimeout(()=>{ try{ const canvas = document.createElement('canvas'); canvas.width=320; canvas.height=180; const ctx=canvas.getContext('2d'); ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); resolve(canvas.toDataURL()); }catch(e){ resolve(null);} }, 2500);
+        setTimeout(()=> resolve(null), 2500);
       }, { once:true });
       video.addEventListener('error', ()=> resolve(null));
     }catch(e){ resolve(null); }
   });
 }
-function createVideoThumbnailFromFile(file, seekTo=0.5){
-  return new Promise((resolve)=>{
-    const url = URL.createObjectURL(file);
-    createVideoThumbnailFromUrl(url, seekTo).then((data)=>{
-      URL.revokeObjectURL(url);
-      resolve(data);
-    }).catch(()=>{ URL.revokeObjectURL(url); resolve(null); });
-  });
-}
+function createVideoThumbnailFromFile(file){ return new Promise((resolve)=>{ const url = URL.createObjectURL(file); createVideoThumbnailFromUrl(url).then((d)=>{ URL.revokeObjectURL(url); resolve(d); }).catch(()=>{ URL.revokeObjectURL(url); resolve(null); }); }); }
 
-/* Attachment element factory */
-function createAttachmentElement(a){
+/* -- Attachment element factory -- */
+function createAttachmentElement(a, avoidDownloadForAudio=true){
   const container = document.createElement('div');
-  container.className = 'media-container mt-2';
-
+  container.className = 'media-container';
   if(a.type === 'audio'){
-    const au = document.createElement('audio'); au.src = a.url; au.controls = true; au.className = 'mt-2';
-    container.appendChild(au);
+    const au = document.createElement('audio'); au.src = a.url; au.controls = true; container.appendChild(au);
     return { element: container };
   }
   if(a.type === 'doc'){
-    const link = document.createElement('a');
-    link.href = a.url; link.className = 'doc-link'; link.setAttribute('download', a.name || 'Document');
-    link.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11"></path><polyline points="17 2 17 8 23 8"></polyline></svg><span style="font-size:0.92rem">${escapeHtml(a.name || 'Document')}</span>`;
-    const dl = document.createElement('a'); dl.href = a.url; dl.className='download-btn'; dl.setAttribute('download', a.name || ''); dl.innerHTML = '⤓';
+    const link = document.createElement('a'); link.href = a.url; link.className = 'doc-link'; link.setAttribute('download', a.name || 'Document'); link.innerHTML = `<span>${escapeHtml(a.name||'Document')}</span>`;
     container.appendChild(link);
-    container.appendChild(dl);
+    const dl = document.createElement('a'); dl.className='download-btn'; dl.href = a.url; dl.setAttribute('download', a.name||''); dl.innerText = '⤓'; container.appendChild(dl);
     return { element: container };
   }
+  if(a.type === 'image'){
+    const img = document.createElement('img'); img.className='image-attachment'; img.src = a.url; container.appendChild(img);
+    const dl = document.createElement('a'); dl.className='download-btn'; dl.href = a.url; dl.setAttribute('download', a.name||''); dl.innerText = '⤓'; container.appendChild(dl);
+    return { element: container, mediaElement: img };
+  }
+  if(a.type === 'video'){
+    const thumb = document.createElement('img'); thumb.className='thumb'; thumb.alt = a.name || 'video';
+    const playOverlay = document.createElement('div'); playOverlay.className='play-overlay'; playOverlay.innerHTML = '<div class="play-circle">▶</div>';
+    container.appendChild(thumb); container.appendChild(playOverlay);
+    const dl = document.createElement('a'); dl.className='download-btn'; dl.href = a.url; dl.setAttribute('download', a.name||''); dl.innerText = '⤓'; container.appendChild(dl);
 
-  if(a.type === 'image' || a.type === 'video'){
-    const dl = document.createElement('a'); dl.href = a.url; dl.className='download-btn'; dl.setAttribute('download', a.name || ''); dl.innerHTML = '⤓';
-    container.appendChild(dl);
-
-    if(a.type === 'image'){
-      const img = document.createElement('img'); img.src = a.url; img.className = 'image-attachment';
-      container.appendChild(img);
-      return { element: container, mediaElement: img };
-    } else {
-      const thumbImg = document.createElement('img'); thumbImg.className = 'thumb'; thumbImg.alt = a.name || 'video';
-      const playOverlay = document.createElement('div'); playOverlay.className='play-overlay'; playOverlay.innerHTML = '<div class="play-circle">▶</div>';
-      container.appendChild(thumbImg); container.appendChild(playOverlay);
-
-      createVideoThumbnailFromUrl(a.url, 0.7).then(dataUrl=>{ if(dataUrl) thumbImg.src = dataUrl; else { const v = document.createElement('video'); v.src = a.url; v.controls = true; v.className='video-attachment'; container.innerHTML = ''; container.appendChild(dl); container.appendChild(v); } });
-
-      container.addEventListener('click', ()=>{
-        if(container.querySelector('video')) return;
-        const v = document.createElement('video'); v.src = a.url; v.controls = true; v.autoplay = true; v.playsInline = true; v.className='video-attachment';
-        const existingDl = container.querySelector('.download-btn');
+    createVideoThumbnailFromUrl(a.url).then(dataUrl=>{
+      if(dataUrl) thumb.src = dataUrl;
+      else {
+        // fallback show video element directly
         container.innerHTML = '';
-        if(existingDl) container.appendChild(existingDl);
-        container.appendChild(v);
-      }, { once:true });
+        const v = document.createElement('video'); v.src = a.url; v.controls = true; v.className='video-attachment';
+        container.appendChild(dl); container.appendChild(v);
+      }
+    });
 
-      return { element: container, mediaElement: thumbImg };
-    }
+    container.addEventListener('click', ()=>{
+      if(container.querySelector('video')) return;
+      const v = document.createElement('video'); v.src = a.url; v.controls = true; v.autoplay=true; v.playsInline=true; v.className='video-attachment';
+      const existingDl = container.querySelector('.download-btn');
+      container.innerHTML = '';
+      if(existingDl) container.appendChild(existingDl);
+      container.appendChild(v);
+    }, { once:true });
+
+    return { element: container, mediaElement: thumb };
   }
   return { element: null };
 }
 
-/* Emoji picker (inline) */
-function showEmojiPicker(msgId, anchorRect){
-  // remove existing
-  document.querySelectorAll('.emoji-picker-menu').forEach(n=>n.remove());
-  const picker = document.createElement('div');
-  picker.className = 'menu emoji-picker-menu';
-  picker.style.display = 'grid';
-  picker.style.gridTemplateColumns = 'repeat(8, 1fr)';
-  picker.style.gap = '6px';
-  picker.style.padding = '8px';
-  picker.style.minWidth = 'auto';
-  const emojis = ['👍','❤️','😂','😮','😢','👏','🔥','🎉','💯','😅','🤩','😍'];
-  emojis.forEach(e=>{
-    const b = document.createElement('button');
-    b.style.fontSize = '20px';
-    b.style.padding = '6px';
-    b.style.border = 'none';
-    b.style.background = 'transparent';
-    b.style.cursor = 'pointer';
-    b.innerText = e;
-    b.onclick = async (ev)=>{
-      ev.stopPropagation();
-      try{
-        await fetch('/react_message', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ id: msgId, emoji: e })});
-      }catch(err){
-        console.error('react error', err);
-      }
-      picker.remove();
-      messagesEl.innerHTML=''; lastId=0; poll();
-    };
-    picker.appendChild(b);
-  });
-  document.body.appendChild(picker);
-  // position near anchor
-  const left = Math.max(8, anchorRect.left);
-  const top = anchorRect.bottom + 8;
-  picker.style.position = 'fixed';
-  picker.style.left = left + 'px';
-  picker.style.top = top + 'px';
-  picker.style.zIndex = 9999;
-}
-
-/* Poll & Render messages */
+/* -- Polling messages & rendering -- */
 async function poll(){
   try{
     const resp = await fetch('/poll_messages?since=' + lastId);
@@ -756,147 +717,114 @@ async function poll(){
     if(!data || !data.length) return;
     for(const m of data){
       const me = (m.sender === myName);
-      const wrapper = document.createElement('div'); wrapper.className = 'msg-row ' + (me ? 'justify-end' : 'justify-start');
-      const body = document.createElement('div'); body.className='msg-body';
-
-      const meta = document.createElement('div'); meta.className='msg-meta-top';
-      const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
-      const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
-      meta.appendChild(leftMeta); meta.appendChild(rightMeta);
+      const wrapper = document.createElement('div'); wrapper.className = 'msg-row ' + (me ? 'justify-end':'justify-start');
+      const body = document.createElement('div'); body.className = 'msg-body';
+      const meta = document.createElement('div'); meta.style.fontSize='0.78rem'; meta.style.color='#6b7280'; meta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
       body.appendChild(meta);
 
-      const hasText = m.text && m.text.trim().length>0;
-      const attachments = (m.attachments || []);
       const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me':'them');
-
-      if(hasText){
-        const textNode = document.createElement('div');
-        textNode.innerHTML = escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'');
-        bubble.appendChild(textNode);
+      // text
+      if(m.text && m.text.trim().length){
+        const t = document.createElement('div'); t.innerHTML = escapeHtml(m.text) + (m.edited ? ' <span style="font-size:.75rem;color:#9ca3af">(edited)</span>':'');
+        bubble.appendChild(t);
       }
-
-      if(attachments && attachments.length){
-        for(const a of attachments){
+      // attachments
+      if(m.attachments && m.attachments.length){
+        for(const a of m.attachments){
           if(a.type === 'sticker'){
-            const s = document.createElement('img'); s.src = a.url; s.className = 'sticker'; s.style.marginTop='8px';
+            const s = document.createElement('img'); s.src = a.url; s.style.maxWidth='160px'; s.style.borderRadius='12px'; s.style.display='block'; s.style.marginTop='8px';
             bubble.appendChild(s);
           } else {
-            const { element, mediaElement } = createAttachmentElement(a);
+            const { element } = createAttachmentElement(a);
             if(element) bubble.appendChild(element);
           }
         }
       }
 
-      // render existing reactions (grouped)
+      // Reaction pills (group)
       if(m.reactions && m.reactions.length){
         const counts = {};
-        m.reactions.forEach(r=>{ counts[r.emoji] = (counts[r.emoji]||0) + 1; });
+        m.reactions.forEach(r=> counts[r.emoji] = (counts[r.emoji]||0) + 1);
         const reactionRow = document.createElement('div'); reactionRow.className = 'reaction-row';
         Object.keys(counts).forEach(emoji=>{
-          const pill = document.createElement('div'); pill.className = 'reaction-pill';
-          // if current user reacted with this emoji, mark
-          const foundByMe = m.reactions.some(x=> x.emoji === emoji && x.user === myName);
-          if(foundByMe) pill.className += ' me';
+          const pill = document.createElement('div'); pill.className='reaction-pill';
+          const foundByMe = m.reactions.some(x=> x.emoji===emoji && x.user===myName);
+          if(foundByMe) pill.classList.add('me');
           pill.innerText = emoji + ' ' + counts[emoji];
           reactionRow.appendChild(pill);
         });
         bubble.appendChild(reactionRow);
       }
 
-      const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
-      menuBtn.onclick = (ev)=>{
+      // three-dot inside bubble (always present)
+      const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText = '⋯';
+      menuBtn.onclick = (ev) => {
         ev.stopPropagation();
-        document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
+        document.querySelectorAll('.menu').forEach(n=>n.remove());
         const menu = document.createElement('div'); menu.className='menu';
-        const edit = document.createElement('div'); edit.innerText='Edit';
-        edit.onclick = async (e)=>{ e.stopPropagation(); const newText = prompt('Edit message text', m.text || ''); if(newText!==null){ await fetch('/edit_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,text:newText})}); messagesEl.innerHTML=''; lastId=0; poll(); } };
-        const del = document.createElement('div'); del.innerText='Delete'; del.onclick = async (e)=>{ e.stopPropagation(); if(confirm('Delete this message?')){ await fetch('/delete_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id})}); messagesEl.innerHTML=''; lastId=0; poll(); } };
-        const react = document.createElement('div'); react.innerText='React ❤️'; react.onclick = (ev2)=>{
-          ev2.stopPropagation();
-          const rect = menuBtn.getBoundingClientRect();
-          showEmojiPicker(m.id, rect);
-          menu.remove();
-        };
-
-        const hasAudio = (attachments || []).some(x=>x.type==='audio');
-        const hasOther = (attachments || []).some(x=>x.type==='image' || x.type==='video' || x.type==='doc');
-        if(m.sender === myName) menu.appendChild(edit);
-        if(hasAudio){
-          const dlAudio = document.createElement('div'); dlAudio.innerText='Download audio'; dlAudio.onclick = (ev2)=>{ ev2.stopPropagation(); const audio = attachments.find(x=>x.type==='audio'); if(audio){ const a = document.createElement('a'); a.href = audio.url; a.setAttribute('download', audio.name || 'audio'); document.body.appendChild(a); a.click(); a.remove(); } menu.remove(); };
-          menu.appendChild(dlAudio);
+        // edit (only me)
+        if(m.sender === myName){
+          const edit = document.createElement('div'); edit.innerText='Edit'; edit.onclick = async (ev2)=>{ ev2.stopPropagation(); const txt = prompt('Edit message', m.text || ''); if(txt!==null){ await fetch('/edit_message',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id:m.id, text:txt })}); messagesEl.innerHTML=''; lastId=0; poll(); } document.querySelectorAll('.menu').forEach(n=>n.remove()); };
+          menu.appendChild(edit);
         }
-        if(hasOther){
-          const dlAll = document.createElement('div'); dlAll.innerText = 'Download file'; dlAll.onclick = (ev2)=>{ ev2.stopPropagation(); const f = attachments.find(x=>x.type!=='sticker' && x.type!=='audio'); if(f){ const a = document.createElement('a'); a.href = f.url; a.setAttribute('download', f.name || 'file'); document.body.appendChild(a); a.click(); a.remove(); } menu.remove(); };
-          menu.appendChild(dlAll);
-        }
-
+        const react = document.createElement('div'); react.innerText='React'; react.onclick = (ev2)=>{ ev2.stopPropagation(); const rect = menuBtn.getBoundingClientRect(); showEmojiPickerForMessage(m.id, rect); menu.remove(); };
         menu.appendChild(react);
-        menu.appendChild(del); menu.appendChild(react);
-        // ensure 'del' appended only once (fix ordering)
-        // re-create proper ordering:
-        menu.innerHTML = '';
-        if(m.sender === myName) {
-          const edit2 = document.createElement('div'); edit2.innerText = 'Edit'; edit2.onclick = edit.onclick; menu.appendChild(edit2);
-        }
+        // download options (audio or other)
+        const hasAudio = (m.attachments||[]).some(x=>x.type==='audio');
+        const hasMedia = (m.attachments||[]).some(x=> x.type==='image' || x.type==='video' || x.type==='doc');
         if(hasAudio){
-          const dlAudio2 = document.createElement('div'); dlAudio2.innerText='Download audio'; dlAudio2.onclick = (ev2)=>{ ev2.stopPropagation(); const audio = attachments.find(x=>x.type==='audio'); if(audio){ const a = document.createElement('a'); a.href = audio.url; a.setAttribute('download', audio.name || 'audio'); document.body.appendChild(a); a.click(); a.remove(); } document.body.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove()); };
-          menu.appendChild(dlAudio2);
+          const dlA = document.createElement('div'); dlA.innerText='Download audio'; dlA.onclick = ()=>{ const a = (m.attachments||[]).find(x=>x.type==='audio'); if(a){ const el = document.createElement('a'); el.href = a.url; el.setAttribute('download', a.name || 'audio'); document.body.appendChild(el); el.click(); el.remove(); } document.querySelectorAll('.menu').forEach(n=>n.remove()); };
+          menu.appendChild(dlA);
         }
-        if(hasOther){
-          const dlAll2 = document.createElement('div'); dlAll2.innerText='Download file'; dlAll2.onclick = (ev2)=>{ ev2.stopPropagation(); const f = attachments.find(x=>x.type!=='sticker' && x.type!=='audio'); if(f){ const a = document.createElement('a'); a.href = f.url; a.setAttribute('download', f.name || 'file'); document.body.appendChild(a); a.click(); a.remove(); } document.body.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove()); };
-          menu.appendChild(dlAll2);
+        if(hasMedia){
+          const dlF = document.createElement('div'); dlF.innerText='Download file'; dlF.onclick = ()=>{ const f = (m.attachments||[]).find(x=>x.type!=='sticker' && x.type!=='audio'); if(f){ const el = document.createElement('a'); el.href = f.url; el.setAttribute('download', f.name || 'file'); document.body.appendChild(el); el.click(); el.remove(); } document.querySelectorAll('.menu').forEach(n=>n.remove()); };
+          menu.appendChild(dlF);
         }
-        const react2 = document.createElement('div'); react2.innerText='React'; react2.onclick = (ev2)=>{ ev2.stopPropagation(); const rect = menuBtn.getBoundingClientRect(); showEmojiPicker(m.id, rect); document.body.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove()); };
-        menu.appendChild(react2);
-        const del2 = document.createElement('div'); del2.innerText='Delete'; del2.onclick = del.onclick;
-        menu.appendChild(del2);
-        const react3 = document.createElement('div'); react3.innerText='React ❤️'; react3.onclick = async (e)=>{ e.stopPropagation(); await fetch('/react_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id,emoji:'❤️'})}); messagesEl.innerHTML=''; lastId=0; poll(); document.body.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove()); };
-        menu.appendChild(react3);
-
+        const del = document.createElement('div'); del.innerText='Delete'; del.onclick = async (ev2)=>{ ev2.stopPropagation(); if(confirm('Delete message?')){ await fetch('/delete_message',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id:m.id })}); messagesEl.innerHTML=''; lastId=0; poll(); } document.querySelectorAll('.menu').forEach(n=>n.remove()); };
+        menu.appendChild(del);
         document.body.appendChild(menu);
         const rect = menuBtn.getBoundingClientRect();
-        menu.style.position = 'fixed';
+        menu.style.left = rect.left + 'px';
         menu.style.top = (rect.bottom + 8) + 'px';
-        menu.style.left = (rect.left) + 'px';
       };
-
       bubble.appendChild(menuBtn);
+
       body.appendChild(bubble);
       wrapper.appendChild(body);
       messagesEl.appendChild(wrapper);
+
       lastId = m.id;
     }
     messagesEl.scrollTop = messagesEl.scrollHeight;
-  }catch(e){ console.error('poll error', e); }
+  }catch(e){ console.error(e); }
 }
 poll(); setInterval(poll, 2000);
 
-/* Send with optimistic UI & thumbnail generation */
+/* -- Sending messages (with optimistic UI, thumbnails) -- */
 byId('sendBtn').addEventListener('click', async ()=>{
-  const text = (inputEl.value || '').trim();
+  const text = (msgInput.value||'').trim();
   if(!text && stagedFiles.length===0) return;
   const tempId = 'temp-'+Date.now();
+  // optimistic UI
   const wrapper = document.createElement('div'); wrapper.className='msg-row justify-end';
   const body = document.createElement('div'); body.className='msg-body';
   const bubble = document.createElement('div'); bubble.className='bubble me'; bubble.dataset.tempId = tempId;
   if(text) bubble.appendChild(document.createTextNode(text));
+  // previews
   const objectUrls = [];
-  const overlays = [];
   for(const file of stagedFiles){
     if(file.type.startsWith('image/')){
       const img = document.createElement('img'); const url = URL.createObjectURL(file); objectUrls.push(url); img.src = url; img.className='image-attachment'; bubble.appendChild(img);
     } else if(file.type.startsWith('video/')){
-      const container = document.createElement('div'); container.style.position='relative'; container.style.display='inline-block';
-      const placeholder = document.createElement('img'); placeholder.className='thumb'; placeholder.alt = file.name;
-      const overlay = document.createElement('div'); overlay.className='uploading-overlay'; overlay.innerHTML='<div class="spinner"></div>';
-      container.appendChild(placeholder); container.appendChild(overlay);
-      bubble.appendChild(container);
-      createVideoThumbnailFromFile(file, 0.7).then(dataUrl=>{ if(dataUrl) placeholder.src = dataUrl; else placeholder.src=''; });
-      overlays.push(overlay);
+      const container = document.createElement('div'); container.style.position='relative';
+      const placeholder = document.createElement('img'); placeholder.className='thumb';
+      const overlay = document.createElement('div'); overlay.className='uploading-overlay'; overlay.innerHTML = '<div class="spinner"></div>';
+      container.appendChild(placeholder); container.appendChild(overlay); bubble.appendChild(container);
+      createVideoThumbnailFromFile(file).then(d=>{ if(d) placeholder.src=d; });
     } else if(file.type.startsWith('audio/')){
-      const au = document.createElement('audio'); const url=URL.createObjectURL(file); objectUrls.push(url); au.src = url; au.controls=true; bubble.appendChild(au);
+      const a = document.createElement('audio'); a.controls=true; const url = URL.createObjectURL(file); objectUrls.push(url); a.src=url; bubble.appendChild(a);
     } else {
-      const d = document.createElement('div'); d.className='preview-item-doc'; d.textContent = file.name; bubble.appendChild(d);
+      const d = document.createElement('div'); d.className='doc-link'; d.textContent = file.name; bubble.appendChild(d);
     }
   }
   body.appendChild(bubble); wrapper.appendChild(body); messagesEl.appendChild(wrapper); messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -906,76 +834,125 @@ byId('sendBtn').addEventListener('click', async ()=>{
   try{
     const r = await fetch('/send_composite_message', { method:'POST', body: fd });
     if(r.ok){
+      // remove optimistic element
       const el = document.querySelector('[data-temp-id="'+tempId+'"]'); if(el) el.parentElement.removeChild(el);
-      inputEl.value=''; stagedFiles=[]; document.getElementById('attachmentPreview').innerHTML=''; document.getElementById('attachmentPreview').style.display='none';
+      msgInput.value=''; stagedFiles=[]; byId('attachmentPreview').innerHTML=''; byId('attachmentPreview').style.display='none';
       await poll();
     } else {
-      const txt = await r.text(); alert('Send failed: '+txt);
-      overlays.forEach(o=> o.innerHTML='!');
+      const t = await r.text(); alert('Send failed: '+t);
     }
-  }catch(e){ alert('Send error: '+e.message); overlays.forEach(o=> o.innerHTML='!'); }
+  }catch(e){ alert('Send error: '+e.message); }
   finally{ objectUrls.forEach(u=> URL.revokeObjectURL(u)); }
 });
-inputEl.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); byId('sendBtn').click(); } });
+msgInput.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); byId('sendBtn').click(); } });
 
-/* Attachment preview */
+/* -- Attachment preview & handlers -- */
 function setAttachmentPreview(files){
-  stagedFiles = Array.from(files || []);
-  const preview = byId('attachmentPreview'); preview.innerHTML=''; preview.style.display = stagedFiles.length ? 'block' : 'none';
+  stagedFiles = Array.from(files||[]);
+  const p = byId('attachmentPreview'); p.innerHTML=''; p.style.display = stagedFiles.length ? 'block' : 'none';
   stagedFiles.forEach((file, idx)=>{
-    const item = document.createElement('div'); item.className='preview-item';
-    const removeBtn = document.createElement('button'); removeBtn.className='preview-remove-btn'; removeBtn.innerText='×';
-    removeBtn.onclick = (e)=>{ e.stopPropagation(); stagedFiles.splice(idx,1); setAttachmentPreview(stagedFiles); };
-    item.appendChild(removeBtn);
+    const item = document.createElement('div'); item.style.display='inline-block'; item.style.marginRight='8px'; item.style.position='relative';
+    const rem = document.createElement('button'); rem.innerText='×'; rem.style.position='absolute'; rem.style.top='-8px'; rem.style.right='-8px'; rem.style.background='#374151'; rem.style.color='#fff'; rem.style.border='none'; rem.style.borderRadius='999px'; rem.style.width='22px'; rem.style.height='22px'; rem.onclick = ()=>{ stagedFiles.splice(idx,1); setAttachmentPreview(stagedFiles); };
+    item.appendChild(rem);
     if(file.type.startsWith('image/')){
-      const img = document.createElement('img');
-      const reader = new FileReader();
-      reader.onload = (ev)=> img.src = ev.target.result;
-      reader.readAsDataURL(file);
+      const img = document.createElement('img'); img.style.maxWidth='96px'; img.style.borderRadius='8px';
+      const r = new FileReader(); r.onload = e => img.src = e.target.result; r.readAsDataURL(file);
       item.appendChild(img);
     } else if(file.type.startsWith('video/')){
-      const img = document.createElement('img'); img.className='thumb'; item.appendChild(img);
-      createVideoThumbnailFromFile(file).then(dataUrl=>{ if(dataUrl) img.src = dataUrl; });
+      const img = document.createElement('img'); img.style.maxWidth='120px'; img.className='thumb';
+      createVideoThumbnailFromFile(file).then(d=>{ if(d) img.src=d; });
+      item.appendChild(img);
     } else if(file.type.startsWith('audio/')){
-      const a = document.createElement('audio'); a.controls = true;
-      const url = URL.createObjectURL(file); a.src = url;
-      item.appendChild(a);
+      const au = document.createElement('audio'); au.controls=true; const url = URL.createObjectURL(file); au.src = url; item.appendChild(au);
     } else {
-      const d = document.createElement('div'); d.className='preview-item-doc'; d.textContent = file.name; item.appendChild(d);
+      const div = document.createElement('div'); div.className='doc-link'; div.textContent = file.name; item.appendChild(div);
     }
-    preview.appendChild(item);
+    p.appendChild(item);
   });
 }
 function clearAttachmentPreview(){ stagedFiles = []; const p = byId('attachmentPreview'); p.innerHTML=''; p.style.display='none'; }
-function handleFileSelection(ev){ const files = ev.target.files; if(files && files.length) setAttachmentPreview(files); attachMenu.style.display='none'; ev.target.value = ''; }
 
+function handleFileSelection(ev){
+  const files = ev.target.files;
+  if(files && files.length) setAttachmentPreview(files);
+  attachMenu.style.display='none';
+  ev.target.value = '';
+}
 byId('fileAttach').addEventListener('change', handleFileSelection);
 byId('cameraAttach').addEventListener('change', handleFileSelection);
 byId('docAttach').addEventListener('change', handleFileSelection);
-byId('plusBtn').addEventListener('click', (ev)=>{ ev.stopPropagation(); attachMenu.style.display = (attachMenu.style.display === 'flex' ? 'none' : 'flex'); });
 
-/* sticker picker */
-byId('stickerPickerBtn').addEventListener('click', async (ev)=>{
-  ev.stopPropagation(); attachMenu.style.display='none';
-  const arr1 = await (await fetch('/stickers_list')).json().catch(()=>[]);
-  const arr2 = await (await fetch('/generated_stickers')).json().catch(()=>[]);
-  const list = (arr1 || []).concat(arr2 || []);
-  stickerGrid.innerHTML='';
-  list.forEach(url=>{
-    const img = document.createElement('img'); img.src = url; img.className='cursor-pointer';
-    img.onclick = async ()=>{
-      await fetch('/send_message',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text:'', attachments:[{ type:'sticker', url }] }) });
-      stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); await poll();
-    };
-    stickerGrid.appendChild(img);
-  });
-  stickerModal.classList.remove('hidden'); stickerModal.classList.add('flex');
+/* -- floating plus and attach menu toggling -- */
+plusFloating.addEventListener('click', (ev)=>{
+  ev.stopPropagation();
+  attachMenu.style.display = attachMenu.style.display === 'block' ? 'none' : 'block';
 });
-byId('closeSticker').addEventListener('click', ()=>{ stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); });
 
-/* mic (voice) */
-const micBtn = byId('mic');
-micBtn.addEventListener('click', async ()=>{
+/* close global UI on outside click */
+document.addEventListener('click', (ev)=>{
+  const insideAttach = attachMenu.contains(ev.target) || plusFloating.contains(ev.target);
+  const insideProfile = byId('profileMenu') && byId('profileMenu').contains(ev.target);
+  if(!insideAttach) attachMenu.style.display = 'none';
+  if(!insideProfile) { const pm = byId('profileMenu'); if(pm) pm.style.display='none'; }
+  // close emoji pickers
+  document.querySelectorAll('.emoji-picker').forEach(n=>{ if(!n.contains(ev.target)) n.remove(); });
+});
+
+/* -- sticker panel logic -- */
+byId('openStickersBtn').addEventListener('click', ()=> openStickerPanel());
+function openStickerPanel(){
+  const open = stickerPanel.classList.contains('open');
+  if(open){ closeStickerPanel(); return; }
+  // load lists and show
+  Promise.all([fetch('/stickers_list').then(r=>r.json()).catch(()=>[]), fetch('/generated_stickers').then(r=>r.json()).catch(()=>[])]).then(([staticList, genList])=>{
+    // by default show stickers (static + generated)
+    renderStickerTab('stickers', (staticList || []).concat(genList||[]));
+    stickerPanel.classList.add('open');
+    composerEl.classList.add('shift-up');
+    stickerPanel.setAttribute('aria-hidden','false');
+  });
+}
+function closeStickerPanel(){
+  stickerPanel.classList.remove('open');
+  composerEl.classList.remove('shift-up');
+  stickerPanel.setAttribute('aria-hidden','true');
+}
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', async (e)=>{
+    const tab = btn.dataset.tab;
+    if(tab === 'stickers'){
+      const s = await fetch('/stickers_list').then(r=>r.json()).catch(()=>[]);
+      const g = await fetch('/generated_stickers').then(r=>r.json()).catch(()=>[]);
+      renderStickerTab('stickers', (s||[]).concat(g||[]));
+    } else if(tab === 'gifs'){
+      const g = await fetch('/gifs_list').then(r=>r.json()).catch(()=>[]);
+      renderStickerTab('gifs', g || []);
+    } else if(tab === 'avatars'){
+      const a = await fetch('/generated_stickers').then(r=>r.json()).catch(()=>[]);
+      renderStickerTab('avatars', a || []);
+    }
+  });
+});
+function renderStickerTab(kind, list){
+  stickerContent.innerHTML = '';
+  if(!list || list.length===0){
+    stickerContent.innerHTML = '<div style="padding:12px;color:#6b7280">No items</div>';
+    return;
+  }
+  list.forEach(url=>{
+    const img = document.createElement('img'); img.src = url; img.style.width='100%'; img.style.borderRadius='8px'; img.style.cursor='pointer';
+    const cell = document.createElement('div'); cell.appendChild(img);
+    img.addEventListener('click', async ()=>{
+      // send sticker as attachment (url)
+      await fetch('/send_message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text:'', attachments:[{ type:'sticker', url }] })});
+      closeStickerPanel(); messagesEl.innerHTML=''; lastId=0; poll();
+    });
+    stickerContent.appendChild(cell);
+  });
+}
+
+/* -- mic handling (voice) -- */
+byId('mic').addEventListener('click', async ()=>{
   if(!micRecording){
     if(!navigator.mediaDevices) return alert('Media not supported');
     try{
@@ -986,41 +963,31 @@ micBtn.addEventListener('click', async ()=>{
       mediaRecorder.onstop = async ()=>{
         const blob = new Blob(mediaChunks, { type:'audio/webm' });
         const file = new File([blob], 'voice_message.webm', { type:'audio/webm' });
-        setAttachmentPreview([file]); stream.getTracks().forEach(t=>t.stop());
+        setAttachmentPreview([file]);
+        stream.getTracks().forEach(t=>t.stop());
       };
-      mediaRecorder.start();
-      micRecording = true; micBtn.classList.add('mic-active'); inputEl.placeholder='Listening... Stop to preview.';
+      mediaRecorder.start(); micRecording=true; byId('mic').style.background='#10b981';
+      msgInput.placeholder = 'Recording... press mic to stop';
     }catch(e){ alert('Mic error: '+e.message); }
   } else {
     if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    micRecording = false; micBtn.classList.remove('mic-active'); inputEl.placeholder='Type a message...';
+    micRecording=false; byId('mic').style.background=''; msgInput.placeholder='Type a message...';
   }
 });
 
-/* profile & other UI */
-byId('profileBtn').addEventListener('click', (e)=>{ e.stopPropagation(); profileMenu.style.display = profileMenu.style.display === 'block' ? 'none' : 'block'; });
-byId('viewProfileBtn').addEventListener('click', async ()=>{
-  profileMenu.style.display='none';
-  profileModal.classList.remove('hidden'); profileModal.classList.add('flex');
-  const r = await fetch('/profile_get');
-  if(r.ok){ const j = await r.json(); byId('profile_display_name').value = j.name || ''; byId('profile_status').value = j.status || ''; }
-});
-function closeProfileModal(){ profileModal.classList.add('hidden'); profileModal.classList.remove('flex'); }
-byId('closeProfile').addEventListener('click', closeProfileModal);
-byId('profileCancel').addEventListener('click', closeProfileModal);
-byId('profileForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const fd = new FormData(e.target); const r = await fetch('/profile_update',{ method:'POST', body:fd }); const t = await r.text(); if(!r.ok){ byId('profileMsg').textContent = t; return; } byId('profileMsg').textContent='Saved'; setTimeout(()=> location.reload(), 400); });
+/* profile, call & other UI wiring */
+byId('profileBtn').addEventListener('click', (e)=>{ e.stopPropagation(); const m = byId('profileMenu'); m.style.display = (m.style.display==='block'?'none':'block'); });
+byId('viewProfileBtn').addEventListener('click', async ()=>{ byId('profileMenu').style.display='none'; const r = await fetch('/profile_get'); if(r.ok){ const j=await r.json(); alert('Profile: '+(j.name||'')+'\\nStatus: '+(j.status||'')); } });
 
 /* call flow */
 let currentInvite = null;
 socket.on('connect', ()=> socket.emit('identify',{ name: myName }));
 socket.on('incoming_call', (data)=>{ currentInvite = data.call_id; byId('incomingText').textContent = `${data.from} is calling (${data.isVideo ? 'video':'audio'})`; byId('incomingCall').style.display='block'; });
-socket.on('call_summary', (data)=>{ const summary = document.createElement('div'); summary.className='system-message'; const icon = data.isVideo ? '📹' : '📞'; summary.innerHTML = `${icon} Call ended. Duration: ${formatDuration(data.duration)}`; messagesEl.appendChild(summary); messagesEl.scrollTop = messagesEl.scrollHeight; });
-
 byId('declineCall')?.addEventListener('click', ()=>{ if(currentInvite) socket.emit('call_decline',{ call_id: currentInvite }); byId('incomingCall').style.display='none'; currentInvite=null; });
 byId('acceptCall')?.addEventListener('click', async ()=>{ if(!currentInvite) return; socket.emit('call_accept',{ call_id: currentInvite }); byId('incomingCall').style.display='none'; currentInvite=null; window.open('/chat','_blank'); });
 
-byId('callAudio').addEventListener('click', ()=> initiateCall(false));
-byId('callVideo').addEventListener('click', ()=> initiateCall(true));
+byId('callAudioBtn').addEventListener('click', ()=> initiateCall(false));
+byId('callVideoBtn').addEventListener('click', ()=> initiateCall(true));
 async function initiateCall(isVideo){
   const resp = await fetch('/partner_info'); const p = await resp.json();
   if(!p || !p.name) return alert('No partner yet');
@@ -1028,6 +995,7 @@ async function initiateCall(isVideo){
   alert('Calling ' + p.name + ' ...');
 }
 
+/* simple helper to format duration */
 function formatDuration(sec){
   const h = Math.floor(sec/3600).toString().padStart(2,'0');
   const m = Math.floor((sec%3600)/60).toString().padStart(2,'0');
@@ -1035,20 +1003,7 @@ function formatDuration(sec){
   return h>'00' ? `${h}:${m}:${s}` : `${m}:${s}`;
 }
 
-/* close global menus on outside click */
-document.addEventListener('click', (ev)=>{
-  const isClickInside = el=> el && el.contains(ev.target);
-  if(isClickInside(attachMenu) || isClickInside(byId('plusBtn'))) return;
-  if(isClickInside(profileMenu) || isClickInside(byId('profileBtn'))) return;
-  attachMenu.style.display='none'; profileMenu.style.display='none';
-  if(stickerModal && !stickerModal.classList.contains('hidden')){
-    const wrap = stickerModal.querySelector('div'); if(!wrap.contains(ev.target)){ stickerModal.classList.add('hidden'); stickerModal.classList.remove('flex'); }
-  }
-  // remove emoji pickers when clicking outside
-  document.querySelectorAll('.emoji-picker-menu').forEach(n=>{
-    if(!n.contains(ev.target)) n.remove();
-  });
-});
+/* ensure sticker endpoints exist; minimal fallback for GIF listing */
 </script>
 </body></html>
 '''
@@ -1065,13 +1020,19 @@ def index():
 
 @app.route("/stickers_list")
 def stickers_list():
-    return jsonify(list_static_folder("stickers") + list_static_folder("gifs"))
+    # return stickers + generated
+    static = list_static_folder("stickers")
+    gen = list_static_folder("generated")
+    return jsonify(static + gen)
 
-# placeholder endpoint for generated_stickers used in client - generate or list your generated assets
+@app.route("/gifs_list")
+def gifs_list():
+    return jsonify(list_static_folder("gifs"))
+
 @app.route("/generated_stickers")
 def generated_stickers():
-    # for now, return GIFs/generic images from /static/gifs
-    return jsonify(list_static_folder("gifs")[:24])
+    # return generated svg stickers created earlier
+    return jsonify(list_static_folder("generated"))
 
 @app.route("/profile_get")
 def profile_get():
@@ -1168,16 +1129,13 @@ def chat():
     touch_user_presence(username)
     return render_template_string(CHAT_HTML, username=username, user_status=user.get('status',''), user_avatar=user.get('avatar',''), is_owner=is_owner, is_partner=is_partner, owner_name=owner_name, partner_name=partner_name, is_member=is_member, heading_img=HEADING_IMG)
 
-# Route for sending messages that might have an attachment
 @app.route("/send_composite_message", methods=["POST"])
 def send_composite_message():
     username = session.get('username')
     if not username: return "not signed in", 401
-
     text = request.form.get('text', '').strip()
     files = request.files.getlist('file') or []
     attachments = []
-
     for file in files:
         if file and file.filename:
             fn = secure_filename(file.filename)
@@ -1194,15 +1152,12 @@ def send_composite_message():
             elif ext in ALLOWED_AUDIO_EXT:
                 kind = "audio"
             attachments.append({"type": kind, "url": url, "name": fn})
-
     if text or attachments:
         save_message(username, text, attachments=attachments)
         touch_user_presence(username)
+    return jsonify({"status":"ok"})
 
-    return jsonify({"status": "ok"})
-
-# Kept for sticker sending, which is URL-based
-@app.route("/send_message", methods=["POST"]) 
+@app.route("/send_message", methods=["POST"])
 def send_message():
     username = session.get('username'); 
     if not username: return "not signed in", 400
@@ -1308,7 +1263,6 @@ def on_call_end(data):
     if log and log.get('started_at') and log.get('ended_at'):
         duration = log['ended_at'] - log['started_at']
         socketio.emit('call_summary', {'duration': duration, 'isVideo': log['is_video']})
-
     info = CALL_INVITES.pop(call_id, None)
     if info:
         sid_caller = USER_SID.get(info.get('caller'))
@@ -1316,7 +1270,6 @@ def on_call_end(data):
         if sid_caller: emit('call_ended', {'call_id': call_id}, room=sid_caller)
         if sid_callee: emit('call_ended', {'call_id': call_id}, room=sid_callee)
 
-# WebRTC signaling passthrough
 @socketio.on('webrtc_offer')
 def on_webrtc_offer(data):
     to = data.get('to'); sid = USER_SID.get(to)
