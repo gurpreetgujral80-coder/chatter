@@ -403,8 +403,8 @@ CHAT_HTML = r'''<!doctype html>
 <title>Asphalt Legends — Chat</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  :root{--glass-bg: rgba(255,255,255,0.5); --accent:#6366f1}
-  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: url("/static/IMG_5939.jpeg") no-repeat center center fixed; background-size: cover;}
+  :root{--glass-bg: rgba(255,255,255,0.5); --accent: #6366f1;}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: url("/static/IMG_5939.jpeg") no-repeat center center fixed; background-size: cover; background-attachment: fixed; background-position: center;}
   
   /* --- FIXED HEADER STYLES --- */
   .fixed-header-container { 
