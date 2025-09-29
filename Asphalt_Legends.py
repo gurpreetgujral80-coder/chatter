@@ -521,7 +521,7 @@ CHAT_HTML = r'''<!doctype html>
   </div>
   <div class="top-right">
     <div id="profileBtn" class="profile-name">{{ username }}</div>
-    <div id="profileMenu" class="menu" style="display:none; right:0; top:48px;">
+    <div id="profileMenu" class="menu" style="display: block;position: absolute;right: 5px;top: 40px;background: white;border-radius: 9px;padding: 5px;">
       <div id="viewProfileBtn">Profile</div>
       <form method="post" action="{{ url_for('logout') }}"><button type="submit">Logout</button></form>
     </div>
