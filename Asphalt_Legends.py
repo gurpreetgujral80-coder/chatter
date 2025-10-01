@@ -875,7 +875,7 @@ CHAT_HTML = r'''<!doctype html>
 
   .composer{ position:fixed; left:0; right:0; bottom:env(safe-area-inset-bottom,0); display:flex; justify-content:center; padding:14px; z-index:70; transition:transform .22s ease; }
   .composer-inner{ width:100%; max-width:980px; display:flex; flex-direction:column; gap:8px; }
-  .composer-main{ display:flex; gap:8px; align-items:center; width:100%; background:var(--glass-bg); border-radius:18px; padding:8px; border:1px solid rgba(255,255,255,0.6); }
+  .composer-main{ display:flex; gap:8px; align-items:center; width:100%; background: white; border-radius:18px; padding:8px; border:1px solid rgba(255,255,255,0.6); }
   .textarea{ flex:1; min-height:44px; border-radius:12px; border:0; padding:8px; resize:none; font-size:1rem; background:transparent; outline: none; }
   .plus-small{ width:44px; height:44px; border-radius:12px; font-size:20px; display:inline-flex; align-items:center; justify-content:center; }
 
@@ -944,10 +944,10 @@ CHAT_HTML = r'''<!doctype html>
       <div id="attachMenuVertical" class="attach-menu-vertical" style="display:none;">
         <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
         <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
-        <div class="attach-card" data-action="gallery"><div>  Gallery</div></div>
-        <div class="attach-card" data-action="audio">🔉<div>  Audio</div></div>
-        <div class="attach-card" data-action="location"><div>  Location</div></div>
-        <div class="attach-card" id="pollBtn">❓❓<div>  Poll</div></div>
+        <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
+        <div class="attach-card" data-action="audio">🎧<div>  Audio</div></div>
+        <div class="attach-card" data-action="location">🌐<div>  Location</div></div>
+        <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
       </div>
 
       <textarea id="msg" class="textarea" placeholder="Type a message." maxlength="1200"></textarea>
@@ -1355,7 +1355,7 @@ async function loadAvatars(){
    ========================= */
 document.getElementById('createAvatarBtn')?.addEventListener('click', ()=>{
   // open the /avatar page in a new window (we implemented server route)
-  window.open('/avatar', '_blank');
+  window.open('/avatar_create', '_blank');
 });
 
 /* =========================
