@@ -21,7 +21,7 @@ app.secret_key = os.urandom(32)
 PORT = int(os.environ.get("PORT", 5004))
 DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
 HEADING_IMG = "/static/heading.png"  # place your heading image here
-MAX_MESSAGES = 300
+MAX_MESSAGES = 100
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp", "svg"}
 ALLOWED_VIDEO_EXT = {"mp4", "webm", "ogg"}
 ALLOWED_AUDIO_EXT = {"mp3", "wav", "ogg", "m4a", "webm"}
@@ -600,7 +600,7 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   const name = document.getElementById('login_name').value.trim();
   const passkey = document.getElementById('login_passkey').value;
   try{
-    const res = await postJson('/login', {name, passkey});
+    const res = await postJson('/login', {passkey});
     if(!res.ok) throw new Error(res.text || 'login failed');
     show('loginStatus','Logged in — redirecting...');
     setTimeout(()=> location.href='/chat', 300);
@@ -875,8 +875,8 @@ CHAT_HTML = r'''<!doctype html>
 
   .composer{ position:fixed; left:0; right:0; bottom:env(safe-area-inset-bottom,0); display:flex; justify-content:center; padding:14px; z-index:70; transition:transform .22s ease; }
   .composer-inner{ width:100%; max-width:980px; display:flex; flex-direction:column; gap:8px; }
-  .composer-main{ display:flex; gap:8px; align-items:center; width:100%; background: white; border-radius:18px; padding:8px; border:1px solid rgba(255,255,255,0.6); }
-  .textarea{ flex:1; min-height:44px; border-radius:12px; border:0; padding:8px; resize:none; font-size:1rem; background:transparent; outline: none; }
+  .composer-main{ display:flex; gap:8px; align-items:center; width:100%; background: transparent; border-radius:18px; padding:8px; border:1px solid rgba(255,255,255,0.6); }
+  .textarea{ flex:1; min-height:44px; border-radius:12px; border:0; padding:8px; resize:none; font-size:1rem; background: white; outline: black; }
   .plus-small{ width:44px; height:44px; border-radius:12px; font-size:20px; display:inline-flex; align-items:center; justify-content:center; }
 
   /* attach menu vertical */
