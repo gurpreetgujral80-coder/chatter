@@ -1614,10 +1614,6 @@ def index():
     first = load_first_user() is None
     return render_template_string(INDEX_HTML, first_user_none=first, heading_img=HEADING_IMG)
 
-@app.route("/stickers_list")
-def stickers_list():
-    return jsonify(list_static_folder("stickers") + list_static_folder("gifs"))
-
 @app.route("/profile_get")
 def profile_get():
     username = session.get('username')
