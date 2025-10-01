@@ -598,13 +598,14 @@ async function postJson(url, body){
   catch(e){ return {ok:r.ok, text}; }
 }
 
-// REGISTER (password-only)
+// REGISTER
 document.getElementById('regForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
   show('regStatus','Registering...');
+  const name = document.getElementById('reg_name').value.trim();
   const passkey = document.getElementById('reg_passkey').value;
   try{
-    const res = await postJson('/register', { passkey }); // only passkey
+    const res = await postJson('/register', { name, passkey });
     if(!res.ok) throw new Error(res.text || 'register failed');
     show('regStatus','Registered — redirecting...');
     setTimeout(()=> location.href='/chat', 500);
@@ -613,13 +614,21 @@ document.getElementById('regForm')?.addEventListener('submit', async (e)=>{
   }
 });
 
-// LOGIN (password-only)
+// LOGIN with name fallback
 document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
   show('loginStatus','Logging in...');
+  const name = document.getElementById('login_name').value.trim();
   const passkey = document.getElementById('login_passkey').value;
   try{
-    const res = await postJson('/login', { passkey }); // only passkey
+    // First try with name + passkey
+    let res = await postJson('/login', { name, passkey });
+
+    // If backend rejects due to "name" (e.g. user not found), retry with passkey only
+    if(!res.ok && /name|user/i.test(res.text)){
+      res = await postJson('/login', { passkey });
+    }
+
     if(!res.ok) throw new Error(res.text || 'login failed');
     show('loginStatus','Logged in — redirecting...');
     setTimeout(()=> location.href='/chat', 300);
