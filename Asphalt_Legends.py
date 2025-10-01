@@ -572,39 +572,60 @@ INDEX_HTML = r'''<!doctype html>
   </div>
 
 <script>
-function show(id,msg,err){const e=document.getElementById(id); if(!e)return; e.textContent=msg; e.style.color = err? '#b91c1c':'#16a34a';}
-document.getElementById('genBtn')?.addEventListener('click', ()=>{ const s = Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => (b%36).toString(36)).join(''); document.getElementById('reg_passkey').value = s; show('regStatus','Generated — copy it.'); });
-
-async function postJson(url, body){
-  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-  const text = await r.text();
-  try { return {ok:r.ok, json: JSON.parse(text), text}; } catch(e){ return {ok:r.ok, text}; }
+function show(id,msg,err){
+  const e=document.getElementById(id);
+  if(!e)return;
+  e.textContent=msg;
+  e.style.color = err? '#b91c1c':'#16a34a';
 }
 
+document.getElementById('genBtn')?.addEventListener('click', ()=>{
+  const s = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+    .map(b => (b%36).toString(36))
+    .join('');
+  document.getElementById('reg_passkey').value = s;
+  show('regStatus','Generated — copy it.');
+});
+
+async function postJson(url, body){
+  const r = await fetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  const text = await r.text();
+  try { return {ok:r.ok, json: JSON.parse(text), text}; }
+  catch(e){ return {ok:r.ok, text}; }
+}
+
+// REGISTER (password-only)
 document.getElementById('regForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
   show('regStatus','Registering...');
-  const name = document.getElementById('reg_name').value.trim();
   const passkey = document.getElementById('reg_passkey').value;
   try{
-    const res = await postJson('/register', {name, passkey});
+    const res = await postJson('/register', { passkey }); // only passkey
     if(!res.ok) throw new Error(res.text || 'register failed');
     show('regStatus','Registered — redirecting...');
     setTimeout(()=> location.href='/chat', 500);
-  }catch(err){ show('regStatus','Register failed: '+(err.message||err), true); }
+  }catch(err){
+    show('regStatus','Register failed: '+(err.message||err), true);
+  }
 });
 
+// LOGIN (password-only)
 document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
   show('loginStatus','Logging in...');
-  const name = document.getElementById('login_name').value.trim();
   const passkey = document.getElementById('login_passkey').value;
   try{
-    const res = await postJson('/login', {passkey});
+    const res = await postJson('/login', { passkey }); // only passkey
     if(!res.ok) throw new Error(res.text || 'login failed');
     show('loginStatus','Logged in — redirecting...');
     setTimeout(()=> location.href='/chat', 300);
-  }catch(err){ show('loginStatus','Login failed: '+(err.message||err), true); }
+  }catch(err){
+    show('loginStatus','Login failed: '+(err.message||err), true);
+  }
 });
 </script>
 </body></html>
