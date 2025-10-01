@@ -609,12 +609,233 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
 </script>
 </body></html>
 '''
+# --- AVATAR page (full-featured generator using DiceBear HTTP API) ---
+AVATAR_HTML = r'''<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Create Avatar — Asphalt Legends</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial; padding:12px; background:#f8fafc; }
+  .tile { display:inline-flex; gap:8px; padding:8px; border-radius:8px; background:#fff; box-shadow:0 6px 18px rgba(2,6,23,0.04); cursor:pointer; text-align:center; flex-direction:column; width:92px; align-items:center; margin:6px; }
+  #avatarPreview { width:240px; height:240px; border-radius:24px; background:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 10px 30px rgba(0,0,0,0.06); overflow:hidden; }
+  #cameraPreview video{ width:320px; border-radius:12px; }
+</style>
+</head><body>
+  <h2 class="text-xl font-bold mb-3">Create Avatar</h2>
+  <p class="text-sm text-gray-600">You can either capture a photo (recommended suggestions) or manually tune the avatar controls (hair, eyes, accessories). This uses DiceBear's HTTP API for generation.</p>
 
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+    <div>
+      <div id="avatarPreview" class="mb-3">Preview</div>
+      <div class="flex gap-2">
+        <button id="downloadAvatar" class="px-3 py-2 bg-indigo-600 text-white rounded">Download</button>
+        <button id="saveAvatar" class="px-3 py-2 bg-green-600 text-white rounded">Save to profile</button>
+      </div>
+      <div class="mt-3">
+        <label class="text-sm font-semibold">Seed (randomize to get thousands of combinations)</label>
+        <div class="flex gap-2 mt-2"><input id="seedInput" class="p-2 border rounded flex-1" placeholder="seed or leave empty for random"/><button id="randomSeed" class="px-3 py-2 bg-gray-200 rounded">Random</button></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="mb-2"><strong>Capture / Upload Photo (optional)</strong></div>
+      <div id="cameraPreview" class="mb-2"></div>
+      <div class="flex gap-2">
+        <button id="startCamera" class="px-3 py-2 bg-gray-100 rounded">Start Camera</button>
+        <button id="takePhoto" class="px-3 py-2 bg-indigo-600 text-white rounded">Capture</button>
+        <button id="uploadPhoto" class="px-3 py-2 bg-gray-100 rounded">Upload Photo</button>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">If you capture/upload a photo we'll hash it and use the hash as the DiceBear seed to create recommended avatars (simple deterministic approach).</p>
+    </div>
+
+    <div>
+      <div class="mb-2"><strong>Controls</strong></div>
+      <div id="controls" class="grid grid-cols-1 gap-2">
+        <label class="text-xs">Style</label>
+        <select id="styleSelect" class="p-2 border rounded">
+          <option value="adventurer">Adventurer</option>
+          <option value="avataaars">Avataaars</option>
+          <option value="big-smile">Big Smile</option>
+          <option value="pixel-art">Pixel Art</option>
+        </select>
+
+        <label class="text-xs mt-2">Hair</label>
+        <div id="hairTiles" class="flex flex-wrap"></div>
+
+        <label class="text-xs mt-2">Eyes</label>
+        <div id="eyesTiles" class="flex flex-wrap"></div>
+
+        <label class="text-xs mt-2">Accessories</label>
+        <div id="accTiles" class="flex flex-wrap"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  Avatar page JS:
+  - Provides tile-based selectors for several parameters (hair, eyes, accessories)
+  - Builds a DiceBear HTTP API URL and previews the SVG
+  - Allows capture/upload of photo -> hash to seed -> preview avatars
+  - Save to server via /save_avatar (expects data:image/svg+xml;base64,...)
+*/
+
+const previewEl = document.getElementById('avatarPreview');
+const seedInput = document.getElementById('seedInput');
+const styleSelect = document.getElementById('styleSelect');
+let selectedParams = { hair: '', eyes: '', accessories: '' };
+
+// simple tile palettes (small subset; you can expand these arrays)
+const hairOptions = ['short', 'long', 'bun', 'mohawk', 'bald'];
+const eyesOptions = ['normal', 'smile', 'surprised', 'wink'];
+const accOptions = ['glasses', 'beanie', 'earring', 'hat', 'none'];
+
+function buildDicebearUrl(){
+  const style = styleSelect.value || 'adventurer';
+  const seed = seedInput.value || Math.random().toString(36).slice(2,10);
+  const params = new URLSearchParams();
+  params.set('seed', seed);
+  // many DiceBear styles accept different query params. We set generic ones for demonstration.
+  if(selectedParams.hair) params.set('hair', selectedParams.hair);
+  if(selectedParams.eyes) params.set('eyes', selectedParams.eyes);
+  if(selectedParams.accessories && selectedParams.accessories !== 'none') params.set('accessories', selectedParams.accessories);
+  params.set('backgroundColor', 'transparent');
+  // use the 9.x DiceBear API path
+  return `https://api.dicebear.com/9.x/${encodeURIComponent(style)}/svg?${params.toString()}`;
+}
+
+async function renderPreview(){
+  const url = buildDicebearUrl();
+  // fetch SVG (as text) then show inline; also prepare a data URL for downloading
+  const r = await fetch(url);
+  if(!r.ok) {
+    previewEl.innerHTML = 'Could not fetch avatar';
+    return;
+  }
+  const svgText = await r.text();
+  // sanitize (basic) and show
+  previewEl.innerHTML = svgText;
+  // store for download
+  previewEl.dataset.svg = svgText;
+}
+
+document.getElementById('randomSeed').addEventListener('click', ()=>{
+  seedInput.value = Math.random().toString(36).slice(2,10);
+  renderPreview();
+});
+
+styleSelect.addEventListener('change', renderPreview);
+seedInput.addEventListener('change', renderPreview);
+
+// build tiles UI
+function mkTiles(containerId, options, paramKey){
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  options.forEach(opt=>{
+    const t = document.createElement('div'); t.className='tile';
+    t.innerHTML = `<div style="font-size:28px;">${opt[0].toUpperCase()}</div><div style="font-size:12px;">${opt}</div>`;
+    t.onclick = ()=>{
+      selectedParams[paramKey] = opt;
+      // highlight selection
+      Array.from(el.children).forEach(c=> c.style.outline='');
+      t.style.outline = '2px solid #4f46e5';
+      renderPreview();
+    };
+    el.appendChild(t);
+  });
+}
+mkTiles('hairTiles', hairOptions, 'hair');
+mkTiles('eyesTiles', eyesOptions, 'eyes');
+mkTiles('accTiles', accOptions, 'accessories');
+
+// camera & upload
+let stream = null;
+const cameraContainer = document.getElementById('cameraPreview');
+document.getElementById('startCamera').addEventListener('click', async ()=>{
+  if(stream){ // stop
+    stream.getTracks().forEach(t=>t.stop()); stream=null; cameraContainer.innerHTML=''; return;
+  }
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+    const v = document.createElement('video'); v.autoplay = true; v.playsInline = true; v.srcObject = stream;
+    cameraContainer.innerHTML=''; cameraContainer.appendChild(v);
+  }catch(e){ alert('Camera error: ' + e.message); }
+});
+
+document.getElementById('takePhoto').addEventListener('click', async ()=>{
+  if(!stream){ alert('Start camera first'); return; }
+  const video = cameraContainer.querySelector('video');
+  if(!video) return;
+  const c = document.createElement('canvas'); c.width = video.videoWidth || 400; c.height = video.videoHeight || 400;
+  const ctx = c.getContext('2d'); ctx.drawImage(video, 0, 0, c.width, c.height);
+  const dataUrl = c.toDataURL('image/png');
+  // hash the image data and use as seed
+  const hashHex = await hashDataUrl(dataUrl);
+  seedInput.value = 'photo-' + hashHex.slice(0,10);
+  renderPreview();
+});
+
+document.getElementById('uploadPhoto').addEventListener('click', ()=>{
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange = async (ev)=>{
+    const f = ev.target.files[0];
+    const reader = new FileReader();
+    reader.onload = async (e)=>{
+      const dataUrl = e.target.result;
+      const hh = await hashDataUrl(dataUrl);
+      seedInput.value = 'upload-' + hh.slice(0,10);
+      renderPreview();
+    };
+    reader.readAsDataURL(f);
+  };
+  inp.click();
+});
+
+async function hashDataUrl(dataUrl){
+  const b = atob(dataUrl.split(',')[1]);
+  const arr = new Uint8Array(b.length);
+  for(let i=0;i<b.length;i++) arr[i]=b.charCodeAt(i);
+  const digest = await crypto.subtle.digest('SHA-1', arr);
+  return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+document.getElementById('downloadAvatar').addEventListener('click', ()=>{
+  const svg = previewEl.dataset.svg;
+  if(!svg) return alert('Generate avatar first');
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'avatar.svg'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+
+document.getElementById('saveAvatar').addEventListener('click', async ()=>{
+  const svg = previewEl.dataset.svg;
+  if(!svg) return alert('Generate avatar first');
+  const b64 = btoa(unescape(encodeURIComponent(svg)));
+  const dataUri = 'data:image/svg+xml;base64,' + b64;
+  // send to server to save and get cached url
+  const username = prompt('Save avatar for which username?', 'user');
+  if(!username) return;
+  const r = await fetch('/save_avatar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, image: dataUri })});
+  const j = await r.json();
+  if(j.ok){
+    alert('Avatar saved: ' + j.url);
+    // open profile page in parent and set preview if possible
+    try{ window.opener && window.opener.postMessage({ avatarSaved: j.url }, '*'); }catch(e){}
+  } else {
+    alert('Save failed: ' + (j.error || 'unknown'));
+  }
+});
+
+// initial render
+renderPreview();
+</script>
+</body></html>
+'''
 # ---- CHAT HTML (heavily modified) ----
 # --- CHAT page: updated with emoji-mart, sticker/gif/avatar/emoji panel, typing indicator, attach menu, poll modal, avatar flow ---
 CHAT_HTML = r'''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Asphalt Legends — Chat</title>
+<title>InfinityChatter ♾️ — Chat</title>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <!-- emoji-mart (browser build) via CDN (we use the dist/browser.js to use in vanilla JS) -->
@@ -626,7 +847,7 @@ CHAT_HTML = r'''<!doctype html>
     --glass-bg: rgba(255,255,255,0.8);
     --download-bg: rgba(17,24,39,0.7);
   }
-  body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: #f8fafc; margin:0; }
+  body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: url('/static/IMG_5939.jpeg') no-repeat center center fixed; background-size: cover; margin:0; }
   header{ position:fixed; left:0; right:0; top:0; height:72px; display:flex; align-items:center; justify-content:center; gap:12px; background:linear-gradient(90deg,#fff,#f8fafc); z-index:40; padding:8px 12px; border-bottom:1px solid rgba(0,0,0,0.04);}
   main{ padding:92px 12px 200px; max-width:980px; margin:0 auto; min-height:calc(100vh - 260px); }
   .msg-row{ margin-bottom:12px; display:flex; gap:8px; align-items:flex-start; }
@@ -635,7 +856,7 @@ CHAT_HTML = r'''<!doctype html>
   .me{ background: linear-gradient(90deg,#e6ffed,#dcffe6); border-bottom-right-radius:6px; align-self:flex-end; margin-left:auto; }
   .them{ background: rgba(255,255,255,0.95); border-bottom-left-radius:6px; margin-right:auto; }
   .bubble .three-dot { position:absolute; top:8px; right:8px; background:transparent; border:none; font-size:1.05rem; padding:4px; cursor:pointer; color:#111827; border-radius:6px; }
-  .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; width:100%; }
+  .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; width:100%; transition: color 0.2s ease; }
 
   /* attachments & previews */
   #attachmentPreview{ padding:8px; border-bottom:1px solid rgba(0,0,0,0.06); display:none; }
@@ -721,13 +942,12 @@ CHAT_HTML = r'''<!doctype html>
 
       <!-- vertical attachment menu -->
       <div id="attachMenuVertical" class="attach-menu-vertical" style="display:none;">
-        <div class="attach-card" data-action="document"><svg width="20" height="20"><rect width="16" height="16" x="2" y="2" rx="3" fill="#f3f4f6"/></svg><div>Document</div></div>
-        <div class="attach-card" data-action="camera"><svg width="20" height="20"><circle cx="10" cy="10" r="8" fill="#fff"/></svg><div>Camera</div></div>
-        <div class="attach-card" data-action="gallery"><svg width="20" height="20"><rect width="16" height="12" x="2" y="4" rx="3" fill="#fff"/></svg><div>Gallery</div></div>
-        <div class="attach-card" data-action="audio"><svg width="20" height="20"><rect width="14" height="8" x="3" y="6" rx="2" fill="#fff"/></svg><div>Audio</div></div>
-        <div class="attach-card" data-action="location"><svg width="20" height="20"><path d="M10 3c-3 0-6 2.5-6 6 0 4.5 6 12 6 12s6-7.5 6-12c0-3.5-3-6-6-6z" fill="#fff"/></svg><div>Location</div></div>
-        <div class="attach-card" data-action="contact"><svg width="20" height="20"><rect width="14" height="14" x="3" y="3" rx="3" fill="#fff"/></svg><div>Contact</div></div>
-        <div class="attach-card" id="pollBtn"><svg width="20" height="20"><rect width="14" height="10" x="3" y="6" rx="2" fill="#fff"/></svg><div>Poll</div></div>
+        <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
+        <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
+        <div class="attach-card" data-action="gallery"><div>  Gallery</div></div>
+        <div class="attach-card" data-action="audio">🔉<div>  Audio</div></div>
+        <div class="attach-card" data-action="location"><div>  Location</div></div>
+        <div class="attach-card" id="pollBtn">❓❓<div>  Poll</div></div>
       </div>
 
       <textarea id="msg" class="textarea" placeholder="Type a message." maxlength="1200"></textarea>
@@ -906,9 +1126,26 @@ attachMenuVertical.querySelectorAll('.attach-card').forEach(c=>{
     } else if(action === 'audio'){
       openAudioSelector();
     } else if(action === 'location'){
-      alert('Location attach not implemented in this demo.');
-    } else if(action === 'contact'){
-      alert('Contact attach not implemented in this demo.');
+      if(!navigator.geolocation){
+        alert('Geolocation not supported on this device.');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(async (pos)=>{
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        const url = `https://www.google.com/maps?q=${lat},${lng}`;
+        const mapImg = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=400x200&markers=color:red|${lat},${lng}&key=YOUR_GOOGLE_MAPS_API_KEY`;
+        
+        // send as location message
+        await fetch('/send_message', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ text:'', attachments:[{ type:'location', lat, lng, url, map: mapImg }] })
+        });
+        messagesEl.innerHTML=''; lastId=0; poll();
+      }, (err)=>{
+        alert('Could not get location: ' + err.message);
+      });
     }
     attachMenuVertical.style.display='none';
   });
@@ -1377,233 +1614,59 @@ document.getElementById('viewProfileBtn').addEventListener('click', async ()=>{ 
 function closeProfileModal(){ const modal = document.getElementById('profileModal'); modal.classList.add('hidden'); modal.classList.remove('flex'); }
 document.getElementById('closeProfile').addEventListener('click', closeProfileModal);
 document.getElementById('profileCancel').addEventListener('click', closeProfileModal);
+function getAverageColor(element) {
+  const rect = element.getBoundingClientRect();
+  const x = Math.max(0, rect.left + rect.width / 2);
+  const y = Math.max(0, rect.top + rect.height / 2);
 
-</script>
-</body></html>
-'''
+  // Create a small canvas to sample background
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  canvas.width = 1;
+  canvas.height = 1;
 
-# --- AVATAR page (full-featured generator using DiceBear HTTP API) ---
-AVATAR_HTML = r'''<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Create Avatar — Asphalt Legends</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-  body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial; padding:12px; background:#f8fafc; }
-  .tile { display:inline-flex; gap:8px; padding:8px; border-radius:8px; background:#fff; box-shadow:0 6px 18px rgba(2,6,23,0.04); cursor:pointer; text-align:center; flex-direction:column; width:92px; align-items:center; margin:6px; }
-  #avatarPreview { width:240px; height:240px; border-radius:24px; background:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 10px 30px rgba(0,0,0,0.06); overflow:hidden; }
-  #cameraPreview video{ width:320px; border-radius:12px; }
-</style>
-</head><body>
-  <h2 class="text-xl font-bold mb-3">Create Avatar</h2>
-  <p class="text-sm text-gray-600">You can either capture a photo (recommended suggestions) or manually tune the avatar controls (hair, eyes, accessories). This uses DiceBear's HTTP API for generation.</p>
-
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
-    <div>
-      <div id="avatarPreview" class="mb-3">Preview</div>
-      <div class="flex gap-2">
-        <button id="downloadAvatar" class="px-3 py-2 bg-indigo-600 text-white rounded">Download</button>
-        <button id="saveAvatar" class="px-3 py-2 bg-green-600 text-white rounded">Save to profile</button>
-      </div>
-      <div class="mt-3">
-        <label class="text-sm font-semibold">Seed (randomize to get thousands of combinations)</label>
-        <div class="flex gap-2 mt-2"><input id="seedInput" class="p-2 border rounded flex-1" placeholder="seed or leave empty for random"/><button id="randomSeed" class="px-3 py-2 bg-gray-200 rounded">Random</button></div>
-      </div>
-    </div>
-
-    <div>
-      <div class="mb-2"><strong>Capture / Upload Photo (optional)</strong></div>
-      <div id="cameraPreview" class="mb-2"></div>
-      <div class="flex gap-2">
-        <button id="startCamera" class="px-3 py-2 bg-gray-100 rounded">Start Camera</button>
-        <button id="takePhoto" class="px-3 py-2 bg-indigo-600 text-white rounded">Capture</button>
-        <button id="uploadPhoto" class="px-3 py-2 bg-gray-100 rounded">Upload Photo</button>
-      </div>
-      <p class="text-xs text-gray-500 mt-2">If you capture/upload a photo we'll hash it and use the hash as the DiceBear seed to create recommended avatars (simple deterministic approach).</p>
-    </div>
-
-    <div>
-      <div class="mb-2"><strong>Controls</strong></div>
-      <div id="controls" class="grid grid-cols-1 gap-2">
-        <label class="text-xs">Style</label>
-        <select id="styleSelect" class="p-2 border rounded">
-          <option value="adventurer">Adventurer</option>
-          <option value="avataaars">Avataaars</option>
-          <option value="big-smile">Big Smile</option>
-          <option value="pixel-art">Pixel Art</option>
-        </select>
-
-        <label class="text-xs mt-2">Hair</label>
-        <div id="hairTiles" class="flex flex-wrap"></div>
-
-        <label class="text-xs mt-2">Eyes</label>
-        <div id="eyesTiles" class="flex flex-wrap"></div>
-
-        <label class="text-xs mt-2">Accessories</label>
-        <div id="accTiles" class="flex flex-wrap"></div>
-      </div>
-    </div>
-  </div>
-
-<script>
-/*
-  Avatar page JS:
-  - Provides tile-based selectors for several parameters (hair, eyes, accessories)
-  - Builds a DiceBear HTTP API URL and previews the SVG
-  - Allows capture/upload of photo -> hash to seed -> preview avatars
-  - Save to server via /save_avatar (expects data:image/svg+xml;base64,...)
-*/
-
-const previewEl = document.getElementById('avatarPreview');
-const seedInput = document.getElementById('seedInput');
-const styleSelect = document.getElementById('styleSelect');
-let selectedParams = { hair: '', eyes: '', accessories: '' };
-
-// simple tile palettes (small subset; you can expand these arrays)
-const hairOptions = ['short', 'long', 'bun', 'mohawk', 'bald'];
-const eyesOptions = ['normal', 'smile', 'surprised', 'wink'];
-const accOptions = ['glasses', 'beanie', 'earring', 'hat', 'none'];
-
-function buildDicebearUrl(){
-  const style = styleSelect.value || 'adventurer';
-  const seed = seedInput.value || Math.random().toString(36).slice(2,10);
-  const params = new URLSearchParams();
-  params.set('seed', seed);
-  // many DiceBear styles accept different query params. We set generic ones for demonstration.
-  if(selectedParams.hair) params.set('hair', selectedParams.hair);
-  if(selectedParams.eyes) params.set('eyes', selectedParams.eyes);
-  if(selectedParams.accessories && selectedParams.accessories !== 'none') params.set('accessories', selectedParams.accessories);
-  params.set('backgroundColor', 'transparent');
-  // use the 9.x DiceBear API path
-  return `https://api.dicebear.com/9.x/${encodeURIComponent(style)}/svg?${params.toString()}`;
-}
-
-async function renderPreview(){
-  const url = buildDicebearUrl();
-  // fetch SVG (as text) then show inline; also prepare a data URL for downloading
-  const r = await fetch(url);
-  if(!r.ok) {
-    previewEl.innerHTML = 'Could not fetch avatar';
-    return;
-  }
-  const svgText = await r.text();
-  // sanitize (basic) and show
-  previewEl.innerHTML = svgText;
-  // store for download
-  previewEl.dataset.svg = svgText;
-}
-
-document.getElementById('randomSeed').addEventListener('click', ()=>{
-  seedInput.value = Math.random().toString(36).slice(2,10);
-  renderPreview();
-});
-
-styleSelect.addEventListener('change', renderPreview);
-seedInput.addEventListener('change', renderPreview);
-
-// build tiles UI
-function mkTiles(containerId, options, paramKey){
-  const el = document.getElementById(containerId);
-  el.innerHTML = '';
-  options.forEach(opt=>{
-    const t = document.createElement('div'); t.className='tile';
-    t.innerHTML = `<div style="font-size:28px;">${opt[0].toUpperCase()}</div><div style="font-size:12px;">${opt}</div>`;
-    t.onclick = ()=>{
-      selectedParams[paramKey] = opt;
-      // highlight selection
-      Array.from(el.children).forEach(c=> c.style.outline='');
-      t.style.outline = '2px solid #4f46e5';
-      renderPreview();
+  // Draw the background image into canvas at the same scroll position
+  const img = new Image();
+  img.src = "/static/IMG_5939.jpeg";  // same as your chat background
+  return new Promise((resolve) => {
+    img.onload = () => {
+      ctx.drawImage(
+        img,
+        window.scrollX + x, window.scrollY + y, 1, 1, // crop 1x1 pixel from background
+        0, 0, 1, 1
+      );
+      const data = ctx.getImageData(0, 0, 1, 1).data;
+      resolve({ r: data[0], g: data[1], b: data[2] });
     };
-    el.appendChild(t);
+    img.onerror = () => resolve({ r: 255, g: 255, b: 255 }); // fallback
   });
 }
-mkTiles('hairTiles', hairOptions, 'hair');
-mkTiles('eyesTiles', eyesOptions, 'eyes');
-mkTiles('accTiles', accOptions, 'accessories');
 
-// camera & upload
-let stream = null;
-const cameraContainer = document.getElementById('cameraPreview');
-document.getElementById('startCamera').addEventListener('click', async ()=>{
-  if(stream){ // stop
-    stream.getTracks().forEach(t=>t.stop()); stream=null; cameraContainer.innerHTML=''; return;
-  }
-  try{
-    stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
-    const v = document.createElement('video'); v.autoplay = true; v.playsInline = true; v.srcObject = stream;
-    cameraContainer.innerHTML=''; cameraContainer.appendChild(v);
-  }catch(e){ alert('Camera error: ' + e.message); }
-});
-
-document.getElementById('takePhoto').addEventListener('click', async ()=>{
-  if(!stream){ alert('Start camera first'); return; }
-  const video = cameraContainer.querySelector('video');
-  if(!video) return;
-  const c = document.createElement('canvas'); c.width = video.videoWidth || 400; c.height = video.videoHeight || 400;
-  const ctx = c.getContext('2d'); ctx.drawImage(video, 0, 0, c.width, c.height);
-  const dataUrl = c.toDataURL('image/png');
-  // hash the image data and use as seed
-  const hashHex = await hashDataUrl(dataUrl);
-  seedInput.value = 'photo-' + hashHex.slice(0,10);
-  renderPreview();
-});
-
-document.getElementById('uploadPhoto').addEventListener('click', ()=>{
-  const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*';
-  inp.onchange = async (ev)=>{
-    const f = ev.target.files[0];
-    const reader = new FileReader();
-    reader.onload = async (e)=>{
-      const dataUrl = e.target.result;
-      const hh = await hashDataUrl(dataUrl);
-      seedInput.value = 'upload-' + hh.slice(0,10);
-      renderPreview();
-    };
-    reader.readAsDataURL(f);
-  };
-  inp.click();
-});
-
-async function hashDataUrl(dataUrl){
-  const b = atob(dataUrl.split(',')[1]);
-  const arr = new Uint8Array(b.length);
-  for(let i=0;i<b.length;i++) arr[i]=b.charCodeAt(i);
-  const digest = await crypto.subtle.digest('SHA-1', arr);
-  return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
+function luminance(r, g, b) {
+  return 0.299*r + 0.587*g + 0.114*b;
 }
 
-document.getElementById('downloadAvatar').addEventListener('click', ()=>{
-  const svg = previewEl.dataset.svg;
-  if(!svg) return alert('Generate avatar first');
-  const blob = new Blob([svg], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'avatar.svg'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-});
-
-document.getElementById('saveAvatar').addEventListener('click', async ()=>{
-  const svg = previewEl.dataset.svg;
-  if(!svg) return alert('Generate avatar first');
-  const b64 = btoa(unescape(encodeURIComponent(svg)));
-  const dataUri = 'data:image/svg+xml;base64,' + b64;
-  // send to server to save and get cached url
-  const username = prompt('Save avatar for which username?', 'user');
-  if(!username) return;
-  const r = await fetch('/save_avatar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, image: dataUri })});
-  const j = await r.json();
-  if(j.ok){
-    alert('Avatar saved: ' + j.url);
-    // open profile page in parent and set preview if possible
-    try{ window.opener && window.opener.postMessage({ avatarSaved: j.url }, '*'); }catch(e){}
-  } else {
-    alert('Save failed: ' + (j.error || 'unknown'));
+async function updateMetaColors() {
+  const metas = document.querySelectorAll(".msg-meta-top");
+  for (const el of metas) {
+    const { r, g, b } = await getAverageColor(el);
+    const lum = luminance(r, g, b);
+    el.style.color = lum > 150 ? "#111" : "#f9fafb"; // dark on light bg, light on dark bg
   }
+}
+
+// Run initially and on scroll
+window.addEventListener("scroll", () => {
+  updateMetaColors();
 });
 
-// initial render
-renderPreview();
+// Also run when new messages are loaded
+setInterval(updateMetaColors, 2000);
+
 </script>
 </body></html>
 '''
+
 # --------- Routes & API ----------
 @app.context_processor
 def util():
