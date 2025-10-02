@@ -831,24 +831,98 @@ renderPreview();
 </body></html>
 '''
 # ---- CHAT HTML (heavily modified) ----
-# --- CHAT page: updated with emoji-mart, sticker/gif/avatar/emoji panel, typing indicator, attach menu, poll modal, avatar flow ---
+# --- CHAT page: updated with emoji-mart v5, sticker/gif/avatar/emoji panel, typing indicator, attach menu, poll modal, avatar flow ---
 CHAT_HTML = r'''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>InfinityChatter ♾️ — Chat</title>
 <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- emoji-mart (browser build) via CDN (we use the dist/browser.js to use in vanilla JS) -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/emoji-mart@^3.0.0/dist/css/emoji-mart.css">
-<script src="https://cdn.jsdelivr.net/npm/emoji-mart@^3.0.0/dist/browser.js"></script>
+<!-- emoji-mart v5 browser build (exposes global EmojiMart for vanilla JS) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/emoji-mart@5.6.0/dist/browser.css">
+<script src="https://cdn.jsdelivr.net/npm/emoji-mart@5.6.0/dist/browser.js"></script>
 
 <style>
   :root{
     --glass-bg: rgba(255,255,255,0.8);
     --download-bg: rgba(17,24,39,0.7);
   }
-  body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: url('/static/IMG_5939.jpeg') no-repeat center center fixed; background-size: cover; margin:0; }
-  header{ position:fixed; left:0; right:0; top:0; height:72px; display:flex; align-items:center; justify-content:center; gap:12px; background:linear-gradient(90deg,#fff,#f8fafc); z-index:40; padding:8px 12px; border-bottom:1px solid rgba(0,0,0,0.04);}
-  main{ padding:92px 12px 200px; max-width:980px; margin:0 auto; min-height:calc(100vh - 260px); }
+
+  /* page background image */
+  body{
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: url('/static/IMG_5939.jpeg') no-repeat center center fixed;
+    background-size: cover;
+    margin:0;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+
+  /*
+    Responsive header / heading:
+    - Phones: heading text appears UNDER the heading image (stacked).
+    - Tablets: image becomes bigger, still stacked for clarity.
+    - Laptops+: image bigger and heading/controls arranged side-by-side.
+  */
+  header{
+    position:fixed;
+    left:0;
+    right:0;
+    top:0;
+    height:auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+    background:linear-gradient(90deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95));
+    z-index:40;
+    padding:10px 14px;
+    border-bottom:1px solid rgba(0,0,0,0.04);
+    box-sizing:border-box;
+    flex-wrap:wrap;
+    text-align:center;
+  }
+
+  .heading-wrapper{
+    display:flex;
+    flex-direction:column; /* default phones: image then heading below */
+    align-items:center;
+    gap:8px;
+    width:100%;
+    max-width:980px;
+  }
+
+  .heading-wrapper img{
+    height:56px;
+    width:auto;
+    border-radius:10px;
+    object-fit:cover;
+  }
+  .heading-title{
+    font-weight:800;
+    font-size:1.05rem;
+    line-height:1;
+  }
+
+  /* Tablet - larger image and heading */
+  @media (min-width:768px){
+    .heading-wrapper img{ height:80px; }
+    .heading-title{ font-size:1.35rem; }
+    header{ padding:12px 18px; }
+  }
+
+  /* Laptop and up - side-by-side layout */
+  @media (min-width:1024px){
+    header{ justify-content:space-between; padding:12px 28px; }
+    .heading-wrapper{ flex-direction:row; align-items:center; text-align:left; width:auto; }
+    .heading-wrapper img{ height:96px; }
+    .heading-title{ font-size:1.6rem; margin-left:12px; }
+  }
+
+  /* Right-side profile area */
+  .header-actions{ position:absolute; right:12px; top:12px; display:flex; gap:8px; align-items:center; }
+  .profile-name{ cursor:pointer; padding:6px 10px; border-radius:10px; background:white; box-shadow:0 6px 18px rgba(2,6,23,0.04); }
+
+  main{ padding:120px 12px 200px; max-width:980px; margin:0 auto; min-height:calc(100vh - 260px); box-sizing:border-box; }
   .msg-row{ margin-bottom:12px; display:flex; gap:8px; align-items:flex-start; }
   .msg-body{ display:flex; flex-direction:column; align-items:flex-start; min-width:0; }
   .bubble{ position:relative; padding:10px 14px; border-radius:12px; display:inline-block; word-break:break-word; white-space:pre-wrap; background-clip:padding-box; box-shadow: 0 6px 18px rgba(2,6,23,0.04); }
@@ -872,15 +946,126 @@ CHAT_HTML = r'''<!doctype html>
   .reaction-pill{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; background:rgba(255,255,255,0.95); box-shadow:0 6px 18px rgba(2,6,23,0.04); font-size:0.85rem; }
   .reaction-emoji{ width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
 
-  .composer{ position:fixed; left:0; right:0; bottom:env(safe-area-inset-bottom,0); display:flex; justify-content:center; padding:14px; z-index:70; transition:transform .22s ease; }
-  .composer-inner{ width:100%; max-width:980px; display:flex; flex-direction:column; gap:8px; }
-  .composer-main{ display:flex; gap:8px; align-items:center; width:100%; background: glass; border-radius:18px; padding:8px; border:1px solid rgba(255,255,255,0.6); }
-  .textarea{ flex:1; min-height:44px; border-radius:12px; border:0; padding:8px; resize:none; font-size:1rem; background: white; outline: black; }
-  .plus-small{ width:44px; height:44px; border-radius:12px; font-size:20px; display:inline-flex; align-items:center; justify-content:center; }
+  /* Liquid glass composer (drop-in) */
+  .composer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: env(safe-area-inset-bottom, 0);
+    display: flex;
+    justify-content: center;
+    padding: 14px;
+    z-index: 70;
+    transition: transform .22s ease, backdrop-filter .25s ease;
+    pointer-events: auto;
+  }
+
+  /* container that actually looks like glass */
+  .composer-main {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    max-width: 980px;
+    border-radius: 18px;
+    padding: 10px;
+    position: relative;
+    overflow: visible;
+    /* frosted base */
+    background: linear-gradient(
+      180deg,
+      rgba(255,255,255,0.46) 0%,
+      rgba(245,247,250,0.30) 100%
+    );
+    /* heavy blur + saturation for glassy look */
+    backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
+    -webkit-backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
+    /* subtle inner glow and depth */
+    box-shadow: 0 8px 30px rgba(8,15,30,0.08), inset 0 1px 0 rgba(255,255,255,0.35);
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.16);
+    transition: box-shadow .22s ease, backdrop-filter .22s ease, transform .22s ease;
+  }
+
+  /* soft translucent border gradient using pseudo element */
+  .composer-main::before{
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: -1px; /* shows the border outside slightly */
+    border-radius: 20px;
+    pointer-events: none;
+    background: linear-gradient(120deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03) 35%, rgba(0,0,0,0.03) 100%);
+    mix-blend-mode: overlay;
+    z-index: 1;
+  }
+
+  /* glossy sheen */
+  .composer-main::after{
+    content: "";
+    position: absolute;
+    left: -10%;
+    top: -40%;
+    width: 140%;
+    height: 60%;
+    transform: rotate(-12deg);
+    background: linear-gradient(180deg, rgba(255,255,255,0.50), rgba(255,255,255,0.14) 35%, rgba(255,255,255,0.02) 60%, rgba(255,255,255,0));
+    filter: blur(18px);
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 2;
+    transition: opacity .25s ease, transform .25s ease;
+  }
+
+  /* move actual content above pseudo layers */
+  .composer-main > * { position: relative; z-index: 3; }
+
+  /* more pronounced look when "elevated" (open panel or focused) */
+  .composer-main.glass-elevated{
+    backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
+    box-shadow: 0 18px 40px rgba(6,10,25,0.12), inset 0 1px 0 rgba(255,255,255,0.45);
+  }
+  .composer-main.glass-elevated::after{ opacity: 0.85; transform: rotate(-10deg) translateY(-4px); }
+
+  /* small controls look */
+  .plus-small, .mic-btn, #emojiBtn {
+    background: rgba(255,255,255,0.66);
+    backdrop-filter: blur(6px) saturate(1.1);
+    -webkit-backdrop-filter: blur(6px) saturate(1.1);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+  }
+
+  /* text area */
+  .textarea {
+    flex: 1;
+    min-height: 44px;
+    border-radius: 12px;
+    border: 0;
+    padding: 8px;
+    resize: none;
+    font-size: 1rem;
+    background: transparent;
+    color: #0b1220; /* dark text on light glass */
+    outline: none;
+  }
+
+  /* prefer reduced transparency or low-power devices: fallback */
+  @media (prefers-reduced-transparency: reduce), (scripting: none) {
+    .composer-main { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(255,255,255,0.85); }
+    .composer-main::after{ display:none; }
+  }
+
+  /* reduce motion */
+  @media (prefers-reduced-motion: reduce) {
+    .composer-main::after, .composer-main::before, .composer-main, .composer { transition: none; }
+  }
 
   /* attach menu vertical */
-  .attach-menu-vertical{ position:fixed; right:18px; bottom:100px; display:flex; flex-direction:column; gap:10px; z-index:80; }
-  .attach-card{ background:white; padding:10px 14px; min-width:140px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.12); display:flex; gap:8px; align-items:center; cursor:pointer; }
+  .attach-menu-vertical{ position:fixed; right:18px; bottom:100px; display:flex; flex-direction:column; gap:10px; border-radius:12px; z-index:80; }
+  .attach-card{ background:white; padding:10px 14px; min-width:140px; box-shadow:0 10px 30px rgba(0,0,0,0.12); display:flex; gap:8px; align-items:center; cursor:pointer; }
 
   /* sticker panel */
   #stickerPanel{ position:fixed; left:0; right:0; bottom:76px; height:40vh; background:linear-gradient(180deg,#fff,#f9fafb); border-top-left-radius:14px; border-top-right-radius:14px; box-shadow:0 -10px 30px rgba(0,0,0,0.06); padding:12px; display:none; z-index:75; overflow:auto; }
@@ -891,29 +1076,33 @@ CHAT_HTML = r'''<!doctype html>
   /* polling modal */
   .modal { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); z-index:120; }
   .modal-card { width:100%; max-width:560px; background:white; border-radius:12px; padding:16px; }
+
+  /* small utilities */
+  .hidden{ display:none; }
 </style>
 </head><body>
 
 <header>
-  <div style="display:flex;gap:12px;align-items:center;">
-    <img src="{{ heading_img }}" alt="logo" style="height:48px;"/>
-    <div style="font-weight:800;font-size:1.15rem;">Asphalt <span style="color:#be185d;">Legends</span></div>
+  <div class="heading-wrapper" role="banner" aria-label="App header">
+    <img src="{{ heading_img }}" alt="Heading image" />
+    <div class="heading-title">Asphalt <span style="color:#be185d;">Legends</span></div>
   </div>
-  <div style="position:absolute;right:12px;top:12px;">
-    <div id="profileBtn" class="profile-name" style="cursor:pointer;padding:6px 10px;border-radius:10px;background:white;">{{ username }}</div>
-    <div id="profileMenu" class="menu" style="display:none; position: absolute; right:12px; top:48px;">
+
+  <div class="header-actions" role="navigation" aria-label="Profile actions">
+    <div id="profileBtn" class="profile-name">{{ username }}</div>
+    <div id="profileMenu" class="menu hidden" style="position:absolute; right:12px; top:56px;">
         <div id="viewProfileBtn" class="attach-card">Profile</div>
-        <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="attach-card">Logout</button></form>
+        <form method="post" action="{{ url_for('logout') }}" style="margin:0;"><button type="submit" class="attach-card">Logout</button></form>
     </div>
   </div>
 </header>
 
 <main>
-  <div id="messages" class="mb-6"></div>
+  <div id="messages" class="mb-6" aria-live="polite"></div>
 </main>
 
 <!-- Sticker/GIF/Avatar/Emoji Panel -->
-<div id="stickerPanel">
+<div id="stickerPanel" aria-hidden="true">
   <div style="display:flex;align-items:center;">
     <div style="font-weight:700;">Media & Avatars</div>
     <div style="margin-left:auto;"><button id="closeStickerPanel" class="px-2 py-1 rounded bg-gray-100">Close</button></div>
@@ -932,15 +1121,15 @@ CHAT_HTML = r'''<!doctype html>
 </div>
 
 <!-- Composer -->
-<div class="composer" id="composer">
+<div class="composer" id="composer" aria-label="Composer area">
   <div class="composer-inner">
     <div id="attachmentPreview"></div>
 
-    <div class="composer-main" id="composerMain">
-      <button id="plusBtn" class="plus-small bg-white shadow">＋</button>
+    <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
+      <button id="plusBtn" class="plus-small bg-white shadow" aria-label="Attach">＋</button>
 
       <!-- vertical attachment menu -->
-      <div id="attachMenuVertical" class="attach-menu-vertical" style="display:none;">
+      <div id="attachMenuVertical" class="attach-menu-vertical hidden" style="display:none;">
         <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
         <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
         <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
@@ -949,19 +1138,19 @@ CHAT_HTML = r'''<!doctype html>
         <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
       </div>
 
-      <textarea id="msg" class="textarea" placeholder="Type a message." maxlength="1200"></textarea>
+      <textarea id="msg" class="textarea" placeholder="Type a message." maxlength="1200" aria-label="Message input"></textarea>
 
       <!-- emoji button (opens emoji-mart picker) -->
-      <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white">😊</button>
+      <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white" aria-label="Emoji">😊</button>
 
-      <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full">🎙️</button>
-      <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white">Send</button>
+      <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full" aria-label="Voice message">🎙️</button>
+      <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white" aria-label="Send">Send</button>
     </div>
   </div>
 </div>
 
 <!-- Poll modal -->
-<div id="pollModal" style="display:none;">
+<div id="pollModal" class="hidden" style="display:none;">
   <div class="modal">
     <div class="modal-card">
       <h3>Create Poll</h3>
@@ -1052,19 +1241,18 @@ socket.on('stop_typing', (d)=> {
 });
 
 /* =========================
-   Emoji-mart picker integration
-   - uses the emoji-mart browser build available via CDN
+   Emoji-mart picker integration (v5)
+   - uses the emoji-mart v5 browser build available via CDN
    - when user chooses emoji, insert into textarea cursor spot
    ========================= */
 let emojiPicker = null;
 document.getElementById('emojiBtn').addEventListener('click', (ev)=>{
   ev.stopPropagation();
   if(!emojiPicker){
-    // EmojiMart global exposed by browser.js: EmojiMart.Picker
+    // v5 exposes global EmojiMart.Picker
     const picker = new EmojiMart.Picker({
-      onClick: (emoji) => {
-        // emoji.native available
-        insertAtCursor(inputEl, emoji.native || emoji.colons || '');
+      onEmojiSelect: (emoji) => {
+        insertAtCursor(inputEl, emoji.native || (emoji.colons ? emoji.colons : '') );
         closeEmojiPicker();
         inputEl.focus();
       },
@@ -1081,8 +1269,10 @@ document.getElementById('emojiBtn').addEventListener('click', (ev)=>{
   }
   // position near button
   const rect = document.getElementById('emojiBtn').getBoundingClientRect();
-  emojiPicker.style.left = Math.max(8, rect.left) + 'px';
-  emojiPicker.style.top = (rect.top - 360) + 'px';
+  const left = Math.max(8, rect.left);
+  const top = rect.top - 360;
+  emojiPicker.style.left = left + 'px';
+  emojiPicker.style.top = (top) + 'px';
   emojiPicker.style.display = 'block';
   setTimeout(()=> document.addEventListener('click', closeEmojiPicker), 50);
 });
@@ -1103,9 +1293,10 @@ const plusBtn = document.getElementById('plusBtn');
 const attachMenuVertical = document.getElementById('attachMenuVertical');
 plusBtn.addEventListener('click', (e)=>{
   e.stopPropagation();
-  attachMenuVertical.style.display = attachMenuVertical.style.display === 'flex' ? 'none' : 'flex';
+  const showing = attachMenuVertical.style.display === 'flex';
+  attachMenuVertical.style.display = showing ? 'none' : 'flex';
   // auto hide on scroll
-  if(attachMenuVertical.style.display === 'flex'){
+  if(!showing){
     window.addEventListener('scroll', hideAttachMenuOnce, { once:true });
   }
 });
@@ -1133,8 +1324,8 @@ attachMenuVertical.querySelectorAll('.attach-card').forEach(c=>{
         const lat = pos.coords.latitude.toFixed(6);
         const lng = pos.coords.longitude.toFixed(6);
         const url = `https://www.google.com/maps?q=${lat},${lng}`;
-        const mapImg = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=400x200&markers=color:red|${lat},${lng}&key=YOUR_GOOGLE_MAPS_API_KEY`;
-        
+        // Use free OSM-based static map preview (no API key)
+        const mapImg = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=600,300&z=15&l=map&pt=${lng},${lat},pm2rdm`;
         // send as location message
         await fetch('/send_message', {
           method:'POST',
@@ -1255,14 +1446,18 @@ document.getElementById('stickerPickerBtn')?.addEventListener('click', ()=> show
 
 function showStickerPanel(){
   stickerPanel.style.display='block';
+  stickerPanel.setAttribute('aria-hidden','false');
   // bring composer up
   composerEl.style.transform = 'translateY(-40vh)';
   // default load stickers
   loadStickers();
+  setComposerElevated(true);
 }
 function hideStickerPanel(){
   stickerPanel.style.display='none';
+  stickerPanel.setAttribute('aria-hidden','true');
   composerEl.style.transform = 'translateY(0)';
+  setComposerElevated(false);
 }
 
 /* load local stickers (from /static/stickers/) */
@@ -1342,18 +1537,14 @@ async function loadAvatars(){
     panelGrid.appendChild(wrapper);
   }
 
-  // show saved avatars cached on server
-  try{
-    const r = await fetch('/static/avatars/');
-    // cannot list dir via fetch raw; instead request generated endpoints or provide listing from server if needed.
-  }catch(e){}
+  // show saved avatars cached on server (server should provide an endpoint if listing required)
 }
 
 /* =========================
    Avatar creation page trigger
    ========================= */
 document.getElementById('createAvatarBtn')?.addEventListener('click', ()=>{
-  // open the /avatar page in a new window (we implemented server route)
+  // open the /avatar_create page in a new window (server route expected)
   window.open('/avatar_create', '_blank');
 });
 
@@ -1361,9 +1552,9 @@ document.getElementById('createAvatarBtn')?.addEventListener('click', ()=>{
    Poll modal handling
    ========================= */
 document.getElementById('pollBtn')?.addEventListener('click', ()=>{
-  document.getElementById('pollModal').style.display='block';
+  document.getElementById('pollModal').style.display='block'; document.getElementById('pollModal').classList.remove('hidden');
 });
-document.getElementById('cancelPoll')?.addEventListener('click', ()=> document.getElementById('pollModal').style.display='none');
+document.getElementById('cancelPoll')?.addEventListener('click', ()=> { document.getElementById('pollModal').style.display='none'; document.getElementById('pollModal').classList.add('hidden'); });
 document.getElementById('addPollOption')?.addEventListener('click', ()=>{
   const container = document.getElementById('pollOptions');
   if(container.querySelectorAll('input[name="option"]').length >= 12) return alert('Max 12 options');
@@ -1377,7 +1568,7 @@ document.getElementById('pollForm')?.addEventListener('submit', async (e)=>{
   if(!q || opts.length < 2) return alert('Question and at least 2 options required');
   // send as poll message
   await fetch('/send_message',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text:q, attachments:[{ type:'poll', options:opts }] }) });
-  document.getElementById('pollModal').style.display='none';
+  document.getElementById('pollModal').style.display='none'; document.getElementById('pollModal').classList.add('hidden');
   messagesEl.innerHTML=''; lastId=0; poll();
 });
 
@@ -1428,7 +1619,7 @@ async function poll(){
               bubble.appendChild(ol);
             }
           } else {
-            // image / video / audio / doc
+            // image / video / audio / doc / location
             const { element, mediaElement } = createAttachmentElement(a);
             if(element) bubble.appendChild(element);
           }
@@ -1513,7 +1704,7 @@ function showEmojiPickerForMessage(msgId, anchorEl){
   setTimeout(()=> document.addEventListener('click', hide), 50);
 }
 
-/* Attachment element factory (image/video/audio/doc)
+/* Attachment element factory (image/video/audio/doc/location)
    - Note: for audio messages we do NOT create a download button per your request
 */
 function createAttachmentElement(a){
@@ -1530,13 +1721,30 @@ function createAttachmentElement(a){
     link.href = a.url; link.className = 'doc-link'; link.setAttribute('download', a.name || 'Document');
     link.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11"></path><polyline points="17 2 17 8 23 8"></polyline></svg><span style="font-size:0.92rem">${escapeHtml(a.name || 'Document')}</span>`;
     container.appendChild(link);
-    // provide a separate download link only if explicitly requested elsewhere
+    return { element: container };
+  }
+
+  if(a.type === 'location'){
+    const card = document.createElement('a');
+    card.href = a.url || '#';
+    card.target = '_blank';
+    card.style.display = 'block';
+    card.style.maxWidth = '320px';
+    card.style.borderRadius = '10px';
+    card.style.overflow = 'hidden';
+    card.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)';
+    card.style.textDecoration = 'none';
+    card.style.color = 'inherit';
+    const img = document.createElement('img'); img.src = a.map; img.alt = 'location'; img.style.width='100%'; img.style.display='block';
+    const caption = document.createElement('div'); caption.style.padding='8px'; caption.style.background = '#fff'; caption.style.fontSize = '.9rem'; caption.innerText = '📍 Shared Location';
+    card.appendChild(img); card.appendChild(caption);
+    container.appendChild(card);
     return { element: container };
   }
 
   if(a.type === 'image' || a.type === 'video'){
     if(a.type === 'image'){
-      const img = document.createElement('img'); img.src = a.url; img.className = 'image-attachment'; img.style.maxWidth='420px'; container.appendChild(img);
+      const img = document.createElement('img'); img.src = a.url; img.className = 'image-attachment'; img.style.maxWidth='420px'; img.style.borderRadius='10px'; container.appendChild(img);
       return { element: container, mediaElement: img };
     } else {
       const thumbImg = document.createElement('img'); thumbImg.className = 'thumb'; thumbImg.alt = a.name || 'video';
@@ -1608,37 +1816,69 @@ document.getElementById('sendBtn').addEventListener('click', async ()=>{
 inputEl.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); document.getElementById('sendBtn').click(); } });
 
 /* profile toggles */
-document.getElementById('profileBtn').addEventListener('click', (e)=>{ e.stopPropagation(); const menu = document.getElementById('profileMenu'); menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; });
-document.getElementById('viewProfileBtn').addEventListener('click', async ()=>{ document.getElementById('profileMenu').style.display='none'; const modal = document.getElementById('profileModal'); modal.classList.remove('hidden'); modal.classList.add('flex'); const r = await fetch('/profile_get'); if(r.ok){ const j = await r.json(); document.getElementById('profile_display_name').value = j.name || ''; document.getElementById('profile_status').value = j.status || ''; } });
-function closeProfileModal(){ const modal = document.getElementById('profileModal'); modal.classList.add('hidden'); modal.classList.remove('flex'); }
+document.getElementById('profileBtn').addEventListener('click', (e)=>{ e.stopPropagation(); const menu = document.getElementById('profileMenu'); menu.classList.toggle('hidden'); });
+document.getElementById('viewProfileBtn').addEventListener('click', async ()=>{ document.getElementById('profileMenu').classList.add('hidden'); const modal = document.getElementById('profileModal'); modal.classList.remove('hidden'); const r = await fetch('/profile_get'); if(r.ok){ const j = await r.json(); document.getElementById('profile_display_name').value = j.name || ''; document.getElementById('profile_status').value = j.status || ''; } });
+function closeProfileModal(){ const modal = document.getElementById('profileModal'); modal.classList.add('hidden'); }
 document.getElementById('closeProfile').addEventListener('click', closeProfileModal);
 document.getElementById('profileCancel').addEventListener('click', closeProfileModal);
-function getAverageColor(element) {
-  const rect = element.getBoundingClientRect();
-  const x = Math.max(0, rect.left + rect.width / 2);
-  const y = Math.max(0, rect.top + rect.height / 2);
 
-  // Create a small canvas to sample background
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  canvas.width = 1;
-  canvas.height = 1;
-
-  // Draw the background image into canvas at the same scroll position
-  const img = new Image();
-  img.src = "/static/IMG_5939.jpeg";  // same as your chat background
-  return new Promise((resolve) => {
-    img.onload = () => {
-      ctx.drawImage(
-        img,
-        window.scrollX + x, window.scrollY + y, 1, 1, // crop 1x1 pixel from background
-        0, 0, 1, 1
-      );
-      const data = ctx.getImageData(0, 0, 1, 1).data;
-      resolve({ r: data[0], g: data[1], b: data[2] });
-    };
-    img.onerror = () => resolve({ r: 255, g: 255, b: 255 }); // fallback
+/* =========================
+   Adaptive msg-meta-top color sampling (optimized)
+   - caches the background image into an offscreen canvas scaled to the window size
+   - samples pixel where the meta element is displayed to decide light/dark text
+   ========================= */
+let _bgImg = null;
+let _bgCanvas = document.createElement('canvas');
+let _bgCtx = _bgCanvas.getContext('2d');
+let _bgDrawSize = { w: 0, h: 0 };
+async function ensureBgLoaded(){
+  if(_bgImg && _bgImg.complete) return;
+  return new Promise((resolve)=> {
+    if(_bgImg && _bgImg.complete){ resolve(); return; }
+    _bgImg = new Image();
+    _bgImg.crossOrigin = 'anonymous';
+    _bgImg.src = '/static/IMG_5939.jpeg';
+    _bgImg.onload = ()=> resolve();
+    _bgImg.onerror = ()=> resolve();
   });
+}
+function drawBgToCanvasIfNeeded(){
+  const w = Math.max(1, window.innerWidth);
+  const h = Math.max(1, window.innerHeight);
+  if(_bgDrawSize.w === w && _bgDrawSize.h === h) return;
+  _bgCanvas.width = w;
+  _bgCanvas.height = h;
+  try{
+    // draw background image stretched to fill the canvas (background-size: cover approximated by fill)
+    if(_bgImg && _bgImg.complete && _bgImg.naturalWidth){
+      // Draw using cover-like scaling: compute scale to fill canvas
+      const iw = _bgImg.naturalWidth, ih = _bgImg.naturalHeight;
+      const scale = Math.max(w/iw, h/ih);
+      const dw = iw * scale, dh = ih * scale;
+      const dx = (w - dw) / 2, dy = (h - dh) / 2;
+      _bgCtx.clearRect(0,0,w,h);
+      _bgCtx.drawImage(_bgImg, 0,0, iw, ih, dx, dy, dw, dh);
+    } else {
+      _bgCtx.fillStyle = '#ffffff';
+      _bgCtx.fillRect(0,0,w,h);
+    }
+  }catch(e){
+    try{ _bgCtx.fillStyle = '#ffffff'; _bgCtx.fillRect(0,0,w,h); }catch(_){}
+  }
+  _bgDrawSize.w = w; _bgDrawSize.h = h;
+}
+
+function samplePixelAtScreenXY(x, y){
+  try{
+    drawBgToCanvasIfNeeded();
+    // clamp
+    const ix = Math.max(0, Math.min(_bgCanvas.width-1, Math.round(x)));
+    const iy = Math.max(0, Math.min(_bgCanvas.height-1, Math.round(y)));
+    const d = _bgCtx.getImageData(ix, iy, 1, 1).data;
+    return { r: d[0], g: d[1], b: d[2] };
+  }catch(e){
+    return { r: 255, g:255, b:255 };
+  }
 }
 
 function luminance(r, g, b) {
@@ -1646,21 +1886,44 @@ function luminance(r, g, b) {
 }
 
 async function updateMetaColors() {
+  await ensureBgLoaded();
+  drawBgToCanvasIfNeeded();
   const metas = document.querySelectorAll(".msg-meta-top");
   for (const el of metas) {
-    const { r, g, b } = await getAverageColor(el);
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width/2;
+    const y = rect.top + rect.height/2;
+    const { r, g, b } = samplePixelAtScreenXY(x, y);
     const lum = luminance(r, g, b);
     el.style.color = lum > 150 ? "#111" : "#f9fafb"; // dark on light bg, light on dark bg
   }
 }
 
-// Run initially and on scroll
-window.addEventListener("scroll", () => {
-  updateMetaColors();
-});
+// Run initially and on scroll/resize
+window.addEventListener("scroll", () => { updateMetaColors(); });
+window.addEventListener("resize", () => { _bgDrawSize = {w:0,h:0}; updateMetaColors(); });
 
 // Also run when new messages are loaded
 setInterval(updateMetaColors, 2000);
+
+/* toggle elevated glassiness when panel opens / composer moves */
+const composerMainEl = document.querySelector('.composer-main');
+function setComposerElevated(state){
+  if(!composerMainEl) return;
+  composerMainEl.classList.toggle('glass-elevated', Boolean(state));
+}
+
+/* If you don't have explicit hooks, auto-observe composer translate changes: */
+let lastTransform = '';
+setInterval(()=>{
+  if(!composerMainEl) return;
+  const t = window.getComputedStyle(composerMainEl).transform || '';
+  if(t !== lastTransform){
+    lastTransform = t;
+    const isUp = !t || t === 'none' ? false : /matrix|translate/.test(t);
+    setComposerElevated(isUp);
+  }
+}, 250);
 
 </script>
 </body></html>
