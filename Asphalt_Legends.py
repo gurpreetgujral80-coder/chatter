@@ -1366,144 +1366,144 @@ CHAT_HTML = r'''<!doctype html>
 </head>
 <body>
 
-  <!-- Header -->
-  <header>
-    <div class="heading-wrapper" role="banner" aria-label="App header">
-      <img src="{{ heading_img }}" alt="Heading image" />
-      <div class="heading-title">Asphalt <span style="color:#be185d;">Legends</span></div>
-    </div>
-
-    <div class="header-actions" role="navigation" aria-label="Profile actions">
-      <div id="profileBtn" class="profile-name">{{ username }}</div>
-      <div id="profileMenu" class="menu hidden"
-        style="display:none; position: absolute; right:12px; top:48px; border-radius:12px; overflow:hidden;">
-        <div id="viewProfileBtn" class="attach-card">Profile</div>
-        <form method="post" action="{{ url_for('logout') }}" style="margin:0;">
-          <button type="submit" class="attach-card">Logout</button>
-        </form>
-      </div>
-    </div>
-  </header>
-
-  <!-- Messages -->
-  <main>
-    <div id="messages" class="mb-6" aria-live="polite" style="padding-top:calc(80px + 1rem);"></div>
-  </main>
-
-  <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
-  <div id="stickerPanel" aria-hidden="true" class="emoji-drawer">
-    <div class="emoji-drawer-header">
-      <div class="drag-bar"></div>
-      <button id="closeStickerPanel" class="ml-auto px-2 py-1 rounded bg-gray-100">Close</button>
-    </div>
-    <div class="panel-tabs">
-      <button id="tab_stickers">Stickers</button>
-      <button id="tab_gifs">GIFs</button>
-      <button id="tab_avatars">Avatars</button>
-      <button id="tab_emoji">Emoji</button>
-    </div>
-    <div id="panelContent" class="emoji-drawer-content">
-      <div id="panelGrid" class="grid grid-cols-4 gap-3">
-        <!-- Emoji/GIFs/Stickers loaded dynamically -->
-      </div>
-    </div>
-  </div>
-
-  <!-- Composer -->
-  <div class="composer" id="composer" aria-label="Composer area">
-    <div class="composer-inner">
-      <div id="attachmentPreview"></div>
-
-      <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
-        <button id="plusBtn" class="plus-small bg-white shadow" style="font-size:2rem;" aria-label="Attach">＋</button>
-
-        <!-- vertical attachment menu -->
-        <div id="attachMenuVertical" class="attach-menu-vertical hidden" style="display:none;">
-          <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
-          <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
-          <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
-          <div class="attach-card" data-action="audio">🎧<div>  Audio</div></div>
-          <div class="attach-card" data-action="location">🌐<div>  Location</div></div>
-          <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
+      <!-- Header -->
+      <header>
+        <div class="heading-wrapper" role="banner" aria-label="App header">
+          <img src="{{ heading_img }}" alt="Heading image" />
+          <div class="heading-title">Asphalt <span style="color:#be185d;">Legends</span></div>
         </div>
-
-        <textarea id="msg" class="textarea" placeholder="Type a message." maxlength="1200"
-          aria-label="Message input"></textarea>
-
-        <!-- emoji button opens drawer -->
-        <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white" aria-label="Emoji">😊</button>
-
-        <!-- mic button -->
-        <button id="mic" class="mic-btn" aria-label="Voice message" aria-pressed="false"
-          title="Hold to record or click to toggle">🎙️</button>
-
-        <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white" aria-label="Send">Send</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Poll modal -->
-  <div id="pollModal" class="hidden" style="display:none;">
-    <div class="modal">
-      <div class="modal-card">
-        <h3>Create Poll</h3>
-        <form id="pollForm">
-          <div><input id="poll_question" placeholder="Your question" class="w-full p-2 border rounded mb-2"></div>
-          <div id="pollOptions">
-            <input name="option" placeholder="Option 1" class="w-full p-2 border rounded mb-2">
-            <input name="option" placeholder="Option 2" class="w-full p-2 border rounded mb-2">
-          </div>
-          <div class="flex gap-2">
-            <button id="addPollOption" type="button" class="px-3 py-1 bg-gray-100 rounded">Add option</button>
-            <button class="px-3 py-1 bg-indigo-600 text-white rounded">Create Poll</button>
-            <button id="cancelPoll" type="button" class="px-3 py-1 bg-gray-200 rounded">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- Profile Modal -->
-  <div id="profileModal" class="hidden fixed inset-0 items-center justify-center bg-black/40 z-[60]">
-    <div class="bg-white rounded-lg p-4 w-96">
-      <div class="flex items-center justify-between mb-3">
-        <div>
-          <div class="text-lg font-bold">Profile</div>
-        </div>
-        <button id="closeProfile" class="text-gray-500">✕</button>
-      </div>
-      <form id="profileForm" enctype="multipart/form-data">
-        <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name"
-            class="w-full p-2 border rounded" value="{{ username }}" /></div>
-        <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status"
-            class="w-full p-2 border rounded" value="{{ user_status }}" /></div>
-        <div class="mb-2">
-          <label class="text-xs">Avatar</label>
-          <div style="display:flex;gap:8px;">
-            <button id="createAvatarBtn" type="button" class="px-3 py-2 bg-green-600 text-white rounded">Create
-              Avatar</button>
-            <div id="currentAvatarPreview"
-              style="min-width:64px;min-height:64px;background:#f3f4f6;border-radius:8px;"></div>
+    
+        <div class="header-actions" role="navigation" aria-label="Profile actions">
+          <div id="profileBtn" class="profile-name">{{ username }}</div>
+          <div id="profileMenu" class="menu hidden"
+            style="display:none; position: absolute; right:12px; top:48px; border-radius:12px; overflow:hidden;">
+            <div id="viewProfileBtn" class="attach-card">Profile</div>
+            <form method="post" action="{{ url_for('logout') }}" style="margin:0;">
+              <button type="submit" class="attach-card">Logout</button>
+            </form>
           </div>
         </div>
-        <div class="flex gap-2">
-          <button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button>
-          <button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button>
+      </header>
+    
+      <!-- Messages -->
+      <main>
+        <div id="messages" class="mb-6" aria-live="polite" style="padding-top:calc(80px + 1rem);"></div>
+      </main>
+    
+      <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
+      <div id="stickerPanel" aria-hidden="true" class="emoji-drawer">
+        <div class="emoji-drawer-header">
+          <div class="drag-bar"></div>
+          <button id="closeStickerPanel" class="ml-auto px-2 py-1 rounded bg-gray-100">Close</button>
         </div>
-        <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Incoming call banner -->
-  <div id="incomingCall"
-    style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
-    <div id="incomingText">Incoming call</div>
-    <div style="display:flex;gap:8px;margin-top:8px;">
-      <button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button>
-      <button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button>
-    </div>
-  </div>
+        <div class="panel-tabs">
+          <button id="tab_stickers">Stickers</button>
+          <button id="tab_gifs">GIFs</button>
+          <button id="tab_avatars">Avatars</button>
+          <button id="tab_emoji">Emoji</button>
+        </div>
+        <div id="panelContent" class="emoji-drawer-content">
+          <div id="panelGrid" class="grid grid-cols-4 gap-3">
+            <!-- Emoji/GIFs/Stickers loaded dynamically -->
+          </div>
+        </div>
+      </div>
+    
+      <!-- Composer -->
+      <div class="composer" id="composer" aria-label="Composer area">
+        <div class="composer-inner">
+          <div id="attachmentPreview"></div>
+    
+          <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
+            <button id="plusBtn" class="plus-small bg-white shadow" style="font-size:2rem;" aria-label="Attach">＋</button>
+    
+            <!-- vertical attachment menu -->
+            <div id="attachMenuVertical" class="attach-menu-vertical hidden" style="display:none;">
+              <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
+              <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
+              <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
+              <div class="attach-card" data-action="audio">🎧<div>  Audio</div></div>
+              <div class="attach-card" data-action="location">🌐<div>  Location</div></div>
+              <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
+            </div>
+    
+            <textarea id="msg" class="textarea" placeholder="Type a message." maxlength="1200"
+              aria-label="Message input"></textarea>
+    
+            <!-- emoji button opens drawer -->
+            <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white" aria-label="Emoji">😊</button>
+    
+            <!-- mic button -->
+            <button id="mic" class="mic-btn" aria-label="Voice message" aria-pressed="false"
+              title="Hold to record or click to toggle">🎙️</button>
+    
+            <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white" aria-label="Send">Send</button>
+          </div>
+        </div>
+      </div>
+    
+      <!-- Poll modal -->
+      <div id="pollModal" class="hidden" style="display:none;">
+        <div class="modal">
+          <div class="modal-card">
+            <h3>Create Poll</h3>
+            <form id="pollForm">
+              <div><input id="poll_question" placeholder="Your question" class="w-full p-2 border rounded mb-2"></div>
+              <div id="pollOptions">
+                <input name="option" placeholder="Option 1" class="w-full p-2 border rounded mb-2">
+                <input name="option" placeholder="Option 2" class="w-full p-2 border rounded mb-2">
+              </div>
+              <div class="flex gap-2">
+                <button id="addPollOption" type="button" class="px-3 py-1 bg-gray-100 rounded">Add option</button>
+                <button class="px-3 py-1 bg-indigo-600 text-white rounded">Create Poll</button>
+                <button id="cancelPoll" type="button" class="px-3 py-1 bg-gray-200 rounded">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    
+      <!-- Profile Modal -->
+      <div id="profileModal" class="hidden fixed inset-0 items-center justify-center bg-black/40 z-[60]">
+        <div class="bg-white rounded-lg p-4 w-96">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <div class="text-lg font-bold">Profile</div>
+            </div>
+            <button id="closeProfile" class="text-gray-500">✕</button>
+          </div>
+          <form id="profileForm" enctype="multipart/form-data">
+            <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name"
+                class="w-full p-2 border rounded" value="{{ username }}" /></div>
+            <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status"
+                class="w-full p-2 border rounded" value="{{ user_status }}" /></div>
+            <div class="mb-2">
+              <label class="text-xs">Avatar</label>
+              <div style="display:flex;gap:8px;">
+                <button id="createAvatarBtn" type="button" class="px-3 py-2 bg-green-600 text-white rounded">Create
+                  Avatar</button>
+                <div id="currentAvatarPreview"
+                  style="min-width:64px;min-height:64px;background:#f3f4f6;border-radius:8px;"></div>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button>
+              <button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button>
+            </div>
+            <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
+          </form>
+        </div>
+      </div>
+    
+      <!-- Incoming call banner -->
+      <div id="incomingCall"
+        style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
+        <div id="incomingText">Incoming call</div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button>
+          <button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button>
+        </div>
+      </div>
 
 <!-- include socket.io and other scripts (socket server expected) -->
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
