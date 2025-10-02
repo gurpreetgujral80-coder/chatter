@@ -971,64 +971,85 @@ CHAT_HTML = r'''<!doctype html>
       -moz-osx-font-smoothing:grayscale;
     }
 
-    /*
-      Responsive header / heading...
-    */
-    header{
-      position:fixed;
-      left:0;
-      right:0;
-      top:0;
-      height:auto;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap:12px;
-      background:linear-gradient(90deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95));
-      z-index:40;
-      padding:10px 14px;
-      border-bottom:1px solid rgba(0,0,0,0.04);
-      box-sizing:border-box;
-      flex-wrap:wrap;
-      text-align:center;
+    header {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95));
+      z-index: 40;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(0,0,0,0.04);
+      box-sizing: border-box;
+      flex-wrap: wrap;
+      text-align: center;
     }
-
-    .heading-wrapper{
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      gap:8px;
-      width:100%;
-      max-width:980px;
+    
+    /* wrapper centers everything */
+    .heading-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      max-width: 980px;
     }
-
-    .heading-wrapper img{
-      height:56px;
-      width:auto;
-      border-radius:10px;
-      object-fit:cover;
+    
+    .heading-wrapper img {
+      height: 56px;
+      width: auto;
+      border-radius: 10px;
+      object-fit: cover;
     }
-    .heading-title{
-      font-weight:800;
-      font-size:1.05rem;
-      line-height:1;
+    
+    .heading-title {
+      font-weight: 800;
+      font-size: 1.05rem;
+      line-height: 1;
     }
-
+    
+    /* tablets */
     @media (min-width: 768px) {
-      header { padding: 12px 18px; justify-content:center; }
-      .heading-wrapper { display:flex; align-items:center; }
-      .heading-wrapper img { height:80px; }
-      .heading-title { font-size:1.35rem; }
+      header { padding: 12px 18px; }
+      .heading-wrapper { flex-direction: column; align-items: center; }
+      .heading-wrapper img { height: 70px; }
+      .heading-title { font-size: 1.25rem; }
     }
+    
+    /* laptops/desktops: slightly smaller height + keep centered */
     @media (min-width: 1024px) {
-      header { justify-content: space-between; padding: 12px 28px; }
-      .heading-wrapper { flex-direction: row; align-items:center; text-align:left; width:auto; }
-      .heading-wrapper img { height:96px; }
-      .heading-title { font-size:1.6rem; margin-left:12px; }
+      header { padding: 10px 20px; }
+      .heading-wrapper { flex-direction: column; align-items: center; text-align: center; }
+      .heading-wrapper img { height: 64px; }
+      .heading-title { font-size: 1.4rem; margin-left: 0; }
     }
-
-    .header-actions{ position:absolute; right:12px; top:12px; display:flex; gap:8px; align-items:center; }
-    .profile-name{ cursor:pointer; padding:6px 10px; border-radius:10px; background:white; box-shadow:0 6px 18px rgba(2,6,23,0.04); }
+    
+    /* header action buttons */
+    .header-actions {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    
+    .profile-name {
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: white;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.04);
+    }
+    
+    /* give first message a bit of breathing room under header */
+    .chat-messages {
+      padding-top: calc(var(--header-height, 80px) + 12px);
+    }
 
     main{ padding:120px 12px 200px; max-width:980px; margin:0 auto; min-height:calc(100vh - 260px); box-sizing:border-box; }
     .msg-row{ margin-bottom:12px; display:flex; gap:8px; align-items:flex-start; }
@@ -1054,12 +1075,11 @@ CHAT_HTML = r'''<!doctype html>
     .reaction-pill{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; background:rgba(255,255,255,0.95); box-shadow:0 6px 18px rgba(2,6,23,0.04); font-size:0.85rem; }
     .reaction-emoji{ width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
 
-    /* ===== Responsive composer (replace previous composer CSS) ===== */
+    /* ===== Liquid Glass Responsive Composer ===== */
     .composer {
       position: fixed;
       left: 0;
       right: 0;
-      /* leave a small safe area + fluid padding */
       bottom: calc(env(safe-area-inset-bottom, 0) + 8px);
       display: flex;
       justify-content: center;
@@ -1069,113 +1089,263 @@ CHAT_HTML = r'''<!doctype html>
       pointer-events: auto;
     }
     
-    /* container that actually looks like glass */
+    /* Liquid Glass Container */
     .composer-main {
       display: flex;
-      gap: clamp(6px, 1.6vw, 12px);
+      border-radius: 14px;
+      padding: 8px 10px;
+      gap: 6px;
       align-items: center;
-      width: min(980px, calc(100% - 32px)); /* never exceed 980, but keep margin */
+      width: min(980px, calc(100% - 32px));
       max-width: 980px;
-      border-radius: clamp(12px, 2.4vw, 20px);
-      padding: clamp(8px, 1.6vw, 14px);
       position: relative;
-      overflow: visible;
-      background: linear-gradient(180deg, rgba(255,255,255,0.46) 0%, rgba(245,247,250,0.30) 100%);
-      backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
-      -webkit-backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
-      box-shadow: 0 8px 30px rgba(8,15,30,0.08), inset 0 1px 0 rgba(255,255,255,0.35);
-      border: 1px solid rgba(255,255,255,0.16);
-      transition: box-shadow .22s ease, backdrop-filter .22s ease, transform .22s ease;
-      z-index: 1;
-      /* allow items to wrap on narrow screens */
+      overflow: hidden;
+    
+      /* frosted translucent look */
+      background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.35) 0%,
+        rgba(245, 247, 250, 0.20) 100%
+      );
+      backdrop-filter: blur(16px) saturate(1.35) contrast(1.05);
+      -webkit-backdrop-filter: blur(16px) saturate(1.35) contrast(1.05);
+    
+      /* inner + outer glow */
+      box-shadow: 0 8px 28px rgba(8, 15, 30, 0.12),
+                  inset 0 1px 1px rgba(255, 255, 255, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      transition: box-shadow .25s ease, transform .25s ease;
       flex-wrap: nowrap;
+      z-index: 1;
     }
     
-    /* allow wrapping for very narrow widths so textarea can span full width */
-    @media (max-width: 480px) {
-      .composer-main { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
-      .composer-main > * { flex-basis: 100%; } /* controls stack for tiny screens */
-      .composer-main .textarea { order: 1; width: 100%; }
-      .composer-main .plus-small { order: 0; margin-right: 4px; }
-      .composer-main .control-row { display:flex; gap:8px; align-items:center; width:100%; justify-content:space-between; }
+    /* sheen highlight */
+    .composer-main::after {
+      content: "";
+      position: absolute;
+      top: -40%;
+      left: -20%;
+      width: 140%;
+      height: 80%;
+      background: linear-gradient(
+        120deg,
+        rgba(255, 255, 255, 0.55) 0%,
+        rgba(255, 255, 255, 0.12) 40%,
+        rgba(255, 255, 255, 0) 80%
+      );
+      transform: rotate(-12deg);
+      filter: blur(20px);
+      opacity: 0.6;
+      pointer-events: none;
+      z-index: 0;
+      transition: opacity .25s ease, transform .25s ease;
     }
     
-    /* medium widths (phones / small tablets) keep controls inline but scale them */
-    @media (min-width: 481px) and (max-width: 1023px) {
-      .composer-main { flex-wrap: nowrap; }
+    /* Elevated (focused/open state) */
+    .composer-main.glass-elevated {
+      transform: translateY(-6px);
+      backdrop-filter: blur(22px) saturate(1.5) contrast(1.07);
+      -webkit-backdrop-filter: blur(22px) saturate(1.5) contrast(1.07);
+      box-shadow: 0 18px 40px rgba(6, 10, 25, 0.16),
+                  inset 0 1px 2px rgba(255, 255, 255, 0.55);
+    }
+    .composer-main.glass-elevated::after {
+      opacity: 0.85;
+      transform: rotate(-10deg) translateY(-6px);
     }
     
-    /* desktop: a bit more breathing room */
-    @media (min-width: 1024px) {
-      .composer-main { padding: clamp(10px, 1.4vw, 18px); gap: clamp(8px, 1.2vw, 14px); }
-    }
-    
-    /* small controls sizes (fluid) */
+    /* Buttons (plus, mic, emoji) */
     .plus-small, .mic-btn, #emojiBtn {
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       width: clamp(36px, 7vw, 48px);
       height: clamp(36px, 7vw, 48px);
       border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.66);
-      box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.4);
+      backdrop-filter: blur(6px) saturate(1.2);
+      -webkit-backdrop-filter: blur(6px) saturate(1.2);
+      box-shadow: 0 6px 16px rgba(2, 6, 23, 0.08);
       z-index: 5;
       flex: 0 0 auto;
       -webkit-tap-highlight-color: transparent;
+      transition: background .2s ease;
+    }
+    .plus-small:hover, .mic-btn:hover, #emojiBtn:hover {
+      background: rgba(255,255,255,0.55);
     }
     
-    /* circular mic on narrower screens */
+    /* circular mic on narrow screens */
     @media (max-width:420px){
-      .mic-btn { border-radius: 999px; width: clamp(40px,9vw,48px); height: clamp(40px,9vw,48px); }
+      .mic-btn {
+        border-radius: 999px;
+        width: clamp(40px,9vw,52px);
+        height: clamp(40px,9vw,52px);
+      }
     }
     
-    /* text area responsive */
+    /* Textarea */
     .textarea {
       flex: 1 1 auto;
-      min-height: clamp(40px, 7vh, 72px);
+      min-height: 40px;
+      font-size: 0.9rem;
+      padding: 6px 8px;
       max-height: 30vh;
       border-radius: 12px;
       border: 0;
-      padding: clamp(6px, 1.6vw, 10px);
       resize: none;
-      font-size: clamp(.94rem, 1.8vw, 1.05rem);
-      background: white;
+      background: rgba(255,255,255,0.75);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       color: #0b1220;
       outline: none;
       box-sizing: border-box;
-      line-height: 1.3;
+      line-height: 1.4;
+      transition: background .2s ease;
+    }
+    .textarea:focus {
+      background: rgba(255,255,255,0.9);
     }
     
-    /* ensure preview/attachment area doesn't break layout */
-    #attachmentPreview { width: 100%; box-sizing: border-box; }
-    
-    /* send button scale (fluid) */
+    /* Send button */
     #sendBtn {
       flex: 0 0 auto;
       padding: clamp(8px,1.8vw,12px) clamp(12px,2.2vw,16px);
       margin-left: 6px;
-      border-radius: 10px;
+      border-radius: 12px;
       font-size: clamp(.9rem,1.6vw,1rem);
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: white;
+      box-shadow: 0 6px 20px rgba(79,70,229,0.35);
+      transition: transform .15s ease, box-shadow .15s ease;
     }
+    #sendBtn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(79,70,229,0.45); }
     
-    /* when composer is 'elevated' (panel open) adjust visuals */
-    .composer-main.glass-elevated {
-      transform: translateY(-6px);
-      backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
-      -webkit-backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
-      box-shadow: 0 18px 40px rgba(6,10,25,0.12), inset 0 1px 0 rgba(255,255,255,0.45);
-    }
-    
-    /* small screens: tuck less-important controls if space is tight */
+    /* Extra tiny screens: hide plus */
     @media (max-width: 380px){
-      /* hide plus on tiniest screens, keep emoji/mic/send accessible */
       .plus-small { display:none; }
-      /* shrink gap */
       .composer-main { gap: 6px; padding: 8px; }
     }
-
+    /* Tablet sizes (≥ 600px) → medium */
+    @media (min-width: 600px) {
+      .composer-main {
+        border-radius: 18px;
+        padding: 12px 14px;
+        gap: 10px;
+      }
+      .textarea {
+        min-height: 48px;
+        font-size: 1rem;
+        padding: 8px 10px;
+      }
+      .plus-small, .mic-btn, #emojiBtn {
+        width: 42px;
+        height: 42px;
+      }
+    }
+    
+    /* Laptop / Desktop (≥ 1024px) → larger and more spacious */
+    @media (min-width: 1024px) {
+      .composer-main {
+        border-radius: 22px;
+        padding: 14px 18px;
+        gap: 14px;
+      }
+      .textarea {
+        min-height: 56px;
+        font-size: 1.05rem;
+        padding: 10px 14px;
+      }
+      .plus-small, .mic-btn, #emojiBtn {
+        width: 48px;
+        height: 48px;
+      }
+      #sendBtn {
+        font-size: 1rem;
+        padding: 12px 18px;
+        border-radius: 14px;
+      }
+    }
+    /* Drawer container */
+    .emoji-drawer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: -60%; /* hidden initially */
+      height: 60%;
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: blur(12px) saturate(1.2);
+      border-top-left-radius: 18px;
+      border-top-right-radius: 18px;
+      box-shadow: 0 -8px 20px rgba(0,0,0,0.08);
+      transition: bottom 0.3s ease;
+      z-index: 100; /* above composer */
+      display: flex;
+      flex-direction: column;
+    }
+    
+    /* When visible */
+    .emoji-drawer.active {
+      bottom: 0;
+    }
+    
+    /* Header with drag handle */
+    .emoji-drawer-header {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .drag-bar {
+      width: 42px;
+      height: 4px;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.2);
+    }
+    
+    /* Content scrollable */
+    .emoji-drawer-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    /* Emoji grid */
+    .emoji-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+      gap: 10px;
+      font-size: 1.6rem;
+      text-align: center;
+    }
+    
+    /* GIFs */
+    .gif-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 10px;
+    }
+    .gif-grid img {
+      width: 100%;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform .2s;
+    }
+    .gif-grid img:hover {
+      transform: scale(1.05);
+    }
+    
+    /* Push composer up when drawer open */
+    .composer {
+      transition: bottom 0.3s ease;
+    }
+    .composer.up {
+      bottom: 60%;
+    }
     /* attach menu vertical */
     .attach-menu-vertical{ position:fixed; right:18px; bottom:100px; display:flex; flex-direction:column; gap:10px; border-radius:12px; z-index:80; }
     .attach-card{ background:white; padding:10px 14px; min-width:140px; box-shadow:0 10px 30px rgba(0,0,0,0.12); display:flex; gap:8px; align-items:center; cursor:pointer; }
@@ -1196,116 +1366,144 @@ CHAT_HTML = r'''<!doctype html>
 </head>
 <body>
 
-<header>
-  <div class="heading-wrapper" role="banner" aria-label="App header">
-    <img src="{{ heading_img }}" alt="Heading image" />
-    <div class="heading-title">Asphalt <span style="color:#be185d;">Legends</span></div>
-  </div>
+  <!-- Header -->
+  <header>
+    <div class="heading-wrapper" role="banner" aria-label="App header">
+      <img src="{{ heading_img }}" alt="Heading image" />
+      <div class="heading-title">Asphalt <span style="color:#be185d;">Legends</span></div>
+    </div>
 
-  <div class="header-actions" role="navigation" aria-label="Profile actions">
-    <div id="profileBtn" class="profile-name">{{ username }}</div>
-    <div id="profileMenu" class="menu hidden" style="display:none; position: absolute; right:12px; top:48px; border-radius:12px; overflow:hidden;">
+    <div class="header-actions" role="navigation" aria-label="Profile actions">
+      <div id="profileBtn" class="profile-name">{{ username }}</div>
+      <div id="profileMenu" class="menu hidden"
+        style="display:none; position: absolute; right:12px; top:48px; border-radius:12px; overflow:hidden;">
         <div id="viewProfileBtn" class="attach-card">Profile</div>
-        <form method="post" action="{{ url_for('logout') }}" style="margin:0;"><button type="submit" class="attach-card">Logout</button></form>
-    </div>
-  </div>
-</header>
-
-<main>
-  <div id="messages" class="mb-6" aria-live="polite"></div>
-</main>
-
-<!-- Sticker/GIF/Avatar/Emoji Panel -->
-<div id="stickerPanel" aria-hidden="true">
-  <div style="display:flex;align-items:center;">
-    <div style="font-weight:700;">Media & Avatars</div>
-    <div style="margin-left:auto;"><button id="closeStickerPanel" class="px-2 py-1 rounded bg-gray-100">Close</button></div>
-  </div>
-  <div class="panel-tabs" style="margin-top:8px;">
-    <button id="tab_stickers">Stickers</button>
-    <button id="tab_gifs">GIFs</button>
-    <button id="tab_avatars">Avatars</button>
-    <button id="tab_emoji">Emoji</button>
-  </div>
-
-  <div id="panelContent" style="display:block;">
-    <div id="panelGrid" class="grid grid-cols-4 gap-3"></div>
-  </div>
-</div>
-
-<!-- Composer -->
-<div class="composer" id="composer" aria-label="Composer area">
-  <div class="composer-inner">
-    <div id="attachmentPreview"></div>
-
-    <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
-      <button id="plusBtn" class="plus-small bg-white shadow" style=" font-size: 2rem;" aria-label="Attach">＋</button>
-
-      <!-- vertical attachment menu -->
-      <div id="attachMenuVertical" class="attach-menu-vertical hidden" style="display:none;">
-        <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
-        <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
-        <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
-        <div class="attach-card" data-action="audio">🎧<div>  Audio</div></div>
-        <div class="attach-card" data-action="location">🌐<div>  Location</div></div>
-        <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
+        <form method="post" action="{{ url_for('logout') }}" style="margin:0;">
+          <button type="submit" class="attach-card">Logout</button>
+        </form>
       </div>
+    </div>
+  </header>
 
-      <textarea id="msg" class="textarea" placeholder="Type a message." maxlength="1200" aria-label="Message input"></textarea>
+  <!-- Messages -->
+  <main>
+    <div id="messages" class="mb-6" aria-live="polite" style="padding-top:calc(80px + 1rem);"></div>
+  </main>
 
-      <!-- emoji button (opens emoji-mart picker) -->
-      <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white" aria-label="Emoji">😊</button>
-
-      <!-- mic button: fixed and interactive -->
-      <button id="mic" class="mic-btn" aria-label="Voice message" aria-pressed="false" title="Hold to record or click to toggle">🎙️</button>
-
-      <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white" aria-label="Send">Send</button>
+  <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
+  <div id="stickerPanel" aria-hidden="true" class="emoji-drawer">
+    <div class="emoji-drawer-header">
+      <div class="drag-bar"></div>
+      <button id="closeStickerPanel" class="ml-auto px-2 py-1 rounded bg-gray-100">Close</button>
+    </div>
+    <div class="panel-tabs">
+      <button id="tab_stickers">Stickers</button>
+      <button id="tab_gifs">GIFs</button>
+      <button id="tab_avatars">Avatars</button>
+      <button id="tab_emoji">Emoji</button>
+    </div>
+    <div id="panelContent" class="emoji-drawer-content">
+      <div id="panelGrid" class="grid grid-cols-4 gap-3">
+        <!-- Emoji/GIFs/Stickers loaded dynamically -->
+      </div>
     </div>
   </div>
-</div>
 
-<!-- Poll modal -->
-<div id="pollModal" class="hidden" style="display:none;">
-  <div class="modal">
-    <div class="modal-card">
-      <h3>Create Poll</h3>
-      <form id="pollForm">
-        <div><input id="poll_question" placeholder="Your question" class="w-full p-2 border rounded mb-2"></div>
-        <div id="pollOptions">
-          <input name="option" placeholder="Option 1" class="w-full p-2 border rounded mb-2">
-          <input name="option" placeholder="Option 2" class="w-full p-2 border rounded mb-2">
+  <!-- Composer -->
+  <div class="composer" id="composer" aria-label="Composer area">
+    <div class="composer-inner">
+      <div id="attachmentPreview"></div>
+
+      <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
+        <button id="plusBtn" class="plus-small bg-white shadow" style="font-size:2rem;" aria-label="Attach">＋</button>
+
+        <!-- vertical attachment menu -->
+        <div id="attachMenuVertical" class="attach-menu-vertical hidden" style="display:none;">
+          <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
+          <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
+          <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
+          <div class="attach-card" data-action="audio">🎧<div>  Audio</div></div>
+          <div class="attach-card" data-action="location">🌐<div>  Location</div></div>
+          <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
         </div>
-        <div class="flex gap-2"><button id="addPollOption" type="button" class="px-3 py-1 bg-gray-100 rounded">Add option</button><button class="px-3 py-1 bg-indigo-600 text-white rounded">Create Poll</button><button id="cancelPoll" type="button" class="px-3 py-1 bg-gray-200 rounded">Cancel</button></div>
+
+        <textarea id="msg" class="textarea" placeholder="Type a message." maxlength="1200"
+          aria-label="Message input"></textarea>
+
+        <!-- emoji button opens drawer -->
+        <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white" aria-label="Emoji">😊</button>
+
+        <!-- mic button -->
+        <button id="mic" class="mic-btn" aria-label="Voice message" aria-pressed="false"
+          title="Hold to record or click to toggle">🎙️</button>
+
+        <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white" aria-label="Send">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Poll modal -->
+  <div id="pollModal" class="hidden" style="display:none;">
+    <div class="modal">
+      <div class="modal-card">
+        <h3>Create Poll</h3>
+        <form id="pollForm">
+          <div><input id="poll_question" placeholder="Your question" class="w-full p-2 border rounded mb-2"></div>
+          <div id="pollOptions">
+            <input name="option" placeholder="Option 1" class="w-full p-2 border rounded mb-2">
+            <input name="option" placeholder="Option 2" class="w-full p-2 border rounded mb-2">
+          </div>
+          <div class="flex gap-2">
+            <button id="addPollOption" type="button" class="px-3 py-1 bg-gray-100 rounded">Add option</button>
+            <button class="px-3 py-1 bg-indigo-600 text-white rounded">Create Poll</button>
+            <button id="cancelPoll" type="button" class="px-3 py-1 bg-gray-200 rounded">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profile Modal -->
+  <div id="profileModal" class="hidden fixed inset-0 items-center justify-center bg-black/40 z-[60]">
+    <div class="bg-white rounded-lg p-4 w-96">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <div class="text-lg font-bold">Profile</div>
+        </div>
+        <button id="closeProfile" class="text-gray-500">✕</button>
+      </div>
+      <form id="profileForm" enctype="multipart/form-data">
+        <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name"
+            class="w-full p-2 border rounded" value="{{ username }}" /></div>
+        <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status"
+            class="w-full p-2 border rounded" value="{{ user_status }}" /></div>
+        <div class="mb-2">
+          <label class="text-xs">Avatar</label>
+          <div style="display:flex;gap:8px;">
+            <button id="createAvatarBtn" type="button" class="px-3 py-2 bg-green-600 text-white rounded">Create
+              Avatar</button>
+            <div id="currentAvatarPreview"
+              style="min-width:64px;min-height:64px;background:#f3f4f6;border-radius:8px;"></div>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button>
+          <button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button>
+        </div>
+        <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
       </form>
     </div>
   </div>
-</div>
 
-<!-- Profile Modal (avatar input replaced with Create Avatar button) -->
-<div id="profileModal" class="hidden fixed inset-0 items-center justify-center bg-black/40 z-[60]">
-  <div class="bg-white rounded-lg p-4 w-96">
-    <div class="flex items-center justify-between mb-3"><div><div class="text-lg font-bold">Profile</div></div><button id="closeProfile" class="text-gray-500">✕</button></div>
-    <form id="profileForm" enctype="multipart/form-data">
-      <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name" class="w-full p-2 border rounded" value="{{ username }}" /></div>
-      <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status" class="w-full p-2 border rounded" value="{{ user_status }}" /></div>
-      <div class="mb-2">
-        <label class="text-xs">Avatar</label>
-        <div style="display:flex;gap:8px;">
-          <button id="createAvatarBtn" type="button" class="px-3 py-2 bg-green-600 text-white rounded">Create Avatar</button>
-          <div id="currentAvatarPreview" style="min-width:64px;min-height:64px;background:#f3f4f6;border-radius:8px;"></div>
-        </div>
-      </div>
-      <div class="flex gap-2"><button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button><button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button></div>
-      <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
-    </form>
+  <!-- Incoming call banner -->
+  <div id="incomingCall"
+    style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
+    <div id="incomingText">Incoming call</div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button>
+      <button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button>
+    </div>
   </div>
-</div>
-
-<!-- Incoming call small banner -->
-<div id="incomingCall" style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,12);">
-  <div id="incomingText">Incoming call</div>
-  <div style="display:flex;gap:8px;margin-top:8px;"><button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button><button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button></div>
-</div>
 
 <!-- include socket.io and other scripts (socket server expected) -->
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -1860,7 +2058,7 @@ function updateMicUI(state){
     micBtn.classList.add('recording');
     micBtn.setAttribute('aria-pressed','true');
     micBtn.title = 'Recording… click to stop';
-    micBtn.innerText = '⏺️';
+    micBtn.innerText = '⏸️';
   } else {
     micBtn.classList.remove('recording');
     micBtn.setAttribute('aria-pressed','false');
@@ -2134,6 +2332,41 @@ setInterval(()=>{
     input && input.addEventListener('blur', ()=> composer.style.transform = 'translateY(0)');
   }
 })();
+const emojiBtn = document.getElementById('emojiBtn');
+const emojiDrawer = document.getElementById('emojiDrawer');
+const composer = document.querySelector('.composer');
+const textarea = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+
+// Toggle drawer
+emojiBtn.addEventListener('click', () => {
+  emojiDrawer.classList.toggle('active');
+  composer.classList.toggle('up');
+});
+
+// Insert emoji
+document.querySelectorAll('.emoji-grid span, .emoji-grid').forEach(el => {
+  el.addEventListener('click', (e) => {
+    textarea.value += e.target.textContent;
+    sendBtn.click(); // auto send
+  });
+});
+
+// Insert GIF
+document.querySelectorAll('.gif-grid img').forEach(img => {
+  img.addEventListener('click', (e) => {
+    textarea.value = `[GIF: ${e.target.src}]`; 
+    sendBtn.click(); // auto send
+  });
+});
+
+// Close drawer when dragged down (optional)
+emojiDrawer.addEventListener('click', (e) => {
+  if (e.target.classList.contains('drag-bar')) {
+    emojiDrawer.classList.remove('active');
+    composer.classList.remove('up');
+  }
+});
 </script>
 </body>
 </html>
