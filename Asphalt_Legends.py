@@ -412,41 +412,86 @@ def vote_poll():
 
 # ---------- Templates ----------
 # AVATAR CREATE page HTML (separate smaller page)
-AVATAR_CREATE_HTML = r'''<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
+AVATAR_CREATE_HTML = r'''<!-- AVATAR_CREATE_HTML (updated) -->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Create Avatar</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: #f8fafc; padding:18px;}
-  .preview{ width:180px; height:180px; border-radius:16px; overflow:hidden; display:inline-block; background:#fff; box-shadow:0 6px 20px rgba(2,6,23,0.06); }
+  .preview{ width:180px; height:180px; border-radius:50%; overflow:hidden; display:inline-block; background:#fff; box-shadow:0 6px 20px rgba(2,6,23,0.06); border:6px solid rgba(255,255,255,0.8); }
+  .preview img{ width:100%; height:100%; object-fit:cover; display:block; }
   .tile{ cursor:pointer; border-radius:8px; padding:6px; background:#fff; box-shadow:0 6px 18px rgba(2,6,23,0.04); display:flex; align-items:center; justify-content:center; }
   .tile.selected{ outline:3px solid #6366f1; }
   .controls{ display:flex; gap:8px; flex-wrap:wrap; }
+  label.switch { display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
 </style>
-</head><body>
+</head>
+<body>
   <div class="max-w-3xl mx-auto">
-    <h1 class="text-2xl font-bold mb-3">Create avatar — DiceBear</h1>
+    <h1 class="text-2xl font-bold mb-3">Create avatar — DiceBear (WhatsApp-style approx)</h1>
     <div class="flex gap-6">
       <div>
-        <div class="preview mb-3" id="avatarPreview"><img id="avatarImg" src="/avatar/{{ username }}" style="width:100%;height:100%;object-fit:cover" /></div>
+        <div class="preview mb-3" id="avatarPreview"><img id="avatarImg" src="/avatar/{{ username }}" alt="avatar preview" /></div>
         <div style="display:flex;gap:8px;">
           <button id="saveBtn" class="px-3 py-2 rounded bg-indigo-600 text-white">Save avatar</button>
           <a href="/chat" class="px-3 py-2 rounded bg-gray-200">Back to chat</a>
         </div>
       </div>
       <div style="flex:1;">
-        <div class="mb-2"><label class="text-sm font-semibold">Style</label>
-          <select id="styleSelect" class="p-2 border rounded w-full"><option value="adventurer">adventurer</option><option value="avataaars">avataaars</option><option value="identicon">identicon</option><option value="bottts">bottts</option></select></div>
-        <div class="mb-2"><label class="text-sm font-semibold">Seed (name or random)</label><input id="seedInput" class="p-2 border rounded w-full" placeholder="seed (e.g. your name)" /></div>
-        <div class="mb-2"><label class="text-sm font-semibold">Quick presets (click)</label>
+        <div class="mb-2">
+          <label class="text-sm font-semibold">Style</label>
+          <select id="styleSelect" class="p-2 border rounded w-full">
+            <option value="adventurer">adventurer</option>
+            <option value="avataaars">avataaars</option>
+            <option value="bottts">bottts</option>
+            <option value="pixel-art">pixel-art</option>
+          </select>
+        </div>
+
+        <div class="mb-2">
+          <label class="text-sm font-semibold">Seed (name or random)</label>
+          <input id="seedInput" class="p-2 border rounded w-full" placeholder="seed (e.g. your name)" />
+        </div>
+
+        <div class="mb-2">
+          <label class="text-sm font-semibold">Quick presets (click)</label>
           <div class="grid grid-cols-3 gap-2 mt-2" id="presetGrid"></div>
         </div>
-        <div class="mb-2"><label class="text-sm font-semibold">Controls</label>
+
+        <div class="mb-2">
+          <label class="text-sm font-semibold">Controls</label>
           <div class="controls mt-2">
-            <div><label class="text-xs">Hair</label><select id="hair" class="p-2 border rounded"><option value="">auto</option><option value="short">short</option><option value="long">long</option><option value="bald">bald</option></select></div>
-            <div><label class="text-xs">Eyes</label><select id="eyes" class="p-2 border rounded"><option value="">auto</option><option value="happy">happy</option><option value="squint">squint</option><option value="surprised">surprised</option></select></div>
-            <div><label class="text-xs">Mouth</label><select id="mouth" class="p-2 border rounded"><option value="">auto</option><option value="smile">smile</option><option value="serious">serious</option><option value="laugh">laugh</option></select></div>
-            <div><label class="text-xs">Accessories</label><select id="accessory" class="p-2 border rounded"><option value="">none</option><option value="glasses">glasses</option><option value="earrings">earrings</option><option value="cap">cap</option></select></div>
+            <div><label class="text-xs">Skin tone</label>
+              <select id="skinTone" class="p-2 border rounded">
+                <option value="">auto</option>
+                <option value="T1">light</option>
+                <option value="T2">fair</option>
+                <option value="T3">tan</option>
+                <option value="T4">brown</option>
+                <option value="T5">dark</option>
+              </select>
+            </div>
+            <div><label class="text-xs">Hair</label>
+              <select id="hair" class="p-2 border rounded">
+                <option value="">auto</option><option value="short">short</option><option value="long">long</option><option value="curly">curly</option><option value="bald">bald</option>
+              </select>
+            </div>
+            <div><label class="text-xs">Eyes</label>
+              <select id="eyes" class="p-2 border rounded"><option value="">auto</option><option value="smile">smile</option><option value="round">round</option><option value="squint">squint</option></select>
+            </div>
+            <div><label class="text-xs">Mouth</label>
+              <select id="mouth" class="p-2 border rounded"><option value="">auto</option><option value="smile">smile</option><option value="serious">serious</option><option value="laugh">laugh</option></select>
+            </div>
+            <div><label class="text-xs">Accessory</label>
+              <select id="accessory" class="p-2 border rounded"><option value="">none</option><option value="glasses">glasses</option><option value="earrings">earrings</option><option value="cap">cap</option></select>
+            </div>
+            <div style="display:flex;align-items:center;">
+              <label class="switch"><input id="whatsappLike" type="checkbox" /> WhatsApp-style (approx)</label>
+            </div>
           </div>
         </div>
       </div>
@@ -456,30 +501,42 @@ AVATAR_CREATE_HTML = r'''<!doctype html>
 <script>
 function el(id){ return document.getElementById(id); }
 const username = "{{ username }}";
+
+// build params; we map UI controls into query params sent to proxy.
+// DiceBear will accept unknown params (they are ignored if not supported by the chosen sprite), but we use common param names.
 function buildParams(){
-  const params = {};
-  if(el('hair').value) params['hair'] = el('hair').value;
-  if(el('eyes').value) params['eyes'] = el('eyes').value;
-  if(el('mouth').value) params['mouth'] = el('mouth').value;
-  if(el('accessory').value) params['accessory'] = el('accessory').value;
-  return params;
+  const p = {};
+  if(el('skinTone').value) p['skin[]'] = el('skinTone').value;
+  if(el('hair').value) p['hair'] = el('hair').value;
+  if(el('eyes').value) p['eyes'] = el('eyes').value;
+  if(el('mouth').value) p['mouth'] = el('mouth').value;
+  if(el('accessory').value) p['accessories[]'] = el('accessory').value;
+  // whatsapp-like toggle forwards as a flag; proxy will apply a recommended set of params for that style.
+  if(el('whatsappLike').checked) p['whatsapp_like'] = '1';
+  return p;
 }
+
 function updatePreview(){
   const style = el('styleSelect').value;
   const seed = (el('seedInput').value || username || 'user').trim();
   const params = buildParams();
   const qs = new URLSearchParams(params).toString();
-  const url = `/proxy_dicebear?style=${encodeURIComponent(style)}&seed=${encodeURIComponent(seed)}${qs?('&'+qs):''}`;
-  el('avatarImg').src = url;
+  // proxy_dicebear will fetch and return the final SVG (CORS-safe).
+  const url = `/proxy_dicebear?style=${encodeURIComponent(style)}&seed=${encodeURIComponent(seed)}${qs ? '&' + qs : ''}`;
+  el('avatarImg').src = url + '&_=' + Date.now(); // cache-bust
 }
+
+// wire events
 el('styleSelect').addEventListener('change', updatePreview);
-el('seedInput').addEventListener('input', ()=>{ updatePreview(); });
-['hair','eyes','mouth','accessory'].forEach(id=> el(id).addEventListener('change', updatePreview));
+el('seedInput').addEventListener('input', updatePreview);
+['hair','eyes','mouth','accessory','skinTone','whatsappLike'].forEach(id => {
+  el(id).addEventListener('change', updatePreview);
+});
 
 // presets (random seeds)
 const presetGrid = el('presetGrid');
 for(let i=0;i<9;i++){
-  const seed = 'preset_'+Math.random().toString(36).slice(2,8);
+  const seed = 'user' + Math.random().toString(36).slice(2,8);
   const d = document.createElement('div'); d.className='tile'; d.textContent = seed;
   d.onclick = ()=>{
     el('seedInput').value = seed;
@@ -499,28 +556,82 @@ el('saveBtn').addEventListener('click', async ()=>{
   const j=await res.json(); if(j.avatar){ alert('Saved avatar'); location.href = '/chat'; }
 });
 
-// proxy endpoint used to avoid CORS issues and to centralize params
-// it is implemented server-side as /proxy_dicebear
+// initial preview
+updatePreview();
 </script>
-</body></html>
+</body>
+</html>
 '''
 
-# Proxy endpoint to return DiceBear SVG to browser (avoids third-party CORS and lets us tweak params)
+from urllib.parse import quote_plus, urlencode
+import requests
+from flask import request, current_app, Response
+
+def dicebear_avatar_url(style, seed, params):
+    """
+    Build DiceBear API URL (SVG). When params contains 'whatsapp_like' we apply
+    a recommended set of parameters to approximate WhatsApp's cartoony avatar.
+    Note: this is an approximation — official WhatsApp avatars are Meta's product.
+    """
+    # Remove control-only params
+    params = dict(params)  # copy
+    whatsapp_flag = params.pop('whatsapp_like', None)
+
+    # Basic normalization: prefer avataaars/adventurer for cartoony faces
+    if whatsapp_flag:
+        # prefer 'adventurer' which gives good face/body shapes; 'avataaars' is also good
+        style = style if style in ('adventurer','avataaars') else 'adventurer'
+        # suggested WhatsApp-like defaults (approximate)
+        defaults = {
+            # common, general options — DiceBear will ignore unknown names for some styles,
+            # but these help push toward a round, cartoony portrait.
+            'backgroundType': 'circle',    # request circular background when supported
+            'backgroundColor[]': 'transparent',
+            'radius': '50',                # roundedness if supported
+            # character options (names vary by sprite; proxy forwards them)
+            'hair': params.get('hair','short'),
+            'eyes': params.get('eyes','smile'),
+            'mouth': params.get('mouth','smile'),
+            'accessories[]': params.get('accessories[]', params.get('accessories','')),
+            # skin tone shorthands if provided
+            'skin[]': params.get('skin[]', params.get('skin','')),
+        }
+        # merge defaults but keep explicit params the user supplied
+        for k,v in defaults.items():
+            if k not in params or not params[k]:
+                params[k] = v
+
+    # Build base URL: DiceBear 9.x API returns SVG for /{style}/svg
+    base = f"https://api.dicebear.com/9.x/{quote_plus(style)}/svg"
+    # ensure seed is included
+    qs = {'seed': seed}
+    # add other params (flatten lists for arrays)
+    for k, v in params.items():
+        if v is None or v == '':
+            continue
+        # DiceBear expects repeated params for array-like fields; here we accept comma or array strings too.
+        qs[k] = v
+
+    url = base + '?' + urlencode(qs, doseq=True)
+    return url
+
 @app.route("/proxy_dicebear")
 def proxy_dicebear():
     style = request.args.get('style','adventurer')
     seed = request.args.get('seed','user')
-    params = dict(request.args)
-    # remove style and seed
-    params.pop('style', None); params.pop('seed', None)
+    # capture all query params except style/seed (so we can forward arbitrary controls)
+    params = {k: request.args.get(k) for k in request.args.keys() if k not in ('style','seed')}
     try:
         url = dicebear_avatar_url(style, seed, params)
+        # fetch svg from DiceBear
         r = requests.get(url, timeout=8)
         if r.status_code != 200:
-            return "error", 500
-        # respond as image/svg+xml
-        return app.response_class(r.content, mimetype='image/svg+xml')
+            current_app.logger.error("DiceBear returned status %s for url %s", r.status_code, url)
+            return "error fetching avatar", 502
+        # return SVG (CORS safe because it comes from our server)
+        return Response(r.content, mimetype='image/svg+xml')
     except Exception as e:
+        current_app.logger.exception("proxy_dicebear error")
         return f"error: {e}", 500
 
 # ---------- Templates (INDEX_HTML unchanged) ----------
@@ -943,149 +1054,126 @@ CHAT_HTML = r'''<!doctype html>
     .reaction-pill{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; background:rgba(255,255,255,0.95); box-shadow:0 6px 18px rgba(2,6,23,0.04); font-size:0.85rem; }
     .reaction-emoji{ width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
 
-    /* Liquid glass composer (drop-in) */
+    /* ===== Responsive composer (replace previous composer CSS) ===== */
     .composer {
       position: fixed;
       left: 0;
       right: 0;
-      bottom: env(safe-area-inset-bottom, 0);
+      /* leave a small safe area + fluid padding */
+      bottom: calc(env(safe-area-inset-bottom, 0) + 8px);
       display: flex;
       justify-content: center;
-      padding: 14px;
-      z-index: 70;
-      transition: transform .22s ease, backdrop-filter .25s ease;
+      padding: clamp(8px, 2.4vw, 18px);
+      z-index: 90;
+      transition: transform .22s ease, bottom .18s ease;
       pointer-events: auto;
     }
-
+    
     /* container that actually looks like glass */
     .composer-main {
       display: flex;
-      gap: 8px;
+      gap: clamp(6px, 1.6vw, 12px);
       align-items: center;
-      width: 100%;
+      width: min(980px, calc(100% - 32px)); /* never exceed 980, but keep margin */
       max-width: 980px;
-      border-radius: 18px;
-      padding: 10px;
+      border-radius: clamp(12px, 2.4vw, 20px);
+      padding: clamp(8px, 1.6vw, 14px);
       position: relative;
       overflow: visible;
-      /* frosted base */
-      background: linear-gradient(
-        180deg,
-        rgba(255,255,255,0.46) 0%,
-        rgba(245,247,250,0.30) 100%
-      );
-      /* heavy blur + saturation for glassy look */
+      background: linear-gradient(180deg, rgba(255,255,255,0.46) 0%, rgba(245,247,250,0.30) 100%);
       backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
       -webkit-backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
-      /* subtle inner glow and depth */
       box-shadow: 0 8px 30px rgba(8,15,30,0.08), inset 0 1px 0 rgba(255,255,255,0.35);
-      border-radius: 18px;
       border: 1px solid rgba(255,255,255,0.16);
       transition: box-shadow .22s ease, backdrop-filter .22s ease, transform .22s ease;
       z-index: 1;
+      /* allow items to wrap on narrow screens */
+      flex-wrap: nowrap;
     }
-
-    /* soft translucent border gradient using pseudo element */
-    .composer-main::before{
-      content: "";
-      position: absolute;
-      inset: 0;
-      margin: -1px; /* shows the border outside slightly */
-      border-radius: 20px;
-      pointer-events: none;
-      background: linear-gradient(120deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03) 35%, rgba(0,0,0,0.03) 100%);
-      mix-blend-mode: overlay;
-      z-index: 1;
+    
+    /* allow wrapping for very narrow widths so textarea can span full width */
+    @media (max-width: 480px) {
+      .composer-main { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+      .composer-main > * { flex-basis: 100%; } /* controls stack for tiny screens */
+      .composer-main .textarea { order: 1; width: 100%; }
+      .composer-main .plus-small { order: 0; margin-right: 4px; }
+      .composer-main .control-row { display:flex; gap:8px; align-items:center; width:100%; justify-content:space-between; }
     }
-
-    /* glossy sheen */
-    .composer-main::after{
-      content: "";
-      position: absolute;
-      left: -10%;
-      top: -40%;
-      width: 140%;
-      height: 60%;
-      transform: rotate(-12deg);
-      background: linear-gradient(180deg, rgba(255,255,255,0.50), rgba(255,255,255,0.14) 35%, rgba(255,255,255,0.02) 60%, rgba(255,255,255,0));
-      filter: blur(18px);
-      opacity: 0.6;
-      pointer-events: none;
-      z-index: 2;
-      transition: opacity .25s ease, transform .25s ease;
+    
+    /* medium widths (phones / small tablets) keep controls inline but scale them */
+    @media (min-width: 481px) and (max-width: 1023px) {
+      .composer-main { flex-wrap: nowrap; }
     }
-
-    /* move actual content above pseudo layers */
-    .composer-main > * { position: relative; z-index: 3; }
-
-    /* more pronounced look when "elevated" (open panel or focused) */
-    .composer-main.glass-elevated{
+    
+    /* desktop: a bit more breathing room */
+    @media (min-width: 1024px) {
+      .composer-main { padding: clamp(10px, 1.4vw, 18px); gap: clamp(8px, 1.2vw, 14px); }
+    }
+    
+    /* small controls sizes (fluid) */
+    .plus-small, .mic-btn, #emojiBtn {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width: clamp(36px, 7vw, 48px);
+      height: clamp(36px, 7vw, 48px);
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.66);
+      box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+      z-index: 5;
+      flex: 0 0 auto;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    /* circular mic on narrower screens */
+    @media (max-width:420px){
+      .mic-btn { border-radius: 999px; width: clamp(40px,9vw,48px); height: clamp(40px,9vw,48px); }
+    }
+    
+    /* text area responsive */
+    .textarea {
+      flex: 1 1 auto;
+      min-height: clamp(40px, 7vh, 72px);
+      max-height: 30vh;
+      border-radius: 12px;
+      border: 0;
+      padding: clamp(6px, 1.6vw, 10px);
+      resize: none;
+      font-size: clamp(.94rem, 1.8vw, 1.05rem);
+      background: white;
+      color: #0b1220;
+      outline: none;
+      box-sizing: border-box;
+      line-height: 1.3;
+    }
+    
+    /* ensure preview/attachment area doesn't break layout */
+    #attachmentPreview { width: 100%; box-sizing: border-box; }
+    
+    /* send button scale (fluid) */
+    #sendBtn {
+      flex: 0 0 auto;
+      padding: clamp(8px,1.8vw,12px) clamp(12px,2.2vw,16px);
+      margin-left: 6px;
+      border-radius: 10px;
+      font-size: clamp(.9rem,1.6vw,1rem);
+    }
+    
+    /* when composer is 'elevated' (panel open) adjust visuals */
+    .composer-main.glass-elevated {
+      transform: translateY(-6px);
       backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
       -webkit-backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
       box-shadow: 0 18px 40px rgba(6,10,25,0.12), inset 0 1px 0 rgba(255,255,255,0.45);
     }
-    .composer-main.glass-elevated::after{ opacity: 0.85; transform: rotate(-10deg) translateY(-4px); }
-
-    /* small controls look */
-    .plus-small, .mic-btn, #emojiBtn {
-      background: rgba(255,255,255,0.66);
-      backdrop-filter: blur(6px) saturate(1.1);
-      -webkit-backdrop-filter: blur(6px) saturate(1.1);
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.12);
-      box-shadow: 0 6px 18px rgba(2,6,23,0.06);
-      position: relative;
-      z-index: 5;
-    }
-
-    /* ensure mic is always interactive and visually indicates recording */
-    .mic-btn {
-      width:44px;
-      height:44px;
-      border-radius:50%;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      font-size:1.05rem;
-      cursor:pointer;
-      user-select:none;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .mic-btn.recording {
-      background: linear-gradient(180deg,#ffe6e6,#ffd6d6);
-      box-shadow: 0 8px 20px rgba(220,38,38,0.18), 0 0 0 6px rgba(255,66,66,0.06);
-      animation: mic-pulse 1.2s infinite;
-      color: #a50b0b;
-    }
-    @keyframes mic-pulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.06); }
-      100% { transform: scale(1); }
-    }
-
-    /* text area */
-    .textarea {
-      flex: 1;
-      min-height: 44px;
-      border-radius: 12px;
-      border: 0;
-      padding: 8px;
-      resize: none;
-      font-size: 1rem;
-      background: white;
-      color: #0b1220; /* dark text on light glass */
-      outline: none;
-    }
-
-    /* prefer reduced transparency or low-power devices: fallback */
-    @media (prefers-reduced-transparency: reduce), (scripting: none) {
-      .composer-main { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(255,255,255,0.85); }
-      .composer-main::after{ display:none; }
-    }
-
-    /* reduce motion */
-    @media (prefers-reduced-motion: reduce) {
-      .composer-main::after, .composer-main::before, .composer-main, .composer { transition: none; animation: none; }
+    
+    /* small screens: tuck less-important controls if space is tight */
+    @media (max-width: 380px){
+      /* hide plus on tiniest screens, keep emoji/mic/send accessible */
+      .plus-small { display:none; }
+      /* shrink gap */
+      .composer-main { gap: 6px; padding: 8px; }
     }
 
     /* attach menu vertical */
@@ -1151,7 +1239,7 @@ CHAT_HTML = r'''<!doctype html>
     <div id="attachmentPreview"></div>
 
     <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
-      <button id="plusBtn" class="plus-small bg-white shadow" style=" font-size: 1.25rem;" aria-label="Attach">＋</button>
+      <button id="plusBtn" class="plus-small bg-white shadow" style=" font-size: 2rem;" aria-label="Attach">＋</button>
 
       <!-- vertical attachment menu -->
       <div id="attachMenuVertical" class="attach-menu-vertical hidden" style="display:none;">
@@ -2016,6 +2104,36 @@ setInterval(()=>{
     setComposerElevated(isUp);
   }
 }, 250);
+// Move composer up when mobile virtual keyboard opens (improves small-screen UX)
+(function(){
+  const composer = document.getElementById('composer');
+  if(!composer) return;
+
+  // For devices that support visualViewport (most modern mobile browsers)
+  if(window.visualViewport){
+    let lastBottomOffset = 0;
+    function onViewportChange(){
+      // visualViewport.height is reduced when keyboard appears
+      const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
+      if(offset !== lastBottomOffset){
+        // set bottom to safe-area + offset so composer sits above keyboard
+        composer.style.bottom = `calc(env(safe-area-inset-bottom, 0) + ${offset}px)`;
+        lastBottomOffset = offset;
+      }
+    }
+    window.visualViewport.addEventListener('resize', onViewportChange);
+    window.visualViewport.addEventListener('scroll', onViewportChange);
+    // reset on focus out
+    window.addEventListener('blur', ()=>{ composer.style.bottom = `calc(env(safe-area-inset-bottom, 0) + 8px)`; });
+    // call once to init
+    onViewportChange();
+  }else{
+    // fallback: slightly lift composer while input is focused
+    const input = document.getElementById('msg');
+    input && input.addEventListener('focus', ()=> composer.style.transform = 'translateY(-8vh)');
+    input && input.addEventListener('blur', ()=> composer.style.transform = 'translateY(0)');
+  }
+})();
 </script>
 </body>
 </html>
