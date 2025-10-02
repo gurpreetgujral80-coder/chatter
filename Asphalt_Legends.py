@@ -833,254 +833,280 @@ renderPreview();
 # ---- CHAT HTML (heavily modified) ----
 # --- CHAT page: updated with emoji-mart v5, sticker/gif/avatar/emoji panel, typing indicator, attach menu, poll modal, avatar flow ---
 CHAT_HTML = r'''<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>InfinityChatter ♾️ — Chat</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>InfinityChatter ♾️ — Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- emoji-mart v5 browser build (exposes global EmojiMart for vanilla JS) -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/emoji-mart@5.6.0/dist/browser.css">
-<script src="https://cdn.jsdelivr.net/npm/emoji-mart@5.6.0/dist/browser.js"></script>
+  <!-- emoji-mart v5 browser build (exposes global EmojiMart for vanilla JS) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/emoji-mart@5.6.0/dist/browser.css">
+  <script src="https://cdn.jsdelivr.net/npm/emoji-mart@5.6.0/dist/browser.js"></script>
 
-<style>
-  :root{
-    --glass-bg: rgba(255,255,255,0.8);
-    --download-bg: rgba(17,24,39,0.7);
-  }
+  <style>
+    :root{
+      --glass-bg: rgba(255,255,255,0.8);
+      --download-bg: rgba(17,24,39,0.7);
+    }
 
-  /* page background image */
-  body{
-    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-    background: url('/static/IMG_5939.jpeg') no-repeat center center fixed;
-    background-size: cover;
-    margin:0;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-  }
+    /* page background image */
+    body{
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: url('/static/IMG_5939.jpeg') no-repeat center center fixed;
+      background-size: cover;
+      margin:0;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
 
-  /*
-    Responsive header / heading:
-    - Phones: heading text appears UNDER the heading image (stacked).
-    - Tablets: image becomes bigger, still stacked for clarity.
-    - Laptops+: image bigger and heading/controls arranged side-by-side.
-  */
-  header{
-    position:fixed;
-    left:0;
-    right:0;
-    top:0;
-    height:auto;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:12px;
-    background:linear-gradient(90deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95));
-    z-index:40;
-    padding:10px 14px;
-    border-bottom:1px solid rgba(0,0,0,0.04);
-    box-sizing:border-box;
-    flex-wrap:wrap;
-    text-align:center;
-  }
+    /*
+      Responsive header / heading...
+    */
+    header{
+      position:fixed;
+      left:0;
+      right:0;
+      top:0;
+      height:auto;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      background:linear-gradient(90deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95));
+      z-index:40;
+      padding:10px 14px;
+      border-bottom:1px solid rgba(0,0,0,0.04);
+      box-sizing:border-box;
+      flex-wrap:wrap;
+      text-align:center;
+    }
 
-  .heading-wrapper{
-    display:flex;
-    flex-direction:column; /* default phones: image then heading below */
-    align-items:center;
-    gap:8px;
-    width:100%;
-    max-width:980px;
-  }
+    .heading-wrapper{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:8px;
+      width:100%;
+      max-width:980px;
+    }
 
-  .heading-wrapper img{
-    height:56px;
-    width:auto;
-    border-radius:10px;
-    object-fit:cover;
-  }
-  .heading-title{
-    font-weight:800;
-    font-size:1.05rem;
-    line-height:1;
-  }
+    .heading-wrapper img{
+      height:56px;
+      width:auto;
+      border-radius:10px;
+      object-fit:cover;
+    }
+    .heading-title{
+      font-weight:800;
+      font-size:1.05rem;
+      line-height:1;
+    }
 
-  /* Tablet - larger image and heading */
-  @media (min-width:768px){
-    .heading-wrapper img{ height:80px; }
-    .heading-title{ font-size:1.35rem; }
-    header{ padding:12px 18px; }
-  }
+    @media (min-width: 768px) {
+      header { padding: 12px 18px; justify-content:center; }
+      .heading-wrapper { display:flex; align-items:center; }
+      .heading-wrapper img { height:80px; }
+      .heading-title { font-size:1.35rem; }
+    }
+    @media (min-width: 1024px) {
+      header { justify-content: space-between; padding: 12px 28px; }
+      .heading-wrapper { flex-direction: row; align-items:center; text-align:left; width:auto; }
+      .heading-wrapper img { height:96px; }
+      .heading-title { font-size:1.6rem; margin-left:12px; }
+    }
 
-  /* Laptop and up - side-by-side layout */
-  @media (min-width:1024px){
-    header{ justify-content:space-between; padding:12px 28px; }
-    .heading-wrapper{ flex-direction:row; align-items:center; text-align:left; width:auto; }
-    .heading-wrapper img{ height:96px; }
-    .heading-title{ font-size:1.6rem; margin-left:12px; }
-  }
+    .header-actions{ position:absolute; right:12px; top:12px; display:flex; gap:8px; align-items:center; }
+    .profile-name{ cursor:pointer; padding:6px 10px; border-radius:10px; background:white; box-shadow:0 6px 18px rgba(2,6,23,0.04); }
 
-  /* Right-side profile area */
-  .header-actions{ position:absolute; right:12px; top:12px; display:flex; gap:8px; align-items:center; }
-  .profile-name{ cursor:pointer; padding:6px 10px; border-radius:10px; background:white; box-shadow:0 6px 18px rgba(2,6,23,0.04); }
+    main{ padding:120px 12px 200px; max-width:980px; margin:0 auto; min-height:calc(100vh - 260px); box-sizing:border-box; }
+    .msg-row{ margin-bottom:12px; display:flex; gap:8px; align-items:flex-start; }
+    .msg-body{ display:flex; flex-direction:column; align-items:flex-start; min-width:0; }
+    .bubble{ position:relative; padding:10px 14px; border-radius:12px; display:inline-block; word-break:break-word; white-space:pre-wrap; background-clip:padding-box; box-shadow: 0 6px 18px rgba(2,6,23,0.04); }
+    .me{ background: linear-gradient(90deg,#e6ffed,#dcffe6); border-bottom-right-radius:6px; align-self:flex-end; margin-left:auto; }
+    .them{ background: rgba(255,255,255,0.95); border-bottom-left-radius:6px; margin-right:auto; }
+    .bubble .three-dot { position:absolute; top:8px; right:8px; background:transparent; border:none; font-size:1.05rem; padding:4px; cursor:pointer; color:#111827; border-radius:6px; }
+    .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; width:100%; transition: color 0.2s ease; }
 
-  main{ padding:120px 12px 200px; max-width:980px; margin:0 auto; min-height:calc(100vh - 260px); box-sizing:border-box; }
-  .msg-row{ margin-bottom:12px; display:flex; gap:8px; align-items:flex-start; }
-  .msg-body{ display:flex; flex-direction:column; align-items:flex-start; min-width:0; }
-  .bubble{ position:relative; padding:10px 14px; border-radius:12px; display:inline-block; word-break:break-word; white-space:pre-wrap; background-clip:padding-box; box-shadow: 0 6px 18px rgba(2,6,23,0.04); }
-  .me{ background: linear-gradient(90deg,#e6ffed,#dcffe6); border-bottom-right-radius:6px; align-self:flex-end; margin-left:auto; }
-  .them{ background: rgba(255,255,255,0.95); border-bottom-left-radius:6px; margin-right:auto; }
-  .bubble .three-dot { position:absolute; top:8px; right:8px; background:transparent; border:none; font-size:1.05rem; padding:4px; cursor:pointer; color:#111827; border-radius:6px; }
-  .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; width:100%; transition: color 0.2s ease; }
+    /* attachments & previews */
+    #attachmentPreview{ padding:8px; border-bottom:1px solid rgba(0,0,0,0.06); display:none; }
+    .preview-item{ position:relative; display:inline-block; margin-right:8px; vertical-align:top; max-width:90px; }
+    .preview-item img, .preview-item video{ max-width:100%; border-radius:8px; display:block; }
+    .media-container{ position:relative; display:inline-block; width:100%; max-width:420px; }
+    .media-container img.thumb{ display:block; width:100%; border-radius:10px; }
+    .media-container .play-overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+    .media-container .play-overlay .play-circle{ width:56px; height:56px; background: rgba(0,0,0,0.6); border-radius:999px; display:flex; align-items:center; justify-content:center; color:white; font-size:22px; }
+    .download-btn{ position:absolute; top:8px; right:8px; width:36px; height:36px; border-radius:999px; display:flex; align-items:center; justify-content:center; text-decoration:none; color:white; background:var(--download-bg); font-size:1.05rem; z-index:10; box-shadow:0 6px 18px rgba(0,0,0,0.2); }
+    .doc-link{ display:inline-flex; align-items:center; gap:10px; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,0.04); margin-top:8px; text-decoration:none; color:#111827; }
 
-  /* attachments & previews */
-  #attachmentPreview{ padding:8px; border-bottom:1px solid rgba(0,0,0,0.06); display:none; }
-  .preview-item{ position:relative; display:inline-block; margin-right:8px; vertical-align:top; max-width:90px; }
-  .preview-item img, .preview-item video{ max-width:100%; border-radius:8px; display:block; }
-  .media-container{ position:relative; display:inline-block; width:100%; max-width:420px; }
-  .media-container img.thumb{ display:block; width:100%; border-radius:10px; }
-  .media-container .play-overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
-  .media-container .play-overlay .play-circle{ width:56px; height:56px; background: rgba(0,0,0,0.6); border-radius:999px; display:flex; align-items:center; justify-content:center; color:white; font-size:22px; }
-  .download-btn{ position:absolute; top:8px; right:8px; width:36px; height:36px; border-radius:999px; display:flex; align-items:center; justify-content:center; text-decoration:none; color:white; background:var(--download-bg); font-size:1.05rem; z-index:10; box-shadow:0 6px 18px rgba(0,0,0,0.2); }
-  .doc-link{ display:inline-flex; align-items:center; gap:10px; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,0.04); margin-top:8px; text-decoration:none; color:#111827; }
+    .reaction-bar{ display:flex; gap:6px; margin-top:8px; align-items:center; }
+    .reaction-pill{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; background:rgba(255,255,255,0.95); box-shadow:0 6px 18px rgba(2,6,23,0.04); font-size:0.85rem; }
+    .reaction-emoji{ width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
 
-  .reaction-bar{ display:flex; gap:6px; margin-top:8px; align-items:center; }
-  .reaction-pill{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; background:rgba(255,255,255,0.95); box-shadow:0 6px 18px rgba(2,6,23,0.04); font-size:0.85rem; }
-  .reaction-emoji{ width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
+    /* Liquid glass composer (drop-in) */
+    .composer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: env(safe-area-inset-bottom, 0);
+      display: flex;
+      justify-content: center;
+      padding: 14px;
+      z-index: 70;
+      transition: transform .22s ease, backdrop-filter .25s ease;
+      pointer-events: auto;
+    }
 
-  /* Liquid glass composer (drop-in) */
-  .composer {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: env(safe-area-inset-bottom, 0);
-    display: flex;
-    justify-content: center;
-    padding: 14px;
-    z-index: 70;
-    transition: transform .22s ease, backdrop-filter .25s ease;
-    pointer-events: auto;
-  }
+    /* container that actually looks like glass */
+    .composer-main {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      width: 100%;
+      max-width: 980px;
+      border-radius: 18px;
+      padding: 10px;
+      position: relative;
+      overflow: visible;
+      /* frosted base */
+      background: linear-gradient(
+        180deg,
+        rgba(255,255,255,0.46) 0%,
+        rgba(245,247,250,0.30) 100%
+      );
+      /* heavy blur + saturation for glassy look */
+      backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
+      -webkit-backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
+      /* subtle inner glow and depth */
+      box-shadow: 0 8px 30px rgba(8,15,30,0.08), inset 0 1px 0 rgba(255,255,255,0.35);
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.16);
+      transition: box-shadow .22s ease, backdrop-filter .22s ease, transform .22s ease;
+      z-index: 1;
+    }
 
-  /* container that actually looks like glass */
-  .composer-main {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    width: 100%;
-    max-width: 980px;
-    border-radius: 18px;
-    padding: 10px;
-    position: relative;
-    overflow: visible;
-    /* frosted base */
-    background: linear-gradient(
-      180deg,
-      rgba(255,255,255,0.46) 0%,
-      rgba(245,247,250,0.30) 100%
-    );
-    /* heavy blur + saturation for glassy look */
-    backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
-    -webkit-backdrop-filter: blur(12px) saturate(1.25) contrast(1.02);
-    /* subtle inner glow and depth */
-    box-shadow: 0 8px 30px rgba(8,15,30,0.08), inset 0 1px 0 rgba(255,255,255,0.35);
-    border-radius: 18px;
-    border: 1px solid rgba(255,255,255,0.16);
-    transition: box-shadow .22s ease, backdrop-filter .22s ease, transform .22s ease;
-  }
+    /* soft translucent border gradient using pseudo element */
+    .composer-main::before{
+      content: "";
+      position: absolute;
+      inset: 0;
+      margin: -1px; /* shows the border outside slightly */
+      border-radius: 20px;
+      pointer-events: none;
+      background: linear-gradient(120deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03) 35%, rgba(0,0,0,0.03) 100%);
+      mix-blend-mode: overlay;
+      z-index: 1;
+    }
 
-  /* soft translucent border gradient using pseudo element */
-  .composer-main::before{
-    content: "";
-    position: absolute;
-    inset: 0;
-    margin: -1px; /* shows the border outside slightly */
-    border-radius: 20px;
-    pointer-events: none;
-    background: linear-gradient(120deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03) 35%, rgba(0,0,0,0.03) 100%);
-    mix-blend-mode: overlay;
-    z-index: 1;
-  }
+    /* glossy sheen */
+    .composer-main::after{
+      content: "";
+      position: absolute;
+      left: -10%;
+      top: -40%;
+      width: 140%;
+      height: 60%;
+      transform: rotate(-12deg);
+      background: linear-gradient(180deg, rgba(255,255,255,0.50), rgba(255,255,255,0.14) 35%, rgba(255,255,255,0.02) 60%, rgba(255,255,255,0));
+      filter: blur(18px);
+      opacity: 0.6;
+      pointer-events: none;
+      z-index: 2;
+      transition: opacity .25s ease, transform .25s ease;
+    }
 
-  /* glossy sheen */
-  .composer-main::after{
-    content: "";
-    position: absolute;
-    left: -10%;
-    top: -40%;
-    width: 140%;
-    height: 60%;
-    transform: rotate(-12deg);
-    background: linear-gradient(180deg, rgba(255,255,255,0.50), rgba(255,255,255,0.14) 35%, rgba(255,255,255,0.02) 60%, rgba(255,255,255,0));
-    filter: blur(18px);
-    opacity: 0.6;
-    pointer-events: none;
-    z-index: 2;
-    transition: opacity .25s ease, transform .25s ease;
-  }
+    /* move actual content above pseudo layers */
+    .composer-main > * { position: relative; z-index: 3; }
 
-  /* move actual content above pseudo layers */
-  .composer-main > * { position: relative; z-index: 3; }
+    /* more pronounced look when "elevated" (open panel or focused) */
+    .composer-main.glass-elevated{
+      backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
+      -webkit-backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
+      box-shadow: 0 18px 40px rgba(6,10,25,0.12), inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+    .composer-main.glass-elevated::after{ opacity: 0.85; transform: rotate(-10deg) translateY(-4px); }
 
-  /* more pronounced look when "elevated" (open panel or focused) */
-  .composer-main.glass-elevated{
-    backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
-    -webkit-backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
-    box-shadow: 0 18px 40px rgba(6,10,25,0.12), inset 0 1px 0 rgba(255,255,255,0.45);
-  }
-  .composer-main.glass-elevated::after{ opacity: 0.85; transform: rotate(-10deg) translateY(-4px); }
+    /* small controls look */
+    .plus-small, .mic-btn, #emojiBtn {
+      background: rgba(255,255,255,0.66);
+      backdrop-filter: blur(6px) saturate(1.1);
+      -webkit-backdrop-filter: blur(6px) saturate(1.1);
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+      position: relative;
+      z-index: 5;
+    }
 
-  /* small controls look */
-  .plus-small, .mic-btn, #emojiBtn {
-    background: rgba(255,255,255,0.66);
-    backdrop-filter: blur(6px) saturate(1.1);
-    -webkit-backdrop-filter: blur(6px) saturate(1.1);
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.12);
-    box-shadow: 0 6px 18px rgba(2,6,23,0.06);
-  }
+    /* ensure mic is always interactive and visually indicates recording */
+    .mic-btn {
+      width:44px;
+      height:44px;
+      border-radius:50%;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:1.05rem;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mic-btn.recording {
+      background: linear-gradient(180deg,#ffe6e6,#ffd6d6);
+      box-shadow: 0 8px 20px rgba(220,38,38,0.18), 0 0 0 6px rgba(255,66,66,0.06);
+      animation: mic-pulse 1.2s infinite;
+      color: #a50b0b;
+    }
+    @keyframes mic-pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+      100% { transform: scale(1); }
+    }
 
-  /* text area */
-  .textarea {
-    flex: 1;
-    min-height: 44px;
-    border-radius: 12px;
-    border: 0;
-    padding: 8px;
-    resize: none;
-    font-size: 1rem;
-    background: transparent;
-    color: #0b1220; /* dark text on light glass */
-    outline: none;
-  }
+    /* text area */
+    .textarea {
+      flex: 1;
+      min-height: 44px;
+      border-radius: 12px;
+      border: 0;
+      padding: 8px;
+      resize: none;
+      font-size: 1rem;
+      background: white;
+      color: #0b1220; /* dark text on light glass */
+      outline: none;
+    }
 
-  /* prefer reduced transparency or low-power devices: fallback */
-  @media (prefers-reduced-transparency: reduce), (scripting: none) {
-    .composer-main { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(255,255,255,0.85); }
-    .composer-main::after{ display:none; }
-  }
+    /* prefer reduced transparency or low-power devices: fallback */
+    @media (prefers-reduced-transparency: reduce), (scripting: none) {
+      .composer-main { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(255,255,255,0.85); }
+      .composer-main::after{ display:none; }
+    }
 
-  /* reduce motion */
-  @media (prefers-reduced-motion: reduce) {
-    .composer-main::after, .composer-main::before, .composer-main, .composer { transition: none; }
-  }
+    /* reduce motion */
+    @media (prefers-reduced-motion: reduce) {
+      .composer-main::after, .composer-main::before, .composer-main, .composer { transition: none; animation: none; }
+    }
 
-  /* attach menu vertical */
-  .attach-menu-vertical{ position:fixed; right:18px; bottom:100px; display:flex; flex-direction:column; gap:10px; border-radius:12px; z-index:80; }
-  .attach-card{ background:white; padding:10px 14px; min-width:140px; box-shadow:0 10px 30px rgba(0,0,0,0.12); display:flex; gap:8px; align-items:center; cursor:pointer; }
+    /* attach menu vertical */
+    .attach-menu-vertical{ position:fixed; right:18px; bottom:100px; display:flex; flex-direction:column; gap:10px; border-radius:12px; z-index:80; }
+    .attach-card{ background:white; padding:10px 14px; min-width:140px; box-shadow:0 10px 30px rgba(0,0,0,0.12); display:flex; gap:8px; align-items:center; cursor:pointer; }
 
-  /* sticker panel */
-  #stickerPanel{ position:fixed; left:0; right:0; bottom:76px; height:40vh; background:linear-gradient(180deg,#fff,#f9fafb); border-top-left-radius:14px; border-top-right-radius:14px; box-shadow:0 -10px 30px rgba(0,0,0,0.06); padding:12px; display:none; z-index:75; overflow:auto; }
-  .panel-tabs{ display:flex; gap:8px; margin-bottom:8px; }
-  .panel-tabs button{ padding:6px 10px; border-radius:999px; border:0; background:#f3f4f6; cursor:pointer; }
-  .avatar-controls .tile { display:inline-flex; gap:8px; padding:8px; border-radius:8px; background:#fff; box-shadow:0 6px 18px rgba(2,6,23,0.04); cursor:pointer; text-align:center; flex-direction:column; width:92px; align-items:center; }
+    /* sticker panel */
+    #stickerPanel{ position:fixed; left:0; right:0; bottom:76px; height:40vh; background:linear-gradient(180deg,#fff,#f9fafb); border-top-left-radius:14px; border-top-right-radius:14px; box-shadow:0 -10px 30px rgba(0,0,0,0.06); padding:12px; display:none; z-index:75; overflow:auto; }
+    .panel-tabs{ display:flex; gap:8px; margin-bottom:8px; }
+    .panel-tabs button{ padding:6px 10px; border-radius:999px; border:0; background:#f3f4f6; cursor:pointer; }
+    .avatar-controls .tile { display:inline-flex; gap:8px; padding:8px; border-radius:8px; background:#fff; box-shadow:0 6px 18px rgba(2,6,23,0.04); cursor:pointer; text-align:center; flex-direction:column; width:92px; align-items:center; }
 
-  /* polling modal */
-  .modal { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); z-index:120; }
-  .modal-card { width:100%; max-width:560px; background:white; border-radius:12px; padding:16px; }
+    /* polling modal */
+    .modal { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); z-index:120; }
+    .modal-card { width:100%; max-width:560px; background:white; border-radius:12px; padding:16px; }
 
-  /* small utilities */
-  .hidden{ display:none; }
-</style>
-</head><body>
+    /* small utilities */
+    .hidden{ display:none; }
+  </style>
+</head>
+<body>
 
 <header>
   <div class="heading-wrapper" role="banner" aria-label="App header">
@@ -1090,7 +1116,7 @@ CHAT_HTML = r'''<!doctype html>
 
   <div class="header-actions" role="navigation" aria-label="Profile actions">
     <div id="profileBtn" class="profile-name">{{ username }}</div>
-    <div id="profileMenu" class="menu hidden" style="position:absolute; right:12px; top:56px;">
+    <div id="profileMenu" class="menu hidden" style="display:none; position: absolute; right:12px; top:48px; border-radius:12px; overflow:hidden;">
         <div id="viewProfileBtn" class="attach-card">Profile</div>
         <form method="post" action="{{ url_for('logout') }}" style="margin:0;"><button type="submit" class="attach-card">Logout</button></form>
     </div>
@@ -1115,7 +1141,6 @@ CHAT_HTML = r'''<!doctype html>
   </div>
 
   <div id="panelContent" style="display:block;">
-    <!-- content injected here -->
     <div id="panelGrid" class="grid grid-cols-4 gap-3"></div>
   </div>
 </div>
@@ -1126,7 +1151,7 @@ CHAT_HTML = r'''<!doctype html>
     <div id="attachmentPreview"></div>
 
     <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
-      <button id="plusBtn" class="plus-small bg-white shadow" aria-label="Attach">＋</button>
+      <button id="plusBtn" class="plus-small bg-white shadow" style=" font-size: 1.25rem;" aria-label="Attach">＋</button>
 
       <!-- vertical attachment menu -->
       <div id="attachMenuVertical" class="attach-menu-vertical hidden" style="display:none;">
@@ -1143,7 +1168,9 @@ CHAT_HTML = r'''<!doctype html>
       <!-- emoji button (opens emoji-mart picker) -->
       <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white" aria-label="Emoji">😊</button>
 
-      <button id="mic" class="mic-btn bg-white w-11 h-11 rounded-full" aria-label="Voice message">🎙️</button>
+      <!-- mic button: fixed and interactive -->
+      <button id="mic" class="mic-btn" aria-label="Voice message" aria-pressed="false" title="Hold to record or click to toggle">🎙️</button>
+
       <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white" aria-label="Send">Send</button>
     </div>
   </div>
@@ -1242,14 +1269,11 @@ socket.on('stop_typing', (d)=> {
 
 /* =========================
    Emoji-mart picker integration (v5)
-   - uses the emoji-mart v5 browser build available via CDN
-   - when user chooses emoji, insert into textarea cursor spot
    ========================= */
 let emojiPicker = null;
 document.getElementById('emojiBtn').addEventListener('click', (ev)=>{
   ev.stopPropagation();
   if(!emojiPicker){
-    // v5 exposes global EmojiMart.Picker
     const picker = new EmojiMart.Picker({
       onEmojiSelect: (emoji) => {
         insertAtCursor(inputEl, emoji.native || (emoji.colons ? emoji.colons : '') );
@@ -1267,7 +1291,6 @@ document.getElementById('emojiBtn').addEventListener('click', (ev)=>{
     emojiPicker.appendChild(picker);
     document.body.appendChild(emojiPicker);
   }
-  // position near button
   const rect = document.getElementById('emojiBtn').getBoundingClientRect();
   const left = Math.max(8, rect.left);
   const top = rect.top - 360;
@@ -1295,7 +1318,6 @@ plusBtn.addEventListener('click', (e)=>{
   e.stopPropagation();
   const showing = attachMenuVertical.style.display === 'flex';
   attachMenuVertical.style.display = showing ? 'none' : 'flex';
-  // auto hide on scroll
   if(!showing){
     window.addEventListener('scroll', hideAttachMenuOnce, { once:true });
   }
@@ -1307,7 +1329,6 @@ attachMenuVertical.querySelectorAll('.attach-card').forEach(c=>{
   c.addEventListener('click', (ev)=>{
     const action = c.dataset.action;
     if(action === 'camera'){
-      // open camera capture input
       openFileSelector(true);
     } else if(action === 'gallery'){
       openFileSelector(false);
@@ -1324,9 +1345,7 @@ attachMenuVertical.querySelectorAll('.attach-card').forEach(c=>{
         const lat = pos.coords.latitude.toFixed(6);
         const lng = pos.coords.longitude.toFixed(6);
         const url = `https://www.google.com/maps?q=${lat},${lng}`;
-        // Use free OSM-based static map preview (no API key)
         const mapImg = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=600,300&z=15&l=map&pt=${lng},${lat},pm2rdm`;
-        // send as location message
         await fetch('/send_message', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
@@ -1382,7 +1401,7 @@ function setAttachmentPreview(files){
   });
 }
 
-/* createVideoThumbnailFromFile helper (same approach as your original) */
+/* createVideoThumbnailFromFile helper */
 function createVideoThumbnailFromFile(file, seekTo=0.5){
   return new Promise((resolve)=>{
     const url = URL.createObjectURL(file);
@@ -1428,28 +1447,17 @@ const stickerPanel = document.getElementById('stickerPanel');
 const panelGrid = document.getElementById('panelGrid');
 document.getElementById('closeStickerPanel').addEventListener('click', hideStickerPanel);
 
-document.getElementById('tab_stickers').addEventListener('click', async ()=>{
-  await loadStickers();
-});
-document.getElementById('tab_gifs').addEventListener('click', async ()=>{
-  await loadGIFs();
-});
-document.getElementById('tab_avatars').addEventListener('click', async ()=>{
-  await loadAvatars();
-});
-document.getElementById('tab_emoji').addEventListener('click', ()=>{
-  // open emoji picker
-  document.getElementById('emojiBtn').click();
-});
+document.getElementById('tab_stickers').addEventListener('click', async ()=>{ await loadStickers(); });
+document.getElementById('tab_gifs').addEventListener('click', async ()=>{ await loadGIFs(); });
+document.getElementById('tab_avatars').addEventListener('click', async ()=>{ await loadAvatars(); });
+document.getElementById('tab_emoji').addEventListener('click', ()=>{ document.getElementById('emojiBtn').click(); });
 
 document.getElementById('stickerPickerBtn')?.addEventListener('click', ()=> showStickerPanel());
 
 function showStickerPanel(){
   stickerPanel.style.display='block';
   stickerPanel.setAttribute('aria-hidden','false');
-  // bring composer up
   composerEl.style.transform = 'translateY(-40vh)';
-  // default load stickers
   loadStickers();
   setComposerElevated(true);
 }
@@ -1460,7 +1468,7 @@ function hideStickerPanel(){
   setComposerElevated(false);
 }
 
-/* load local stickers (from /static/stickers/) */
+/* load local stickers */
 async function loadStickers(){
   panelGrid.innerHTML = '<div>Loading stickers…</div>';
   try{
@@ -1482,7 +1490,6 @@ async function loadStickers(){
 async function loadGIFs(){
   panelGrid.innerHTML = '<div>Loading GIFs…</div>';
   try{
-    // Tenor public trending endpoint (limit results)
     const r = await fetch('https://g.tenor.com/v1/trending?limit=28');
     let data = await r.json();
     const results = data && data.results ? data.results : [];
@@ -1497,7 +1504,6 @@ async function loadGIFs(){
       panelGrid.appendChild(w);
     }
   }catch(e){
-    // fallback: ask server for /generated_gifs
     try{
       const r2 = await fetch('/generated_gifs');
       const list = await r2.json();
@@ -1519,38 +1525,28 @@ async function loadGIFs(){
 async function loadAvatars(){
   panelGrid.innerHTML = '<div>Loading avatars…</div>';
   panelGrid.innerHTML = '';
-  // Sample preset seeds to show variety
   const presets = ['hero', 'adventurer', 'brave', 'spark', 'mystic', 'dreamer', 'alpha', 'nova', 'sol', 'luna'];
   for(const seed of presets){
     const img = document.createElement('img');
-    // Use DiceBear HTTP API (adventurer style) to render SVG as PNG-friendly URL
     const url = `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(seed)}&backgroundColor=transparent`;
     const wrapper = document.createElement('div'); wrapper.style.cursor='pointer';
     img.src = url;
     img.style.width='100%'; img.style.borderRadius='8px';
     wrapper.appendChild(img);
     wrapper.onclick = async ()=> {
-      // send selected avatar as sticker
       await fetch('/send_message',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text:'', attachments:[{ type:'sticker', url }] }) });
       hideStickerPanel(); messagesEl.innerHTML=''; lastId=0; poll();
     };
     panelGrid.appendChild(wrapper);
   }
-
-  // show saved avatars cached on server (server should provide an endpoint if listing required)
 }
 
-/* =========================
-   Avatar creation page trigger
-   ========================= */
+/* Avatar creation page trigger */
 document.getElementById('createAvatarBtn')?.addEventListener('click', ()=>{
-  // open the /avatar_create page in a new window (server route expected)
   window.open('/avatar_create', '_blank');
 });
 
-/* =========================
-   Poll modal handling
-   ========================= */
+/* Poll modal handling */
 document.getElementById('pollBtn')?.addEventListener('click', ()=>{
   document.getElementById('pollModal').style.display='block'; document.getElementById('pollModal').classList.remove('hidden');
 });
@@ -1566,14 +1562,13 @@ document.getElementById('pollForm')?.addEventListener('submit', async (e)=>{
   const q = document.getElementById('poll_question').value.trim();
   const opts = Array.from(document.querySelectorAll('input[name="option"]')).map(i=>i.value.trim()).filter(v=>v);
   if(!q || opts.length < 2) return alert('Question and at least 2 options required');
-  // send as poll message
   await fetch('/send_message',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text:q, attachments:[{ type:'poll', options:opts }] }) });
   document.getElementById('pollModal').style.display='none'; document.getElementById('pollModal').classList.add('hidden');
   messagesEl.innerHTML=''; lastId=0; poll();
 });
 
 /* =========================
-   Message polling/rendering (kept similar to original)
+   Message polling/rendering
    ========================= */
 async function poll(){
   try{
@@ -1610,7 +1605,6 @@ async function poll(){
           } else if(a.type === 'poll'){
             const p = document.createElement('div'); p.className='poll'; p.style.marginTop='8px'; p.innerHTML = `<strong>Poll:</strong> ${escapeHtml(m.text || '')}`;
             bubble.appendChild(p);
-            // render options
             if(a.options && a.options.length){
               const ol = document.createElement('div'); ol.style.marginTop='6px';
               a.options.forEach((op, i)=>{
@@ -1619,14 +1613,12 @@ async function poll(){
               bubble.appendChild(ol);
             }
           } else {
-            // image / video / audio / doc / location
             const { element, mediaElement } = createAttachmentElement(a);
             if(element) bubble.appendChild(element);
           }
         }
       }
 
-      // reactions display under bubble
       if(m.reactions && m.reactions.length){
         const agg = {};
         for(const r of m.reactions){
@@ -1668,7 +1660,6 @@ async function poll(){
         if(m.sender === myName) menu.appendChild(del);
         menu.appendChild(react);
         document.body.appendChild(menu);
-        // auto-hide on outside click
         const hide = ()=>{ menu.remove(); document.removeEventListener('click', hide); };
         setTimeout(()=> document.addEventListener('click', hide), 50);
       };
@@ -1704,14 +1695,12 @@ function showEmojiPickerForMessage(msgId, anchorEl){
   setTimeout(()=> document.addEventListener('click', hide), 50);
 }
 
-/* Attachment element factory (image/video/audio/doc/location)
-   - Note: for audio messages we do NOT create a download button per your request
-*/
+/* Attachment element factory (image/video/audio/doc/location) */
 function createAttachmentElement(a){
   const container = document.createElement('div');
   container.className = 'media-container mt-2';
 
-  if(a.type === 'audio'){
+  if(a.type === 'audio' || (a.type === 'voice')) {
     const au = document.createElement('audio'); au.src = a.url; au.controls = true; au.className = 'mt-2';
     container.appendChild(au);
     return { element: container };
@@ -1768,7 +1757,120 @@ function createAttachmentElement(a){
   return { element: null };
 }
 
-/* Send message (optimistic UI) */
+/* =========================
+   Mic (voice message) implementation
+   - toggles recording, provides visual state, uploads automatically on stop
+   ========================= */
+const micBtn = document.getElementById('mic');
+let mediaRecorder = null;
+let micStream = null;
+let audioChunks = [];
+let isRecording = false;
+
+function updateMicUI(state){
+  if(state){
+    micBtn.classList.add('recording');
+    micBtn.setAttribute('aria-pressed','true');
+    micBtn.title = 'Recording… click to stop';
+    micBtn.innerText = '⏺️';
+  } else {
+    micBtn.classList.remove('recording');
+    micBtn.setAttribute('aria-pressed','false');
+    micBtn.title = 'Record voice message';
+    micBtn.innerText = '🎙️';
+  }
+}
+
+async function startRecording(){
+  if(isRecording) return;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    alert('Microphone not supported in this browser.');
+    return;
+  }
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(micStream);
+    audioChunks = [];
+    mediaRecorder.addEventListener('dataavailable', e => { if(e.data && e.data.size) audioChunks.push(e.data); });
+    mediaRecorder.addEventListener('stop', async ()=>{
+      const blob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
+      const fileName = `voice_${Date.now()}.webm`;
+      const file = new File([blob], fileName, { type: blob.type });
+
+      // show preview in attachment area
+      stagedFiles = [file];
+      setAttachmentPreview(stagedFiles);
+
+      // send automatically (uses same composite endpoint as normal sends)
+      try{
+        const fd = new FormData();
+        fd.append('text', '');
+        fd.append('file', file, file.name);
+        const r = await fetch('/send_composite_message', { method: 'POST', body: fd });
+        if(r.ok){
+          // clear local preview and refresh messages
+          stagedFiles = [];
+          setAttachmentPreview([]);
+          messagesEl.innerHTML = '';
+          lastId = 0;
+          await poll();
+        } else {
+          const txt = await r.text();
+          alert('Voice send failed: ' + txt);
+        }
+      }catch(err){
+        alert('Voice send error: ' + (err.message || err));
+      }finally{
+        audioChunks = [];
+      }
+    });
+    mediaRecorder.start();
+    isRecording = true;
+    updateMicUI(true);
+  }catch(err){
+    console.error('microphone error', err);
+    alert('Could not start microphone: ' + (err && err.message ? err.message : err));
+    if(micStream){
+      micStream.getTracks().forEach(t=>t.stop());
+      micStream = null;
+    }
+    isRecording = false;
+    updateMicUI(false);
+  }
+}
+
+function stopRecording(){
+  if(!isRecording) return;
+  try{
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  }catch(e){ console.warn(e); }
+  if(micStream){
+    micStream.getTracks().forEach(t=>t.stop());
+    micStream = null;
+  }
+  isRecording = false;
+  updateMicUI(false);
+}
+
+// toggle mic on click
+micBtn.addEventListener('click', (ev)=>{
+  ev.stopPropagation();
+  if(isRecording) stopRecording();
+  else startRecording();
+});
+
+// keyboard activate (Enter / Space)
+micBtn.addEventListener('keydown', (ev)=>{
+  if(ev.key === 'Enter' || ev.key === ' '){
+    ev.preventDefault();
+    micBtn.click();
+  }
+});
+
+/* =========================
+   Send message (optimistic UI)
+   - unchanged; uses stagedFiles
+   ========================= */
 document.getElementById('sendBtn').addEventListener('click', async ()=>{
   const text = (inputEl.value || '').trim();
   if(!text && stagedFiles.length===0) return;
@@ -1796,7 +1898,6 @@ document.getElementById('sendBtn').addEventListener('click', async ()=>{
   }
   body.appendChild(bubble); wrapper.appendChild(body); messagesEl.appendChild(wrapper); messagesEl.scrollTop = messagesEl.scrollHeight;
 
-  // build form data
   const fd = new FormData(); fd.append('text', text);
   stagedFiles.forEach(f=> fd.append('file', f, f.name));
   try{
@@ -1816,16 +1917,14 @@ document.getElementById('sendBtn').addEventListener('click', async ()=>{
 inputEl.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); document.getElementById('sendBtn').click(); } });
 
 /* profile toggles */
-document.getElementById('profileBtn').addEventListener('click', (e)=>{ e.stopPropagation(); const menu = document.getElementById('profileMenu'); menu.classList.toggle('hidden'); });
-document.getElementById('viewProfileBtn').addEventListener('click', async ()=>{ document.getElementById('profileMenu').classList.add('hidden'); const modal = document.getElementById('profileModal'); modal.classList.remove('hidden'); const r = await fetch('/profile_get'); if(r.ok){ const j = await r.json(); document.getElementById('profile_display_name').value = j.name || ''; document.getElementById('profile_status').value = j.status || ''; } });
+document.getElementById('profileBtn').addEventListener('click', (e)=>{ e.stopPropagation(); const menu = document.getElementById('profileMenu'); menu.classList.toggle('hidden'); menu.style.display = menu.classList.contains('hidden') ? 'none' : 'block'; });
+document.getElementById('viewProfileBtn').addEventListener('click', async ()=>{ document.getElementById('profileMenu').classList.add('hidden'); document.getElementById('profileMenu').style.display='none'; const modal = document.getElementById('profileModal'); modal.classList.remove('hidden'); const r = await fetch('/profile_get'); if(r.ok){ const j = await r.json(); document.getElementById('profile_display_name').value = j.name || ''; document.getElementById('profile_status').value = j.status || ''; } });
 function closeProfileModal(){ const modal = document.getElementById('profileModal'); modal.classList.add('hidden'); }
 document.getElementById('closeProfile').addEventListener('click', closeProfileModal);
 document.getElementById('profileCancel').addEventListener('click', closeProfileModal);
 
 /* =========================
-   Adaptive msg-meta-top color sampling (optimized)
-   - caches the background image into an offscreen canvas scaled to the window size
-   - samples pixel where the meta element is displayed to decide light/dark text
+   Adaptive msg-meta-top color sampling
    ========================= */
 let _bgImg = null;
 let _bgCanvas = document.createElement('canvas');
@@ -1849,9 +1948,7 @@ function drawBgToCanvasIfNeeded(){
   _bgCanvas.width = w;
   _bgCanvas.height = h;
   try{
-    // draw background image stretched to fill the canvas (background-size: cover approximated by fill)
     if(_bgImg && _bgImg.complete && _bgImg.naturalWidth){
-      // Draw using cover-like scaling: compute scale to fill canvas
       const iw = _bgImg.naturalWidth, ih = _bgImg.naturalHeight;
       const scale = Math.max(w/iw, h/ih);
       const dw = iw * scale, dh = ih * scale;
@@ -1871,7 +1968,6 @@ function drawBgToCanvasIfNeeded(){
 function samplePixelAtScreenXY(x, y){
   try{
     drawBgToCanvasIfNeeded();
-    // clamp
     const ix = Math.max(0, Math.min(_bgCanvas.width-1, Math.round(x)));
     const iy = Math.max(0, Math.min(_bgCanvas.height-1, Math.round(y)));
     const d = _bgCtx.getImageData(ix, iy, 1, 1).data;
@@ -1895,25 +1991,21 @@ async function updateMetaColors() {
     const y = rect.top + rect.height/2;
     const { r, g, b } = samplePixelAtScreenXY(x, y);
     const lum = luminance(r, g, b);
-    el.style.color = lum > 150 ? "#111" : "#f9fafb"; // dark on light bg, light on dark bg
+    el.style.color = lum > 150 ? "#111" : "#f9fafb";
   }
 }
 
-// Run initially and on scroll/resize
 window.addEventListener("scroll", () => { updateMetaColors(); });
 window.addEventListener("resize", () => { _bgDrawSize = {w:0,h:0}; updateMetaColors(); });
-
-// Also run when new messages are loaded
 setInterval(updateMetaColors, 2000);
 
-/* toggle elevated glassiness when panel opens / composer moves */
+/* toggle elevated glassiness */
 const composerMainEl = document.querySelector('.composer-main');
 function setComposerElevated(state){
   if(!composerMainEl) return;
   composerMainEl.classList.toggle('glass-elevated', Boolean(state));
 }
 
-/* If you don't have explicit hooks, auto-observe composer translate changes: */
 let lastTransform = '';
 setInterval(()=>{
   if(!composerMainEl) return;
@@ -1924,10 +2016,10 @@ setInterval(()=>{
     setComposerElevated(isUp);
   }
 }, 250);
-
 </script>
-</body></html>
-'''
+</body>
+</html>
+''' 
 
 # --------- Routes & API ----------
 @app.context_processor
