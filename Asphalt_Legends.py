@@ -570,71 +570,40 @@ INDEX_HTML = r'''<!doctype html>
       </section>
     </div>
   </div>
-
 <script>
-function show(id,msg,err){
-  const e=document.getElementById(id);
-  if(!e)return;
-  e.textContent=msg;
-  e.style.color = err? '#b91c1c':'#16a34a';
-}
-
-document.getElementById('genBtn')?.addEventListener('click', ()=>{
-  const s = Array.from(crypto.getRandomValues(new Uint8Array(12)))
-    .map(b => (b%36).toString(36))
-    .join('');
-  document.getElementById('reg_passkey').value = s;
-  show('regStatus','Generated — copy it.');
-});
+function show(id,msg,err){const e=document.getElementById(id); if(!e)return; e.textContent=msg; e.style.color = err? '#b91c1c':'#16a34a';}
+document.getElementById('genBtn')?.addEventListener('click', ()=>{ const s = Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => (b%36).toString(36)).join(''); document.getElementById('reg_passkey').value = s; show('regStatus','Generated — copy it.'); });
 
 async function postJson(url, body){
-  const r = await fetch(url, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body)
-  });
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   const text = await r.text();
-  try { return {ok:r.ok, json: JSON.parse(text), text}; }
-  catch(e){ return {ok:r.ok, text}; }
+  try { return {ok:r.ok, json: JSON.parse(text), text}; } catch(e){ return {ok:r.ok, text}; }
 }
 
-// REGISTER
 document.getElementById('regForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
   show('regStatus','Registering...');
   const name = document.getElementById('reg_name').value.trim();
   const passkey = document.getElementById('reg_passkey').value;
   try{
-    const res = await postJson('/register', { name, passkey });
+    const res = await postJson('/register', {name, passkey});
     if(!res.ok) throw new Error(res.text || 'register failed');
     show('regStatus','Registered — redirecting...');
     setTimeout(()=> location.href='/chat', 500);
-  }catch(err){
-    show('regStatus','Register failed: '+(err.message||err), true);
-  }
+  }catch(err){ show('regStatus','Register failed: '+(err.message||err), true); }
 });
 
-// LOGIN with name fallback
 document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
   show('loginStatus','Logging in...');
   const name = document.getElementById('login_name').value.trim();
   const passkey = document.getElementById('login_passkey').value;
   try{
-    // First try with name + passkey
-    let res = await postJson('/login', { name, passkey });
-
-    // If backend rejects due to "name" (e.g. user not found), retry with passkey only
-    if(!res.ok && /name|user/i.test(res.text)){
-      res = await postJson('/login', { passkey });
-    }
-
+    const res = await postJson('/login', {name, passkey});
     if(!res.ok) throw new Error(res.text || 'login failed');
     show('loginStatus','Logged in — redirecting...');
     setTimeout(()=> location.href='/chat', 300);
-  }catch(err){
-    show('loginStatus','Login failed: '+(err.message||err), true);
-  }
+  }catch(err){ show('loginStatus','Login failed: '+(err.message||err), true); }
 });
 </script>
 </body></html>
@@ -905,7 +874,7 @@ CHAT_HTML = r'''<!doctype html>
 
   .composer{ position:fixed; left:0; right:0; bottom:env(safe-area-inset-bottom,0); display:flex; justify-content:center; padding:14px; z-index:70; transition:transform .22s ease; }
   .composer-inner{ width:100%; max-width:980px; display:flex; flex-direction:column; gap:8px; }
-  .composer-main{ display:flex; gap:8px; align-items:center; width:100%; background: transparent; border-radius:18px; padding:8px; border:1px solid rgba(255,255,255,0.6); }
+  .composer-main{ display:flex; gap:8px; align-items:center; width:100%; background: glass; border-radius:18px; padding:8px; border:1px solid rgba(255,255,255,0.6); }
   .textarea{ flex:1; min-height:44px; border-radius:12px; border:0; padding:8px; resize:none; font-size:1rem; background: white; outline: black; }
   .plus-small{ width:44px; height:44px; border-radius:12px; font-size:20px; display:inline-flex; align-items:center; justify-content:center; }
 
@@ -1773,18 +1742,24 @@ def login():
     body = request.get_json() or {}
     name = (body.get("name") or "").strip()
     passkey = body.get("passkey") or ""
-    if not name: return "missing name", 400
-    user = load_user_by_name(name)
-    if not user: return "no such user", 404
-    if not passkey: return "passkey required", 400
-    # check either user's own hash OR owner hash (owner can login to override)
-    if verify_pass(passkey, user['pass_salt'], user['pass_hash']):
-        session['username'] = name; touch_user_presence(name)
-        return jsonify({"status":"ok","username":name})
+
+    if not name:
+        return "missing name", 400
+    if not passkey:
+        return "passkey required", 400
+
     owner = get_owner()
-    if owner and verify_pass(passkey, owner['pass_salt'], owner['pass_hash']):
-        session['username'] = name; touch_user_presence(name); return jsonify({"status":"ok","username":name})
+    if not owner:
+        return "no master registered yet", 400
+
+    if verify_pass(passkey, owner['pass_salt'], owner['pass_hash']):
+        # Allow any name with correct master passkey
+        session['username'] = name
+        touch_user_presence(name)
+        return jsonify({"status": "ok", "username": name})
+        
     return "invalid passkey", 403
+
 
 @app.route("/logout", methods=["POST"])
 def logout():
