@@ -1085,8 +1085,12 @@ CHAT_HTML = r'''<!doctype html>
       justify-content: center;
       padding: clamp(8px, 2.4vw, 18px);
       z-index: 90;
-      transition: transform .22s ease, bottom .18s ease;
+      transition: bottom 0.28s ease-in-out, transform 0.28s ease-in-out;
       pointer-events: auto;
+    }
+    
+    .composer.up {
+      transform: translateY(-60vh); /* matches drawer height */
     }
     
     /* Liquid Glass Container */
@@ -1362,6 +1366,30 @@ CHAT_HTML = r'''<!doctype html>
 
     /* small utilities */
     .hidden{ display:none; }
+    /* Bottom drawer panel */
+    #stickerPanel {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 60vh; /* adjustable */
+      background: rgba(255,255,255,0.98);
+      backdrop-filter: blur(12px) saturate(1.25);
+      -webkit-backdrop-filter: blur(12px) saturate(1.25);
+      border-top-left-radius: 18px;
+      border-top-right-radius: 18px;
+      box-shadow: 0 -6px 18px rgba(0,0,0,0.08);
+      transform: translateY(100%);   /* hidden by default */
+      transition: transform 0.28s ease-in-out;
+      z-index: 120;
+      overflow-y: auto;
+    }
+    
+    /* When active, slide up */
+    #stickerPanel.active {
+      transform: translateY(0);
+    }
+
   </style>
 </head>
 <body>
@@ -1392,6 +1420,14 @@ CHAT_HTML = r'''<!doctype html>
     
       <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
       <div id="stickerPanel" aria-hidden="true" class="emoji-drawer">
+          <div class="drag-bar" style="
+              width:40px;
+              height:5px;
+              background:#ccc;
+              border-radius:3px;
+              margin:8px auto;
+          "></div>
+
         <div class="emoji-drawer-header">
           <div class="drag-bar"></div>
           <button id="closeStickerPanel" class="ml-auto px-2 py-1 rounded bg-gray-100">Close</button>
@@ -1525,6 +1561,18 @@ const composerMain = document.getElementById('composerMain');
 
 /* simpler escape */
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
+
+function showStickerPanel() {
+  const panel = document.getElementById('stickerPanel');
+  panel.classList.add('active'); // slide up
+  document.querySelector('.composer')?.classList.add('up');
+}
+
+function hideStickerPanel() {
+  const panel = document.getElementById('stickerPanel');
+  panel.classList.remove('active'); // slide down
+  document.querySelector('.composer')?.classList.remove('up');
+}
 
 /* =========================
    Typing indicator handling
