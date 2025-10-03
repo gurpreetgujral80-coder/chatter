@@ -942,7 +942,7 @@ renderPreview();
 </body></html>
 '''
 # ---- CHAT HTML (heavily modified) ----
-# --- CHAT page: updated with emoji-mart v5, sticker/gif/avatar/emoji panel, typing indicator, attach menu, poll modal, avatar flow ---
+# --- CHAT page: updated with emoji-mart v5, sticker/gif/avatar/emoji panel, typing indicator, attach menu, poll modal, avatar flow gggggggggggggggggggggggggggggggggggggg---
 CHAT_HTML = r'''<!doctype html>
 <html>
 <head>
@@ -1054,7 +1054,7 @@ CHAT_HTML = r'''<!doctype html>
     main{ padding:120px 12px 200px; max-width:980px; margin:0 auto; min-height:calc(100vh - 260px); box-sizing:border-box; }
     .msg-row{ margin-bottom:12px; display:flex; gap:8px; align-items:flex-start; }
     .msg-body{ display:flex; flex-direction:column; align-items:flex-start; min-width:0; }
-    .bubble{ position:relative; padding:10px 14px; border-radius:12px; display:inline-block; word-break:break-word; white-space:pre-wrap; background-clip:padding-box; box-shadow: 0 6px 18px rgba(2,6,23,0.04); }
+    .bubble{ position:relative; padding: 10px 36px 10px 14px; border-radius:12px; display:inline-block; word-break:break-word; white-space:pre-wrap; background-clip:padding-box; box-shadow: 0 6px 18px rgba(2,6,23,0.04); }
     .me{ background: linear-gradient(90deg,#e6ffed,#dcffe6); border-bottom-right-radius:6px; align-self:flex-end; margin-left:auto; }
     .them{ background: rgba(255,255,255,0.95); border-bottom-left-radius:6px; margin-right:auto; }
     .bubble .three-dot { position:absolute; top:8px; right:8px; background:transparent; border:none; font-size:1.05rem; padding:4px; cursor:pointer; color:#111827; border-radius:6px; }
@@ -1710,7 +1710,7 @@ function createVideoThumbnailFromUrl(url, seekTo=0.5){
           const canvas = document.createElement('canvas');
           canvas.width = video.videoWidth || 320;
           canvas.height = video.videoHeight || 180;
-          const ctx = canvas.getContext('2d');
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const dataURL = canvas.toDataURL('image/png');
           video.remove();
@@ -1740,37 +1740,7 @@ document.getElementById('tab_emoji').addEventListener('click', ()=>{ document.ge
 
 document.getElementById('stickerPickerBtn')?.addEventListener('click', ()=> showStickerPanel());
 
-function showStickerPanel(){
-  stickerPanel.style.display='block';
-  stickerPanel.setAttribute('aria-hidden','false');
-  composerEl.style.transform = 'translateY(-40vh)';
-  loadStickers();
-  setComposerElevated(true);
-}
-function hideStickerPanel(){
-  stickerPanel.style.display='none';
-  stickerPanel.setAttribute('aria-hidden','true');
-  composerEl.style.transform = 'translateY(0)';
-  setComposerElevated(false);
-}
 
-/* load local stickers */
-async function loadStickers(){
-  panelGrid.innerHTML = '<div>Loading stickers…</div>';
-  try{
-    const r = await fetch('/generated_stickers');
-    const list = Array.isArray(await r.json()) ? await r.json() : [];
-    panelGrid.innerHTML = '';
-    for(const url of list){
-      const w = document.createElement('div'); w.style.cursor='pointer';
-      const img = document.createElement('img'); img.src = url; img.style.width='100%'; img.style.borderRadius='8px';
-      w.appendChild(img);
-      w.onclick = async ()=> { await fetch('/send_message',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text:'', attachments:[{ type:'sticker', url }] }) }); hideStickerPanel(); messagesEl.innerHTML=''; lastId=0; poll(); };
-      panelGrid.appendChild(w);
-    }
-    if(!list.length) panelGrid.innerHTML = '<div class="text-sm text-gray-500">No stickers found in /static/stickers/</div>';
-  }catch(e){ panelGrid.innerHTML = '<div>Error loading stickers</div>'; }
-}
 
 /* load GIFs - Tenor trending (no API key attempt) */
 async function loadGIFs(){
@@ -1868,7 +1838,7 @@ async function poll(){
       const body = document.createElement('div'); body.className='msg-body';
 
       const meta = document.createElement('div'); meta.className='msg-meta-top';
-      const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong> · ${new Date(m.created_at*1000).toLocaleTimeString()}`;
+      const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
       const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
       meta.appendChild(leftMeta); meta.appendChild(rightMeta);
       body.appendChild(meta);
@@ -2153,10 +2123,6 @@ micBtn.addEventListener('keydown', (ev)=>{
   }
 });
 
-/* =========================
-   Send message (optimistic UI)
-   - unchanged; uses stagedFiles
-   ========================= */
 document.getElementById('sendBtn').addEventListener('click', async ()=>{
   const text = (inputEl.value || '').trim();
   if(!text && stagedFiles.length===0) return;
@@ -2333,34 +2299,34 @@ setInterval(()=>{
   }
 })();
 const emojiBtn = document.getElementById('emojiBtn');
-const emojiDrawer = document.getElementById('emojiDrawer');
 const composer = document.querySelector('.composer');
-const textarea = document.getElementById('messageInput');
+const emojiDrawer = document.getElementById('stickerPanel');
+const textarea = document.getElementById('msg');
 const sendBtn = document.getElementById('sendBtn');
 
-// Toggle drawer
+// Toggle drawer open/close
 emojiBtn.addEventListener('click', () => {
   emojiDrawer.classList.toggle('active');
   composer.classList.toggle('up');
 });
 
-// Insert emoji
-document.querySelectorAll('.emoji-grid span, .emoji-grid').forEach(el => {
-  el.addEventListener('click', (e) => {
+// Insert emoji (from drawer grid)
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.emoji-grid span')) {
     textarea.value += e.target.textContent;
     sendBtn.click(); // auto send
-  });
+  }
 });
 
-// Insert GIF
-document.querySelectorAll('.gif-grid img').forEach(img => {
-  img.addEventListener('click', (e) => {
+// Insert GIF (from drawer grid)
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.gif-grid img')) {
     textarea.value = `[GIF: ${e.target.src}]`; 
     sendBtn.click(); // auto send
-  });
+  }
 });
 
-// Close drawer when dragged down (optional)
+// Close drawer when drag-bar clicked
 emojiDrawer.addEventListener('click', (e) => {
   if (e.target.classList.contains('drag-bar')) {
     emojiDrawer.classList.remove('active');
