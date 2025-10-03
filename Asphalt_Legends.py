@@ -1271,27 +1271,22 @@ CHAT_HTML = r'''<!doctype html>
         border-radius: 14px;
       }
     }
-    /* Drawer container */
-    .emoji-drawer {
+   .emoji-drawer {
       position: fixed;
       left: 0;
       right: 0;
-      bottom: -60%; /* hidden initially */
-      height: 60%;
-      background: rgba(255,255,255,0.96);
-      backdrop-filter: blur(12px) saturate(1.2);
-      border-top-left-radius: 18px;
-      border-top-right-radius: 18px;
-      box-shadow: 0 -8px 20px rgba(0,0,0,0.08);
-      transition: bottom 0.3s ease;
-      z-index: 100; /* above composer */
-      display: flex;
+      bottom: 0;             /* stick to bottom */
+      height: 280px;         /* like keyboard height */
+      background: #fff;
+      border-top: 1px solid #e5e7eb;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+      z-index: 120;
+      display: none;         /* hidden initially */
       flex-direction: column;
     }
     
-    /* When visible */
     .emoji-drawer.active {
-      bottom: 0;
+      display: flex;
     }
     
     /* Header with drag handle */
@@ -1347,10 +1342,11 @@ CHAT_HTML = r'''<!doctype html>
     .composer {
       transition: bottom 0.3s ease;
     }
+
     .composer.up {
-      bottom: 60%;
+      bottom: 280px;  /* match emoji panel height */
     }
-    /* attach menu vertical */
+    
     .attach-menu-vertical{ position:fixed; right:18px; bottom:100px; display:flex; flex-direction:column; gap:10px; border-radius:12px; z-index:80; }
     .attach-card{ background:white; padding:10px 14px; min-width:140px; box-shadow:0 10px 30px rgba(0,0,0,0.12); display:flex; gap:8px; align-items:center; cursor:pointer; }
 
@@ -1439,9 +1435,8 @@ CHAT_HTML = r'''<!doctype html>
           <button id="tab_emoji">Emoji</button>
         </div>
         <div id="panelContent" class="emoji-drawer-content">
-          <div id="panelGrid" class="grid grid-cols-4 gap-3">
-            <!-- Emoji/GIFs/Stickers loaded dynamically -->
-          </div>
+          <div id="gifGrid" class="gif-grid hidden"></div>
+          <div id="emojiGrid" class="emoji-grid hidden"></div>
         </div>
       </div>
     
@@ -1540,7 +1535,8 @@ CHAT_HTML = r'''<!doctype html>
           <button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button>
         </div>
       </div>
-
+    <div id="emojiPanel" class="emoji-panel"></div>
+</body>
 <!-- include socket.io and other scripts (socket server expected) -->
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
@@ -2382,7 +2378,6 @@ emojiDrawer.addEventListener('click', (e) => {
   }
 });
 </script>
-</body>
 </html>
 ''' 
 
