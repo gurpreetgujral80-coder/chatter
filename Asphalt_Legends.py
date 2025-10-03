@@ -7,13 +7,13 @@ import hashlib
 import hmac
 import pathlib
 import base64
-import requests  # used to fetch DiceBear SVGs for caching
+import requests  
 from flask import (
     Flask, render_template_string, request, jsonify, session,
     redirect, url_for, send_from_directory, abort
 )
 from werkzeug.utils import secure_filename
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room, leave_room
 
 # -------- CONFIG ----------
 app = Flask(__name__, static_folder="static")
@@ -202,6 +202,88 @@ def react_message_db(msg_id, reactor, emoji):
         reactions.append({"emoji": emoji, "user": reactor})
     c.execute("UPDATE messages SET reactions = ? WHERE id = ?", (json.dumps(reactions), msg_id))
     conn.commit(); conn.close(); return True, None
+
+def emit_to_user(username, event, data):
+    sid = USER_SID.get(username)
+    if sid:
+        socketio.emit(event, data, to=sid)
+
+@socketio.on('register_socket')  # call from client once on connect
+def handle_register(data):
+    username = data.get('username')
+    if username:
+        USER_SID[username] = request.sid
+        # Optionally join a room for user
+        join_room(username)
+        touch_user_presence(username)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    # remove user from USER_SID if matches
+    sid = request.sid
+    for u,s in list(USER_SID.items()):
+        if s == sid:
+            USER_SID.pop(u, None)
+            break
+
+# Caller invites callee
+@socketio.on('call:invite')
+def on_call_invite(data):
+    # data: { to: 'otherUser', from: 'caller', is_video: true, call_id: 'uuid' }
+    to = data.get('to'); caller = data.get('from'); call_id = data.get('call_id')
+    if not (to and caller and call_id):
+        return
+    CALL_INVITES[call_id] = {'caller': caller, 'callee': to, 'is_video': bool(data.get('is_video')), 'status': 'ringing', 'created': int(time.time())}
+    # notify callee
+    emit_to_user(to, 'call:incoming', {'call_id': call_id, 'from': caller, 'is_video': bool(data.get('is_video'))})
+    # optionally ack to caller
+    emit('call:invite_ack', {'ok': True, 'call_id': call_id}, to=request.sid)
+    # persist call log
+    save_call(call_id, caller, to, bool(data.get('is_video')), status='ringing')
+
+# Callee accepts -> server forwards acceptance to caller
+@socketio.on('call:accept')
+def on_call_accept(data):
+    call_id = data.get('call_id'); callee = data.get('from')
+    call = CALL_INVITES.get(call_id)
+    if not call:
+        emit('call:error', {'error': 'no_call'}, to=request.sid); return
+    call['status'] = 'accepted'
+    # inform caller
+    emit_to_user(call['caller'], 'call:accepted', {'call_id': call_id, 'from': callee})
+    update_call_started(call_id)
+
+# Callee/Caller reject/hangup
+@socketio.on('call:hangup')
+def on_call_hangup(data):
+    call_id = data.get('call_id'); who = data.get('from')
+    c = CALL_INVITES.pop(call_id, None)
+    if c:
+        emit_to_user(c['caller'], 'call:ended', {'call_id': call_id, 'by': who})
+        emit_to_user(c['callee'], 'call:ended', {'call_id': call_id, 'by': who})
+        update_call_ended(call_id)
+
+# Signaling: forward SDP offer/answer & ICE candidates
+@socketio.on('call:offer')
+def on_call_offer(data):
+    # data: { call_id, from, to, sdp }
+    to = data.get('to'); sdp = data.get('sdp'); caller = data.get('from')
+    emit_to_user(to, 'call:offer', {'from': caller, 'sdp': sdp, 'call_id': data.get('call_id')})
+
+@socketio.on('call:answer')
+def on_call_answer(data):
+    to = data.get('to'); sdp = data.get('sdp'); sender = data.get('from')
+    emit_to_user(to, 'call:answer', {'from': sender, 'sdp': sdp, 'call_id': data.get('call_id')})
+
+@socketio.on('call:candidate')
+def on_call_candidate(data):
+    to = data.get('to'); candidate = data.get('candidate'); sender = data.get('from')
+    emit_to_user(to, 'call:candidate', {'from': sender, 'candidate': candidate, 'call_id': data.get('call_id')})
+
+# Optional in-call signals: mute/unmute, hold, switch-camera
+@socketio.on('call:signal')
+def on_call_signal(data):
+    to = data.get('to'); payload = data.get('payload'); emit_to_user(to, 'call:signal', payload)
 
 # call logs
 def save_call(call_id, caller, callee, is_video, status="ringing"):
@@ -1093,7 +1175,6 @@ CHAT_HTML = r'''<!doctype html>
       transform: translateY(-60vh); /* matches drawer height */
     }
     
-    /* Liquid Glass Container */
     .composer-main {
       display: flex;
       border-radius: 14px;
@@ -1102,9 +1183,10 @@ CHAT_HTML = r'''<!doctype html>
       align-items: center;
       width: min(980px, calc(100% - 32px));
       max-width: 980px;
+      margin: 0 auto;           /* <-- keeps it centered */
       position: relative;
       overflow: hidden;
-    
+      
       /* frosted translucent look */
       background: linear-gradient(
         135deg,
@@ -1271,18 +1353,18 @@ CHAT_HTML = r'''<!doctype html>
         border-radius: 14px;
       }
     }
-   .emoji-drawer {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;             /* stick to bottom */
-      height: 280px;         /* like keyboard height */
-      background: #fff;
-      border-top: 1px solid #e5e7eb;
-      box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
-      z-index: 120;
-      display: none;         /* hidden initially */
-      flex-direction: column;
+    .emoji-mart {
+      position: absolute !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      top: auto !important;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      border-top: 1px solid #e5e7eb !important;
     }
     
     .emoji-drawer.active {
@@ -1385,7 +1467,97 @@ CHAT_HTML = r'''<!doctype html>
     #stickerPanel.active {
       transform: translateY(0);
     }
-
+    #emojiGrid .emoji-mart {
+      width: 100% !important;
+      height: 100% !important;
+      border: none !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
+    /* Incoming call banner */
+    .incoming-call-banner {
+      position: fixed;
+      top: calc(var(--header-height, 56px) + 8px);
+      left: 0;
+      right: 0;
+      background: #ffffffee;
+      border: 1px solid #ddd;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      z-index: 200;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .incoming-call-banner.hidden {
+      display: none;
+    }
+    
+    .incoming-call-banner .caller-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .incoming-call-banner .caller-info #incomingLabel {
+      font-size: 0.9rem;
+      color: #555;
+    }
+    .incoming-call-banner .caller-info #incomingCallerName {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #111;
+    }
+    
+    .incoming-call-banner .banner-buttons {
+      display: flex;
+      gap: 12px;
+    }
+    .incoming-call-banner .btn-decline,
+    .incoming-call-banner .btn-accept {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .btn-decline {
+      background: #f87171;  /* red */
+      color: white;
+    }
+    .btn-accept {
+      background: #34d399;  /* green */
+      color: white;
+    }
+    
+    /* In-call control buttons (header area) */
+    .in-call-controls {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      display: flex;
+      gap: 8px;
+      z-index: 210;
+    }
+    .in-call-controls.hidden {
+      display: none;
+    }
+    .ic-btn {
+      background: rgba(255,255,255,0.9);
+      border: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      cursor: pointer;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+    }
+    .ic-btn:hover {
+      background: rgba(255,255,255,1);
+    }
+    .chat-audio {
+      width: 250px;
+      height: 40px;
+    }
   </style>
 </head>
 <body>
@@ -1396,7 +1568,29 @@ CHAT_HTML = r'''<!doctype html>
           <img src="{{ heading_img }}" alt="Heading image" />
           <div class="heading-title">Asphalt <span style="color:#be185d;">Legends</span></div>
         </div>
-    
+        
+        <!-- Incoming Call Banner / Modal -->
+        <div id="incomingCallBanner" class="incoming-call-banner hidden">
+          <div class="banner-content">
+            <div class="caller-info">
+              <span id="incomingLabel">Incoming Call</span>
+              <span id="incomingCallerName"></span>
+            </div>
+            <div class="banner-buttons">
+              <button id="declineCallBtn" class="btn-decline">Decline</button>
+              <button id="acceptCallBtn" class="btn-accept">Accept</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- In-Call Controls on Header (top-left) -->
+        <div id="inCallControls" class="in-call-controls hidden">
+          <button id="btnHangup" class="ic-btn hangup">📞</button>
+          <button id="btnMute" class="ic-btn mute">🔇</button>
+          <button id="btnToggleVideo" class="ic-btn toggle-video">🎥</button>
+          <button id="btnSwitchCam" class="ic-btn switch-cam">🔄</button>
+        </div>
+        
         <div class="header-actions" role="navigation" aria-label="Profile actions">
           <div id="profileBtn" class="profile-name">{{ username }}</div>
           <div id="profileMenu" class="menu hidden"
@@ -1449,7 +1643,7 @@ CHAT_HTML = r'''<!doctype html>
             <button id="plusBtn" class="plus-small bg-white shadow" style="font-size:2rem;" aria-label="Attach">＋</button>
     
             <!-- vertical attachment menu -->
-            <div id="attachMenuVertical" class="attach-menu-vertical hidden" style="display:none;">
+            <div id="attachMenuVertical" class="attach-menu-vertical" style="display:none;">
               <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
               <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
               <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
@@ -1458,7 +1652,7 @@ CHAT_HTML = r'''<!doctype html>
               <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
             </div>
     
-            <textarea id="msg" class="textarea" placeholder="Type a message." maxlength="1200"
+            <textarea id="msg" class="textarea" placeholder="Type a message..." maxlength="1200"
               aria-label="Message input"></textarea>
     
             <!-- emoji button opens drawer -->
@@ -1604,30 +1798,19 @@ let emojiPicker = null;
 document.getElementById('emojiBtn').addEventListener('click', (ev)=>{
   ev.stopPropagation();
   if(!emojiPicker){
-    const picker = new EmojiMart.Picker({
-      onEmojiSelect: (emoji) => {
-        insertAtCursor(inputEl, emoji.native || (emoji.colons ? emoji.colons : '') );
-        closeEmojiPicker();
-        inputEl.focus();
-      },
-      theme: 'light',
-      set: 'apple',
-      perLine: 8,
-      emojiSize: 20
-    });
-    emojiPicker = document.createElement('div');
-    emojiPicker.style.position = 'absolute';
-    emojiPicker.style.zIndex = 120;
-    emojiPicker.appendChild(picker);
-    document.body.appendChild(emojiPicker);
+      emojiPicker = new EmojiMart.Picker({
+        onEmojiSelect: (emoji) => {
+          insertAtCursor(inputEl, emoji.native);
+          textarea.focus();
+        },
+        theme: 'light',
+        previewPosition: "none",
+        skinTonePosition: "none"
+      });
+      document.getElementById('emojiGrid').appendChild(emojiPicker);
   }
-  const rect = document.getElementById('emojiBtn').getBoundingClientRect();
-  const left = Math.max(8, rect.left);
-  const top = rect.top - 360;
-  emojiPicker.style.left = left + 'px';
-  emojiPicker.style.top = (top) + 'px';
-  emojiPicker.style.display = 'block';
-  setTimeout(()=> document.addEventListener('click', closeEmojiPicker), 50);
+  emojiDrawer.classList.toggle('active');
+  composer.classList.toggle('up');
 });
 function closeEmojiPicker(){ if(emojiPicker) emojiPicker.style.display='none'; document.removeEventListener('click', closeEmojiPicker); }
 function insertAtCursor(el, text){
@@ -1688,6 +1871,328 @@ attachMenuVertical.querySelectorAll('.attach-card').forEach(c=>{
     }
     attachMenuVertical.style.display='none';
   });
+});
+const pcConfig = {
+  iceServers: [
+    { urls: ["stun:stun.l.google.com:19302"] }
+    // Add TURN server here for reliable NAT traversal in production
+  ]
+};
+
+// References
+const incomingCallBanner = document.getElementById('incomingCallBanner');
+const incomingCallerNameEl = document.getElementById('incomingCallerName');
+const acceptCallBtn = document.getElementById('acceptCallBtn');
+const declineCallBtn = document.getElementById('declineCallBtn');
+
+const inCallControls = document.getElementById('inCallControls');
+const btnHangup = document.getElementById('btnHangup');
+const btnMute = document.getElementById('btnMute');
+const btnToggleVideo = document.getElementById('btnToggleVideo');
+const btnSwitchCam = document.getElementById('btnSwitchCam');
+
+// State tracking
+let activeCallId = null;
+
+// When incoming call arrives
+socket.on('call:incoming', (d) => {
+  const caller = d.from;
+  const callId = d.call_id;
+  incomingCallerNameEl.textContent = caller;
+  incomingCallBanner.classList.remove('hidden');
+  activeCallId = callId;
+  // store isVideo if needed for later
+});
+
+// Accept / decline buttons
+acceptCallBtn.addEventListener('click', () => {
+  if (!activeCallId) return;
+  socket.emit('call:accept', { call_id: activeCallId, from: myName });
+  incomingCallBanner.classList.add('hidden');
+  // Show in-call controls
+  inCallControls.classList.remove('hidden');
+});
+
+declineCallBtn.addEventListener('click', () => {
+  if (!activeCallId) return;
+  socket.emit('call:hangup', { call_id: activeCallId, from: myName });
+  incomingCallBanner.classList.add('hidden');
+  activeCallId = null;
+});
+
+// Hook in-call control buttons
+btnHangup.addEventListener('click', () => {
+  if (activeCallId) endCall(activeCallId);
+  inCallControls.classList.add('hidden');
+});
+
+btnMute.addEventListener('click', () => {
+  if (activeCallId) toggleMute(activeCallId);
+  // optionally change icon or style to show mute/unmute
+});
+
+btnToggleVideo.addEventListener('click', () => {
+  if (activeCallId) toggleVideo(activeCallId);
+});
+
+btnSwitchCam.addEventListener('click', () => {
+  if (activeCallId) switchCamera(activeCallId);
+});
+
+// Hide controls on call end
+socket.on('call:ended', (d) => {
+  if (activeCallId === d.call_id) {
+    activeCallId = null;
+    inCallControls.classList.add('hidden');
+    incomingCallBanner.classList.add('hidden');
+  }
+});
+
+const localVideo = document.createElement('video'); localVideo.autoplay = true; localVideo.muted = true;
+const remoteVideo = document.createElement('video'); remoteVideo.autoplay = true; remoteVideo.playsInline = true;
+localVideo.id = 'localVideo'; remoteVideo.id = 'remoteVideo';
+localVideo.style.display = 'none'; remoteVideo.style.maxWidth='100%';
+document.body.appendChild(localVideo); document.body.appendChild(remoteVideo);
+
+// State per call
+const calls = {}; // call_id -> { pc, localStream, remoteStream, isCaller, currentCameraId }
+
+async function startCall(toUser, isVideo = true){
+  const callId = 'call-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+  // create local stream
+  const constraints = { audio: true, video: isVideo ? { facingMode: 'user' } : false };
+  let localStream;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+  } catch(err){
+    alert('Could not access microphone/camera: ' + (err && err.message ? err.message : err));
+    return;
+  }
+  // save
+  calls[callId] = { localStream, isCaller: true, pc: null, currentCameraId: null };
+
+  // notify callee via signaling
+  socket.emit('call:invite', { to: toUser, from: myName, is_video: !!isVideo, call_id: callId });
+
+  // create peer connection and createOffer later on 'call:accepted' event
+  setupPeerConnection(callId, localStream, isVideo);
+
+  // open local preview
+  localVideo.srcObject = localStream; localVideo.style.display = isVideo ? 'block' :'none';
+  showInCallUI(callId, toUser, true);
+}
+
+// Called when callee accepts — now create offer (caller)
+socket.on('call:accepted', async (d) => {
+  const callId = d.call_id; const call = calls[callId];
+  if(!call || !call.pc) return;
+  try {
+    const offer = await call.pc.createOffer();
+    await call.pc.setLocalDescription(offer);
+    socket.emit('call:offer', { to: d.from /* caller? check flow */, from: myName, sdp: offer, call_id: callId });
+  } catch(e){ console.error('offer error', e); }
+});
+
+// When receiving an offer (callee side)
+socket.on('call:offer', async (d) => {
+  const callId = d.call_id; const fromUser = d.from;
+  // Prepare local stream
+  const isVideo = d.sdp && d.sdp.type; // assume caller asked video if offer contains m=video
+  const constraints = { audio:true, video: true };
+  let localStream;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video: true });
+  } catch(e){
+    // user may choose to decline or accept audio-only
+    localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false }).catch(()=>null);
+  }
+  // store
+  calls[callId] = { localStream, pc: null, isCaller: false, currentCameraId: getCurrentCameraId(localStream) };
+  setupPeerConnection(callId, localStream, !!localStream.getVideoTracks().length);
+  // set remote description
+  try {
+    await calls[callId].pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
+    const answer = await calls[callId].pc.createAnswer();
+    await calls[callId].pc.setLocalDescription(answer);
+    socket.emit('call:answer', { to: fromUser, from: myName, sdp: answer, call_id: callId });
+    showInCallUI(callId, fromUser, false);
+  } catch(err){ console.error('handle offer error', err); }
+});
+
+// When receiving an answer (caller)
+socket.on('call:answer', async (d) => {
+  const callId = d.call_id; const call = calls[callId];
+  if(!call || !call.pc) return;
+  try {
+    await call.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
+    // call is now established when ICE flows
+    updateCallStateUI(callId, 'connected');
+    update_call_started_on_server(callId);
+  } catch(e){ console.error(e); }
+});
+
+socket.on('call:candidate', async (d) => {
+  const callId = d.call_id; const call = calls[callId];
+  if(!call || !call.pc || !d.candidate) return;
+  try { await call.pc.addIceCandidate(new RTCIceCandidate(d.candidate)); } catch(e){ console.warn('candidate add failed', e); }
+});
+
+// Remote hangup
+socket.on('call:ended', (d) => {
+  const callId = d.call_id;
+  endCallLocal(callId, d.by);
+});
+
+// Utility to create RTCPeerConnection and wire tracks
+function setupPeerConnection(callId, localStream, hasVideo){
+  const pc = new RTCPeerConnection(pcConfig);
+  calls[callId].pc = pc;
+  // add local tracks
+  if(localStream){
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  }
+
+  const remoteStream = new MediaStream();
+  pc.ontrack = (evt) => {
+    evt.streams.forEach(s => {
+      s.getTracks().forEach(t=> remoteStream.addTrack(t));
+    });
+    remoteVideo.srcObject = remoteStream;
+  };
+
+  pc.onicecandidate = (e) => {
+    if(e.candidate){
+      socket.emit('call:candidate', { to: getPeerForCall(callId), from: myName, candidate: e.candidate, call_id: callId });
+    }
+  };
+
+  pc.onconnectionstatechange = ()=> {
+    const st = pc.connectionState;
+    console.log('pc state', st);
+    if(st === 'connected') updateCallStateUI(callId, 'connected');
+    if(st === 'disconnected' || st === 'failed' || st === 'closed') endCallLocal(callId, 'peer');
+  };
+  return pc;
+}
+
+function getPeerForCall(callId){
+  // find other username from CALL_INVITES or local 'calls' state if you persisted when inviting
+  // For simplicity assume the UI stored `calls[callId].peer`
+  return calls[callId]?.peer || null;
+}
+
+// ---- UI actions ----
+async function toggleMute(callId){
+  const call = calls[callId]; if(!call || !call.localStream) return;
+  call.localStream.getAudioTracks().forEach(t => { t.enabled = !t.enabled; });
+  // notify other peer UI (optional)
+  socket.emit('call:signal', { to: getPeerForCall(callId), payload: { type: 'mute', by: myName, muted: !call.localStream.getAudioTracks()[0].enabled } });
+}
+
+function toggleVideo(callId){
+  const call = calls[callId]; if(!call || !call.localStream) return;
+  call.localStream.getVideoTracks().forEach(t => { t.enabled = !t.enabled; });
+  socket.emit('call:signal', { to: getPeerForCall(callId), payload: { type: 'video-toggled', by: myName, videoOn: !!call.localStream.getVideoTracks().find(tt=>tt.enabled) } });
+}
+
+async function switchCamera(callId){
+  const call = calls[callId];
+  if(!call) return;
+  // enumerate devices
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const videoInputs = devices.filter(d => d.kind === 'videoinput');
+  if(videoInputs.length <= 1) return alert('No other camera found');
+  // pick another device id
+  const currentId = call.currentCameraId;
+  let next = videoInputs.find(d=>d.deviceId !== currentId);
+  if(!next) next = videoInputs[0];
+  // get new stream from device
+  const newStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: next.deviceId } }, audio: false }).catch(e=>null);
+  if(!newStream) return;
+  // replace track
+  const newTrack = newStream.getVideoTracks()[0];
+  const pc = call.pc;
+  const senders = pc.getSenders();
+  const sender = senders.find(s => s.track && s.track.kind === 'video');
+  if(sender) await sender.replaceTrack(newTrack);
+  // update the stored localStream: remove old video track & add new track
+  call.localStream.getVideoTracks().forEach(t => { t.stop(); call.localStream.removeTrack(t); });
+  call.localStream.addTrack(newTrack);
+  call.currentCameraId = next.deviceId;
+  localVideo.srcObject = call.localStream;
+}
+
+async function shareScreen(callId){
+  try{
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video:true });
+    const call = calls[callId];
+    if(!call) return;
+    const screenTrack = screenStream.getVideoTracks()[0];
+    const pc = call.pc;
+    const senders = pc.getSenders();
+    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+    if(videoSender){
+      await videoSender.replaceTrack(screenTrack);
+      // when screen share stops, restore camera
+      screenTrack.onended = async () => {
+        // re-acquire camera track (best-effort)
+        const camStream = await navigator.mediaDevices.getUserMedia({ video:true }).catch(()=>null);
+        if(camStream){
+          const camTrack = camStream.getVideoTracks()[0];
+          await videoSender.replaceTrack(camTrack);
+          call.localStream.getVideoTracks().forEach(t=>t.stop()); // remove old
+          call.localStream.addTrack(camTrack);
+          localVideo.srcObject = call.localStream;
+        }
+      };
+    }
+  }catch(e){ console.warn('screen share failed', e); }
+}
+
+function endCall(callId){
+  socket.emit('call:hangup', { call_id: callId, from: myName });
+  endCallLocal(callId, myName);
+}
+
+function endCallLocal(callId, by){
+  const call = calls[callId];
+  if(!call) return;
+  try{
+    if(call.pc) { call.pc.close(); call.pc = null; }
+    if(call.localStream) { call.localStream.getTracks().forEach(t=>t.stop()); }
+  }catch(e){}
+  // cleanup UI
+  localVideo.srcObject = null; remoteVideo.srcObject = null;
+  // remove from map
+  delete calls[callId];
+  // update UI to show ended
+  alert('Call ended by ' + (by || 'local'));
+}
+
+// Utility: pick camera id from stream
+function getCurrentCameraId(stream){
+  if(!stream) return null;
+  const t = stream.getVideoTracks()[0];
+  if(!t) return null;
+  return t.getSettings && t.getSettings().deviceId ? t.getSettings().deviceId : null;
+}
+
+// Accept/reject UI handlers (call acceptance flow)
+socket.on('call:incoming', (d) => {
+  // show incoming modal with Accept/Decline
+  const caller = d.from; const callId = d.call_id; const isVideo = d.is_video;
+  if(confirm(`Incoming ${isVideo ? 'video':'audio'} call from ${caller}. Accept?`)){
+    socket.emit('call:accept', { call_id: callId, from: myName });
+    // callee will process 'call:offer' soon
+  } else {
+    socket.emit('call:hangup', { call_id: callId, from: myName });
+  }
+});
+
+// wire up additional signals if needed
+socket.on('call:signal', (payload) => {
+  // e.g. show mute indicator, emoji reaction, hold etc.
+  console.log('in-call signal', payload);
 });
 
 /* file selectors we inject (hidden inputs) */
@@ -2001,6 +2506,10 @@ function createAttachmentElement(a){
   container.className = 'media-container mt-2';
 
   if(a.type === 'audio' || (a.type === 'voice')) {
+    html += `
+    <div class="media-container">
+      <audio controls src="${att.url}" class="chat-audio"></audio>
+    </div>`;
     const au = document.createElement('audio'); au.src = a.url; au.controls = true; au.className = 'mt-2';
     container.appendChild(au);
     return { element: container };
@@ -2056,6 +2565,29 @@ function createAttachmentElement(a){
   }
   return { element: null };
 }
+
+function gatherAttachments(){
+  const items = document.querySelectorAll('#previewContainer .preview-item');
+  const atts = [];
+  items.forEach(p=>{
+    if(p.type === 'audio'){
+      atts.push({ type:'audio', blob: p.blob });
+    }
+    // keep existing image/video handling here
+  });
+  return atts;
+}
+
+sendBtn.addEventListener('click', ()=>{
+  const text = textarea.value.trim();
+  const atts = gatherAttachments();
+
+  if(text || atts.length){
+    sendMessage(text, atts);
+    textarea.value = '';
+    document.getElementById('previewContainer').innerHTML = '';
+  }
+});
 
 /* =========================
    Mic (voice message) implementation
@@ -2153,11 +2685,30 @@ function stopRecording(){
 }
 
 // toggle mic on click
-micBtn.addEventListener('click', (ev)=>{
-  ev.stopPropagation();
-  if(isRecording) stopRecording();
-  else startRecording();
-});
+recorder.onstop = () => {
+  const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+  const url = URL.createObjectURL(audioBlob);
+  chunks = [];
+
+  // Create preview card
+  const preview = document.createElement('div');
+  preview.className = 'preview-item';
+
+  preview.innerHTML = `
+    <audio controls src="${url}" class="preview-audio"></audio>
+    <button class="remove-btn">❌</button>
+  `;
+
+  preview.querySelector('.remove-btn').onclick = () => preview.remove();
+
+  // Attach blob data for sending
+  preview.dataset.blobUrl = url;
+  preview.blob = audioBlob;
+  preview.type = "audio";
+
+  document.getElementById('previewContainer').appendChild(preview);
+};
+
 
 // keyboard activate (Enter / Space)
 micBtn.addEventListener('keydown', (ev)=>{
