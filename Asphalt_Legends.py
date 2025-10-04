@@ -1767,92 +1767,38 @@ CHAT_HTML = r'''<!doctype html>
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
 <script>
+const emojiBtn = document.getElementById('emojiBtn');
+const composer = document.querySelector('.composer');
+const textarea = document.getElementById('msg');
+const micBtn = document.getElementById('mic');
+const recorder = document.getElementById('mic'); // if you have one
+const plusBtn = document.getElementById('plusBtn');
+const attachMenuVertical = document.getElementById('attachMenuVertical');
+const socket = io();
+let myName = "{{ username }}";
+let lastId = 0;
+let stagedFiles = [];
+let typingTimer = null;
+let isTyping = false;
+let sendBtn = document.getElementById('sendBtn');
+let emojiDrawer = document.getElementById('stickerPanel');
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('msg');
+const composerEl = document.getElementById('composer');
+const composerMain = document.getElementById('composerMain');
+const panel = document.getElementById('stickerPanel');
+const nodeId = 'typing-'+(d.from||'user');
+const incomingCallBanner = document.getElementById('incomingCallBanner');
+const incomingCallerNameEl = document.getElementById('incomingCallerName');
+const acceptCallBtn = document.getElementById('acceptCallBtn');
+const declineCallBtn = document.getElementById('declineCallBtn');
 
-(function bootChat() {
-  function initChat() {
-    const emojiBtn = document.getElementById('emojiBtn');
-    const composer = document.querySelector('.composer');
-    const textarea = document.getElementById('msg');
-    const micBtn = document.getElementById('mic');
-    const recorder = document.getElementById('mic'); // if you have one
-    const plusBtn = document.getElementById('plusBtn');
-    const attachMenuVertical = document.getElementById('attachMenuVertical');
-    const socket = io();
-    let myName = "{{ username }}";
-    let lastId = 0;
-    let stagedFiles = [];
-    let typingTimer = null;
-    let isTyping = false;
-    let sendBtn = document.getElementById('sendBtn');
-    let emojiDrawer = document.getElementById('stickerPanel');
-    const messagesEl = document.getElementById('messages');
-    const inputEl = document.getElementById('msg');
-    const composerEl = document.getElementById('composer');
-    const composerMain = document.getElementById('composerMain');
-    const panel = document.getElementById('stickerPanel');
-    const nodeId = 'typing-'+(d.from||'user');
-    const incomingCallBanner = document.getElementById('incomingCallBanner');
-    const incomingCallerNameEl = document.getElementById('incomingCallerName');
-    const acceptCallBtn = document.getElementById('acceptCallBtn');
-    const declineCallBtn = document.getElementById('declineCallBtn');
+const inCallControls = document.getElementById('inCallControls');
+const btnHangup = document.getElementById('btnHangup');
+const btnMute = document.getElementById('btnMute');
+const btnToggleVideo = document.getElementById('btnToggleVideo');
+const btnSwitchCam = document.getElementById('btnSwitchCam');
 
-    const inCallControls = document.getElementById('inCallControls');
-    const btnHangup = document.getElementById('btnHangup');
-    const btnMute = document.getElementById('btnMute');
-    const btnToggleVideo = document.getElementById('btnToggleVideo');
-    const btnSwitchCam = document.getElementById('btnSwitchCam');
-    // Example: wire emoji button (move your existing handler here)
-    if (emojiBtn && emojiDrawer && composer) {
-      emojiBtn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        // existing emoji logic that referenced emojiDrawer/composer/emojiPicker
-        emojiDrawer.classList.toggle('active');
-        composer.classList.toggle('up');
-      });
-    }
-
-    // Example: wire send button (move your existing handler here)
-    if (sendBtn && textarea) {
-      sendBtn.addEventListener('click', async () => {
-        const text = (textarea.value || '').trim();
-        if (!text && stagedFiles.length === 0) return;
-        // your existing send logic goes here (use textarea, stagedFiles, etc.)
-      });
-    }
-
-    // Example: wire plusBtn / attach menu (if present)
-    if (plusBtn && attachMenuVertical) {
-      plusBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const showing = attachMenuVertical.style.display === 'flex';
-        attachMenuVertical.style.display = showing ? 'none' : 'flex';
-        if (!showing) {
-          window.addEventListener('scroll', hideAttachMenuOnce, { once: true });
-        }
-      });
-    }
-
-    // Hook the mic start/stop logic to micBtn (if you use startRecording/stopRecording)
-    if (micBtn) {
-      micBtn.addEventListener('click', () => {
-        if (!isRecording) startRecording();
-        else stopRecording();
-      });
-      // keyboard accessibility if needed
-      micBtn.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); micBtn.click(); }
-      });
-    }
-
-    // ... move other event listener wiring here (menu buttons, poll modal, etc.)
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initChat);
-  } else {
-    initChat();
-  }
-})();
 
 /* simpler escape */
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
