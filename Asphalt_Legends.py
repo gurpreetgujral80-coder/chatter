@@ -3,6 +3,8 @@ import sqlite3
 import secrets
 import time
 import json
+import time
+import threading
 import hashlib
 import hmac
 import pathlib
@@ -14,13 +16,8 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 app = Flask(__name__, static_folder="static")
-app.add_handler(CommandHandler("poll", cmd_poll))
-app.add_handler(CallbackQueryHandler(on_option_click))
 # -------- CONFIG ----------
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 # Optional cookie config
@@ -36,7 +33,9 @@ MAX_MESSAGES = 100
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp", "svg"}
 ALLOWED_VIDEO_EXT = {"mp4", "webm", "ogg"}
 ALLOWED_AUDIO_EXT = {"mp3", "wav", "ogg", "m4a", "webm"}
-message_selection = {}
+messages_store = []
+polls_store = {}
+user_sid_map = {}
 
 # ensure static subfolders
 pathlib.Path(os.path.join(app.static_folder, "uploads")).mkdir(parents=True, exist_ok=True)
@@ -496,150 +495,6 @@ def avatar_save():
         return jsonify({"status":"ok","avatar":avatar_url})
     except Exception as e:
         return f"error: {e}", 500
-
-# ---------- Poll system with personal DM ticks ----------
-def build_group_poll_text(question: str, options: list[str], votes: dict[int, set]):
-    """
-    Build the shared group poll message.
-    Shows only counts (no ticks).
-    """
-    counts = [0] * len(options)
-    for user_sel in votes.values():
-        for i in user_sel:
-            if 0 <= i < len(options):
-                counts[i] += 1
-
-    lines = [f"*{question}*\n"]
-    for i, opt in enumerate(options):
-        count = counts[i]
-        lines.append(f"{opt} — {count} vote{'s' if count != 1 else ''}")
-    return "\n".join(lines)
-
-def build_user_poll_text(question: str, options: list[str], votes: dict[int, set], user_id: int):
-    """
-    Build the private poll view for a user.
-    Shows ticks next to *their* selected options, plus global counts.
-    """
-    counts = [0] * len(options)
-    for user_sel in votes.values():
-        for i in user_sel:
-            if 0 <= i < len(options):
-                counts[i] += 1
-
-    user_selected = votes.get(user_id, set())
-    lines = [f"*{question}*\n"]
-    for i, opt in enumerate(options):
-        count = counts[i]
-        if i in user_selected:
-            lines.append(f"✅ {opt} — {count} vote{'s' if count != 1 else ''}")
-        else:
-            lines.append(f"{opt} — {count} vote{'s' if count != 1 else ''}")
-    return "\n".join(lines)
-
-def build_keyboard(options: list[str]):
-    keyboard = []
-    for i, opt in enumerate(options):
-        keyboard.append([InlineKeyboardButton(text=opt, callback_data=str(i))])
-    return InlineKeyboardMarkup(keyboard)
-
-async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Create a poll.
-    Usage:
-    /poll [single|multi]|Question|Option1|Option2|...
-    """
-    text = update.message.text.partition(" ")[2]
-    if not text:
-        await update.message.reply_text("Usage: /poll [single|multi]|Question|Option1|Option2|...")
-        return
-
-    parts = [p.strip() for p in text.split("|") if p.strip()]
-    if not parts:
-        await update.message.reply_text("Usage: /poll [single|multi]|Question|Option1|Option2|...")
-        return
-
-    first = parts[0].lower()
-    allow_multi = False
-    if first == "multi":
-        allow_multi = True
-        parts = parts[1:]
-    elif first == "single":
-        allow_multi = False
-        parts = parts[1:]
-
-    if len(parts) < 2:
-        await update.message.reply_text("Provide a question and at least one option separated by |")
-        return
-
-    question = parts[0]
-    options = parts[1:]
-
-    poll_text = build_group_poll_text(question, options, votes={})
-    keyboard = build_keyboard(options)
-    sent = await update.message.reply_text(
-        poll_text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN
-    )
-
-    # Store poll
-    chat_polls = context.bot_data.setdefault("polls", {}).setdefault(str(sent.chat_id), {})
-    chat_polls[str(sent.message_id)] = {
-        "question": question,
-        "options": options,
-        "allow_multi": allow_multi,
-        "votes": {}
-    }
-
-async def on_option_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    msg = query.message
-    chat_id = str(msg.chat_id)
-    msg_id = str(msg.message_id)
-    polls = context.bot_data.get("polls", {})
-    chat_polls = polls.get(chat_id, {})
-    poll = chat_polls.get(msg_id)
-    if not poll:
-        await query.edit_message_text("Poll expired or not found.")
-        return
-
-    try:
-        chosen_index = int(query.data)
-    except (ValueError, TypeError):
-        return
-
-    user_id = query.from_user.id
-    votes = poll.setdefault("votes", {})
-
-    # Apply voting rules
-    if poll.get("allow_multi"):
-        user_set = votes.setdefault(user_id, set())
-        if chosen_index in user_set:
-            user_set.remove(chosen_index)
-            if not user_set:
-                votes.pop(user_id, None)
-        else:
-            user_set.add(chosen_index)
-    else:
-        current = votes.get(user_id, set())
-        if (len(current) == 1 and chosen_index in current):
-            votes.pop(user_id, None)
-        else:
-            votes[user_id] = {chosen_index}
-
-    # Update group poll (counts only)
-    new_group_text = build_group_poll_text(poll["question"], poll["options"], votes)
-    keyboard = build_keyboard(poll["options"])
-    await query.edit_message_text(new_group_text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
-
-    # Send/update private DM for this user with their ticks
-    new_user_text = build_user_poll_text(poll["question"], poll["options"], votes, user_id)
-    try:
-        await context.bot.send_message(user_id, new_user_text, parse_mode=ParseMode.MARKDOWN)
-    except Exception as e:
-        # user hasn’t started the bot in DM
-        await query.answer("Start the bot in private chat to see your selections.", show_alert=True)
-# ---------- End poll system ----------
 
 # ---------- Templates ----------
 # AVATAR CREATE page HTML (separate smaller page)
@@ -3318,22 +3173,53 @@ def send_composite_message():
     return jsonify({"status": "ok"})
 
 
-# Kept for sticker sending, which is URL-based
-@app.route("/send_message", methods=["POST"]) 
+@app.route('/send_message', methods=['POST'])
 def send_message():
-    username = session.get('username'); 
-    if not username: return "not signed in", 400
-    body = request.get_json() or {}
-    text = (body.get("text") or "").strip()
-    attachments = body.get("attachments") or []
-    save_message(username, text, attachments=attachments); touch_user_presence(username)
-    return jsonify({"status":"ok"})
+    data = request.get_json() or {}
+    text = data.get('text', '')
+    attachments = data.get('attachments', [])
+    sender = data.get('sender') or data.get('from') or 'Unknown'
 
-@app.route("/poll_messages")
+    # generate message ID (use timestamp or incremental)
+    mid = int(time.time() * 1000)
+    # build message dict
+    msg = {
+        'id': mid,
+        'sender': sender,
+        'text': text,
+        'attachments': []
+    }
+
+    for a in attachments:
+        at = {}
+        if a.get('type') == 'poll':
+            opts = a.get('options', [])
+            allow_multi = a.get('allow_multi', False)
+            # create poll store entry
+            polls_store[str(mid)] = {
+                'question': text,
+                'options': opts,
+                'allow_multi': allow_multi,
+                'votes': {}  # username → set of indices
+            }
+            at = {'type': 'poll', 'options': opts}
+        else:
+            # handle other attachments normally
+            at = a.copy()
+        msg['attachments'].append(at)
+
+    # store message
+    messages_store.append(msg)
+    # broadcast new message to connected sockets
+    socketio.emit('new_message', msg)
+    return jsonify({'ok': True, 'id': mid})
+
+@app.route('/poll_messages')
 def poll_messages():
-    since = int(request.args.get("since", 0))
-    msgs = fetch_messages(since)
-    return jsonify(msgs)
+    since = request.args.get('since', 0, type=int)
+    # filter messages whose id > since
+    new_msgs = [m for m in messages_store if m['id'] > since]
+    return jsonify(new_msgs)
 
 @app.route("/edit_message", methods=["POST"])
 def route_edit_message():
@@ -3475,6 +3361,78 @@ def on_call_control(data):
     sid = USER_SID.get(to)
     if sid:
         emit('call_control', data, room=sid)
+@socketio.on('identify')
+def handle_identify(data):
+    name = data.get('name')
+    if name:
+        user_sid_map[name] = request.sid
+        emit('identified', {'ok': True})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    sid = request.sid
+    to_remove = [u for u, s in user_sid_map.items() if s == sid]
+    for u in to_remove:
+        user_sid_map.pop(u, None)
+
+@socketio.on('vote_poll')
+def handle_vote_poll(data):
+    """
+    data: { message_id, option, user }
+    """
+    mid = str(data.get('message_id'))
+    option = data.get('option')
+    user = data.get('user')
+    if mid not in polls_store:
+        emit('poll_error', {'message': 'Poll not found', 'message_id': mid})
+        return
+
+    poll = polls_store[mid]
+    votes = poll.setdefault('votes', {})
+    try:
+        opt_i = int(option)
+    except:
+        return
+
+    if poll.get('allow_multi'):
+        user_set = votes.setdefault(user, set())
+        if opt_i in user_set:
+            user_set.remove(opt_i)
+            if not user_set:
+                votes.pop(user, None)
+        else:
+            user_set.add(opt_i)
+    else:
+        cur = votes.get(user, set())
+        if len(cur) == 1 and opt_i in cur:
+            votes.pop(user, None)
+        else:
+            votes[user] = {opt_i}
+
+    # compute counts
+    counts = [0] * len(poll['options'])
+    for sel in votes.values():
+        for i in sel:
+            if 0 <= i < len(counts):
+                counts[i] += 1
+
+    # broadcast update to all clients
+    socketio.emit('poll_update', {'message_id': mid, 'counts': counts})
+
+    # send private poll view to this user
+    sid = user_sid_map.get(user)
+    private = {
+        'message_id': mid,
+        'user': user,
+        'selected': list(votes.get(user, [])),
+        'counts': counts,
+        'question': poll['question'],
+        'options': poll['options']
+    }
+    if sid:
+        socketio.emit('poll_private', private, to=sid)
+    else:
+        emit('poll_private_missing', {'message': 'You must connect via socket to see private poll'})
 
 # ----- run -----
 if __name__ == "__main__":
