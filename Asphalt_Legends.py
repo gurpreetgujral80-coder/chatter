@@ -111,14 +111,32 @@ def load_user_by_name(name):
     if r: return {"id": r[0], "name": r[1], "pass_salt": r[2], "pass_hash": r[3], "avatar": r[4], "status": r[5], "is_owner": bool(r[6]), "is_partner": bool(r[7])}
     return None
 
-def clone_user(name, pass_salt, pass_hash):
-    conn = get_db()
+def clone_user(name, pass_salt, pass_hash, avatar=None, status=""):
+    """
+    Create a new user row that reuses the provided salt+hash so the same
+    password will work for the new username. New users are NOT owners/partners.
+    Returns the newly created user dict (or None on error).
+    """
+    # normalize memoryview -> bytes if necessary
+    if isinstance(pass_salt, memoryview): pass_salt = bytes(pass_salt)
+    if isinstance(pass_hash, memoryview): pass_hash = bytes(pass_hash)
+
+    conn = db_conn()
     cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO users (name, pass_salt, pass_hash) VALUES (?, ?, ?)",
-        (name, pass_salt, pass_hash)
-    )
-    conn.commit()
+    try:
+        cur.execute(
+            """INSERT INTO users (name, pass_salt, pass_hash, avatar, status, is_owner, is_partner)
+               VALUES (?, ?, ?, ?, ?, 0, 0)""",
+            (name, sqlite3.Binary(pass_salt), sqlite3.Binary(pass_hash), avatar, status)
+        )
+        conn.commit()
+    except Exception:
+        # If INSERT fails (e.g. name collision), ignore/close and continue
+        conn.rollback()
+    finally:
+        conn.close()
+
+    return load_user_by_name(name)
 
 def load_first_user():
     conn = db_conn(); c = conn.cursor()
