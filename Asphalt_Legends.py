@@ -1780,8 +1780,30 @@ CHAT_HTML = r'''<!doctype html>
     const recorderBtn = document.getElementById('recorder'); // if you have one
     const plusBtn = document.getElementById('plusBtn');
     const attachMenuVertical = document.getElementById('attachMenuVertical');
-    // ... add any other element refs that your handlers use
+    const socket = io();
+    let myName = "{{ username }}";
+    let lastId = 0;
+    let stagedFiles = [];
+    let typingTimer = null;
+    let isTyping = false;
+    let sendBtn = document.getElementById('sendBtn');
+    let emojiDrawer = document.getElementById('stickerPanel');
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('msg');
+    const composerEl = document.getElementById('composer');
+    const composerMain = document.getElementById('composerMain');
+    const panel = document.getElementById('stickerPanel');
+    const nodeId = 'typing-'+(d.from||'user');
+    const incomingCallBanner = document.getElementById('incomingCallBanner');
+    const incomingCallerNameEl = document.getElementById('incomingCallerName');
+    const acceptCallBtn = document.getElementById('acceptCallBtn');
+    const declineCallBtn = document.getElementById('declineCallBtn');
 
+    const inCallControls = document.getElementById('inCallControls');
+    const btnHangup = document.getElementById('btnHangup');
+    const btnMute = document.getElementById('btnMute');
+    const btnToggleVideo = document.getElementById('btnToggleVideo');
+    const btnSwitchCam = document.getElementById('btnSwitchCam');
     // Example: wire emoji button (move your existing handler here)
     if (emojiBtn && emojiDrawer && composer) {
       emojiBtn.addEventListener('click', (ev) => {
@@ -1835,30 +1857,15 @@ CHAT_HTML = r'''<!doctype html>
   }
 })();
 
-const socket = io();
-let myName = "{{ username }}";
-let lastId = 0;
-let stagedFiles = [];
-let typingTimer = null;
-let isTyping = false;
-let sendBtn = document.getElementById('sendBtn');
-let emojiDrawer = document.getElementById('stickerPanel');
-const messagesEl = document.getElementById('messages');
-const inputEl = document.getElementById('msg');
-const composerEl = document.getElementById('composer');
-const composerMain = document.getElementById('composerMain');
-
 /* simpler escape */
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
 
 function showStickerPanel() {
-  const panel = document.getElementById('stickerPanel');
   panel.classList.add('active'); // slide up
   document.querySelector('.composer')?.classList.add('up');
 }
 
 function hideStickerPanel() {
-  const panel = document.getElementById('stickerPanel');
   panel.classList.remove('active'); // slide down
   document.querySelector('.composer')?.classList.remove('up');
 }
@@ -1879,16 +1886,13 @@ inputEl.addEventListener('input', ()=> {
 
 /* Show typing text when socket receives it */
 socket.on('typing', (d)=> {
-  const nodeId = 'typing-'+(d.from||'user');
   if(document.getElementById(nodeId)) return;
   const el = document.createElement('div'); el.id = nodeId; el.className='msg-row';
   el.innerHTML = `<div class="msg-body"><div class="bubble them"><em>${escapeHtml(d.from||'Someone')} is typing…</em></div></div>`;
   messagesEl.appendChild(el);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 });
-socket.on('stop_typing', (d)=> {
-  const nodeId = 'typing-'+(d.from||'user'); const el = document.getElementById(nodeId); if(el) el.remove();
-});
+socket.on('stop_typing', (d)=> { const el = document.getElementById(nodeId); if(el) el.remove(); });
 
 /* =========================
    Emoji-mart picker integration (v5)
@@ -1924,8 +1928,7 @@ function insertAtCursor(el, text){
 /* =========================
    + attach menu behavior (vertical rectangular buttons)
    ========================= */
-const plusBtn = document.getElementById('plusBtn');
-const attachMenuVertical = document.getElementById('attachMenuVertical');
+
 plusBtn.addEventListener('click', (e)=>{
   e.stopPropagation();
   const showing = attachMenuVertical.style.display === 'flex';
@@ -1977,18 +1980,6 @@ const pcConfig = {
     // Add TURN server here for reliable NAT traversal in production
   ]
 };
-
-// References
-const incomingCallBanner = document.getElementById('incomingCallBanner');
-const incomingCallerNameEl = document.getElementById('incomingCallerName');
-const acceptCallBtn = document.getElementById('acceptCallBtn');
-const declineCallBtn = document.getElementById('declineCallBtn');
-
-const inCallControls = document.getElementById('inCallControls');
-const btnHangup = document.getElementById('btnHangup');
-const btnMute = document.getElementById('btnMute');
-const btnToggleVideo = document.getElementById('btnToggleVideo');
-const btnSwitchCam = document.getElementById('btnSwitchCam');
 
 // State tracking
 let activeCallId = null;
