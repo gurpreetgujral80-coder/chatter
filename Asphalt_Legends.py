@@ -14,7 +14,13 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, emit, join_room, leave_room
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ParseMode
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+
 app = Flask(__name__, static_folder="static")
+app.add_handler(CommandHandler("poll", cmd_poll))
+app.add_handler(CallbackQueryHandler(on_option_click))
 # -------- CONFIG ----------
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 # Optional cookie config
@@ -30,6 +36,7 @@ MAX_MESSAGES = 100
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp", "svg"}
 ALLOWED_VIDEO_EXT = {"mp4", "webm", "ogg"}
 ALLOWED_AUDIO_EXT = {"mp3", "wav", "ogg", "m4a", "webm"}
+message_selection = {}
 
 # ensure static subfolders
 pathlib.Path(os.path.join(app.static_folder, "uploads")).mkdir(parents=True, exist_ok=True)
@@ -490,40 +497,149 @@ def avatar_save():
     except Exception as e:
         return f"error: {e}", 500
 
-# simple poll voting endpoint (updates message attachments in place)
-@app.route("/vote_poll", methods=["POST"])
-def vote_poll():
-    username = session.get('username')
-    if not username: return "not signed in", 401
-    body = request.get_json() or {}
-    msg_id = body.get("message_id")
-    option_idx = int(body.get("option_index", -1))
-    if msg_id is None or option_idx < 0:
-        return "bad request", 400
-    conn = db_conn(); c = conn.cursor()
-    c.execute("SELECT attachments FROM messages WHERE id = ? LIMIT 1", (msg_id,))
-    r = c.fetchone()
-    if not r:
-        conn.close(); return "no message", 404
-    attachments = json.loads(r[0] or "[]")
-    changed = False
-    for att in attachments:
-        if att.get("type") == "poll":
-            poll = att
-            votes = poll.setdefault("votes", {})  # user->option_index
-            # toggle vote: if same vote already, remove; else set
-            prev = votes.get(username)
-            if prev is not None and prev == option_idx:
-                votes.pop(username, None)
-            else:
-                votes[username] = option_idx
-            changed = True
-            break
-    if not changed:
-        conn.close(); return "no poll found", 404
-    c.execute("UPDATE messages SET attachments = ? WHERE id = ?", (json.dumps(attachments), msg_id))
-    conn.commit(); conn.close()
-    return jsonify({"status":"ok","attachments":attachments})
+# ---------- Poll system with personal DM ticks ----------
+def build_group_poll_text(question: str, options: list[str], votes: dict[int, set]):
+    """
+    Build the shared group poll message.
+    Shows only counts (no ticks).
+    """
+    counts = [0] * len(options)
+    for user_sel in votes.values():
+        for i in user_sel:
+            if 0 <= i < len(options):
+                counts[i] += 1
+
+    lines = [f"*{question}*\n"]
+    for i, opt in enumerate(options):
+        count = counts[i]
+        lines.append(f"{opt} — {count} vote{'s' if count != 1 else ''}")
+    return "\n".join(lines)
+
+def build_user_poll_text(question: str, options: list[str], votes: dict[int, set], user_id: int):
+    """
+    Build the private poll view for a user.
+    Shows ticks next to *their* selected options, plus global counts.
+    """
+    counts = [0] * len(options)
+    for user_sel in votes.values():
+        for i in user_sel:
+            if 0 <= i < len(options):
+                counts[i] += 1
+
+    user_selected = votes.get(user_id, set())
+    lines = [f"*{question}*\n"]
+    for i, opt in enumerate(options):
+        count = counts[i]
+        if i in user_selected:
+            lines.append(f"✅ {opt} — {count} vote{'s' if count != 1 else ''}")
+        else:
+            lines.append(f"{opt} — {count} vote{'s' if count != 1 else ''}")
+    return "\n".join(lines)
+
+def build_keyboard(options: list[str]):
+    keyboard = []
+    for i, opt in enumerate(options):
+        keyboard.append([InlineKeyboardButton(text=opt, callback_data=str(i))])
+    return InlineKeyboardMarkup(keyboard)
+
+async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Create a poll.
+    Usage:
+    /poll [single|multi]|Question|Option1|Option2|...
+    """
+    text = update.message.text.partition(" ")[2]
+    if not text:
+        await update.message.reply_text("Usage: /poll [single|multi]|Question|Option1|Option2|...")
+        return
+
+    parts = [p.strip() for p in text.split("|") if p.strip()]
+    if not parts:
+        await update.message.reply_text("Usage: /poll [single|multi]|Question|Option1|Option2|...")
+        return
+
+    first = parts[0].lower()
+    allow_multi = False
+    if first == "multi":
+        allow_multi = True
+        parts = parts[1:]
+    elif first == "single":
+        allow_multi = False
+        parts = parts[1:]
+
+    if len(parts) < 2:
+        await update.message.reply_text("Provide a question and at least one option separated by |")
+        return
+
+    question = parts[0]
+    options = parts[1:]
+
+    poll_text = build_group_poll_text(question, options, votes={})
+    keyboard = build_keyboard(options)
+    sent = await update.message.reply_text(
+        poll_text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN
+    )
+
+    # Store poll
+    chat_polls = context.bot_data.setdefault("polls", {}).setdefault(str(sent.chat_id), {})
+    chat_polls[str(sent.message_id)] = {
+        "question": question,
+        "options": options,
+        "allow_multi": allow_multi,
+        "votes": {}
+    }
+
+async def on_option_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    msg = query.message
+    chat_id = str(msg.chat_id)
+    msg_id = str(msg.message_id)
+    polls = context.bot_data.get("polls", {})
+    chat_polls = polls.get(chat_id, {})
+    poll = chat_polls.get(msg_id)
+    if not poll:
+        await query.edit_message_text("Poll expired or not found.")
+        return
+
+    try:
+        chosen_index = int(query.data)
+    except (ValueError, TypeError):
+        return
+
+    user_id = query.from_user.id
+    votes = poll.setdefault("votes", {})
+
+    # Apply voting rules
+    if poll.get("allow_multi"):
+        user_set = votes.setdefault(user_id, set())
+        if chosen_index in user_set:
+            user_set.remove(chosen_index)
+            if not user_set:
+                votes.pop(user_id, None)
+        else:
+            user_set.add(chosen_index)
+    else:
+        current = votes.get(user_id, set())
+        if (len(current) == 1 and chosen_index in current):
+            votes.pop(user_id, None)
+        else:
+            votes[user_id] = {chosen_index}
+
+    # Update group poll (counts only)
+    new_group_text = build_group_poll_text(poll["question"], poll["options"], votes)
+    keyboard = build_keyboard(poll["options"])
+    await query.edit_message_text(new_group_text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+
+    # Send/update private DM for this user with their ticks
+    new_user_text = build_user_poll_text(poll["question"], poll["options"], votes, user_id)
+    try:
+        await context.bot.send_message(user_id, new_user_text, parse_mode=ParseMode.MARKDOWN)
+    except Exception as e:
+        # user hasn’t started the bot in DM
+        await query.answer("Start the bot in private chat to see your selections.", show_alert=True)
+# ---------- End poll system ----------
 
 # ---------- Templates ----------
 # AVATAR CREATE page HTML (separate smaller page)
@@ -1062,7 +1178,7 @@ renderPreview();
 </body></html>
 '''
 # ---- CHAT HTML (heavily modified) ----
-# --- CHAT page: updated with emoji-mart v5, sticker/gif/avatar/emoji panel, typing indicator, attach menu, poll modal, avatar flow gggggggggggggggggggggggggggggggggggggg---
+# --- CHAT page: updated with emoji-mart v5, sticker/gif/avatar/emoji panel, typing indicator, attach menu, poll modal, avatar flow ---
 CHAT_HTML = r'''<!doctype html>
 <html>
 <head>
@@ -1147,8 +1263,29 @@ CHAT_HTML = r'''<!doctype html>
       .heading-wrapper img { height: 64px; }
       .heading-title { font-size: 1.4rem; margin-left: 0; }
     }
+    .call-btn{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      white-space:nowrap;
+      padding:6px 10px;
+      border-radius:8px;
+      border:1px solid rgba(0,0,0,0.08);
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      cursor:pointer;
+      font-size:0.92rem;
+      transition: transform .08s ease, box-shadow .08s ease;
+    }
+    .call-btn:active{ transform: translateY(1px); }
+    .call-btn:hover{ box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
     
-    /* header action buttons */
+    /* make buttons tile/stack on very small widths */
+    @media (max-width:520px){
+      .header-actions { gap:6px; }
+      .call-btn { padding:8px 12px; font-size:0.9rem; flex: 1 1 auto; min-width:120px; text-align:center; }
+    }
+
     .header-actions {
       position: absolute;
       right: 12px;
@@ -1603,6 +1740,8 @@ CHAT_HTML = r'''<!doctype html>
       <!-- Header -->
       <header>
         <div class="heading-wrapper" role="banner" aria-label="App header">
+          <button id="audioCallBtn" class="call-btn" title="Start audio call" aria-label="Audio call">📞 Audio</button>
+          <button id="videoCallBtn" class="call-btn" title="Start video call" aria-label="Video call">📽️ Video</button>
           <img src="{{ heading_img }}" alt="Heading image" />
           <div class="heading-title">Asphalt <span style="color:#be185d;">Legends</span></div>
         </div>
@@ -1768,7 +1907,7 @@ CHAT_HTML = r'''<!doctype html>
         </div>
       </div>
     <div id="emojiPanel" class="emoji-panel"></div>
-</body>
+
 <!-- include socket.io and other scripts (socket server expected) -->
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
@@ -2966,7 +3105,64 @@ emojiDrawer.addEventListener('click', (e) => {
     composer.classList.remove('up');
   }
 });
+
+/* ---------- Header call buttons wiring ---------- */
+function getCurrentChatPeer() {
+  // 1) check a header element with data-peer
+  const headerEl = document.getElementById('header') || document.querySelector('.chat-header') || document.querySelector('.header');
+  if (headerEl && headerEl.dataset && headerEl.dataset.peer) return headerEl.dataset.peer;
+
+  // 2) check an element that may contain the chat title/username
+  const titleEl = document.getElementById('chatTitle') || document.querySelector('.chat-title') || document.querySelector('.title .username');
+  if (titleEl && titleEl.textContent && titleEl.textContent.trim()) {
+    const txt = titleEl.textContent.trim();
+    // if title contains "You" or current user, skip
+    if (txt && txt !== myName) return txt;
+  }
+
+  // 3) fallback: try to infer from last visible message sender in the messages list
+  try {
+    const rows = document.querySelectorAll('#messages .msg-row');
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const strong = rows[i].querySelector('.msg-meta-top strong') || rows[i].querySelector('strong');
+      if (strong && strong.textContent) {
+        const name = strong.textContent.trim();
+        if (name && name !== myName) return name;
+      }
+    }
+  } catch(e) { /* ignore */ }
+
+  // 4) last resort -> ask user
+  return null;
+}
+
+async function promptForPeerAndCall(isVideo) {
+  let peer = getCurrentChatPeer();
+  if (!peer) {
+    peer = prompt('Enter the username to call (e.g. alice):');
+    if (!peer) return;
+  }
+
+  // startCall exists in your script: startCall(toUser, isVideo=true)
+  try {
+    await startCall(peer, !!isVideo);
+  } catch (err) {
+    console.error('startCall failed', err);
+    alert('Could not start call: ' + (err && err.message ? err.message : err));
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const audioBtn = document.getElementById('audioCallBtn');
+  const videoBtn = document.getElementById('videoCallBtn');
+
+  if (audioBtn) audioBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall(false); });
+
+  if (videoBtn) videoBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall(true); });
+});
+/* ---------- end header wiring ---------- */
 </script>
+</body>
 </html>
 ''' 
 
