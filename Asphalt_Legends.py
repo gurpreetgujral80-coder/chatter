@@ -1645,7 +1645,7 @@ CHAT_HTML = r'''<!doctype html>
       </main>
     
       <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
-      <div id="stickerPanel" aria-hidden="true" class="emoji-drawer">
+      <div id="stickerPanel" inert hidden class="emoji-drawer">
           <div class="drag-bar" style="
               width:40px;
               height:5px;
@@ -2043,8 +2043,18 @@ CHAT_HTML = r'''<!doctype html>
   }
 
   // Show/hide sticker panel
-  function showStickerPanel(){ if(panel) panel.classList.add('active'); composer && composer.classList.add('up'); }
-  function hideStickerPanel(){ if(panel) panel.classList.remove('active'); composer && composer.classList.remove('up'); }
+  function openStickerPanel(){
+      const p = document.getElementById('stickerPanel');
+      p.hidden = false;
+      p.inert = false;
+  }
+    
+  function closeStickerPanel(){
+      const p = document.getElementById('stickerPanel');
+      p.inert = true;
+      p.hidden = true;
+      document.getElementById('chatInput').focus(); // return focus to input
+  }
 
   /* ---------------------------
      WebRTC / calls
@@ -2673,6 +2683,34 @@ CHAT_HTML = r'''<!doctype html>
       setComposerElevated(isUp);
     }
   }, 250);
+  async function loadStickers(){
+      try {
+        const res = await fetch('/stickers_list');
+        if(!res.ok) throw new Error("Failed to load stickers");
+        const stickers = await res.json();
+    
+        const container = document.getElementById('stickersContainer');
+        if(!container) return;
+    
+        container.innerHTML = '';
+        stickers.forEach(url=>{
+          const img = document.createElement('img');
+          img.src = url;
+          img.className = "w-16 h-16 m-1 cursor-pointer rounded";
+          img.onclick = ()=> insertSticker(url);
+          container.appendChild(img);
+        });
+      } catch(err){
+        console.error("Sticker load error:", err);
+      }
+  }
+
+  function insertSticker(url){
+      // example: append sticker as an image message
+      const textarea = document.getElementById('chatInput');
+      textarea.value += ` [sticker:${url}] `;
+      textarea.focus();
+  }
 
   /* ---------------------------
      Event wiring on DOMContentLoaded - single point of initialization
