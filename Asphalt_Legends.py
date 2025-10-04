@@ -14,7 +14,7 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, emit, join_room, leave_room
-
+app = Flask(__name__, static_folder="static")
 # -------- CONFIG ----------
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 # Optional cookie config
