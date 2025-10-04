@@ -1767,9 +1767,74 @@ CHAT_HTML = r'''<!doctype html>
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
 <script>
-/* =========================
-   App state & helpers
-   ========================= */
+
+(function bootChat() {
+  function initChat() {
+    // DOM elements (assign once here)
+    const sendBtn = document.getElementById('sendBtn');
+    const emojiDrawer = document.getElementById('stickerPanel');
+    const emojiBtn = document.getElementById('emojiBtn');
+    const composer = document.querySelector('.composer');
+    const textarea = document.getElementById('msg');
+    const micBtn = document.getElementById('mic');
+    const recorderBtn = document.getElementById('recorder'); // if you have one
+    const plusBtn = document.getElementById('plusBtn');
+    const attachMenuVertical = document.getElementById('attachMenuVertical');
+    // ... add any other element refs that your handlers use
+
+    // Example: wire emoji button (move your existing handler here)
+    if (emojiBtn && emojiDrawer && composer) {
+      emojiBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        // existing emoji logic that referenced emojiDrawer/composer/emojiPicker
+        emojiDrawer.classList.toggle('active');
+        composer.classList.toggle('up');
+      });
+    }
+
+    // Example: wire send button (move your existing handler here)
+    if (sendBtn && textarea) {
+      sendBtn.addEventListener('click', async () => {
+        const text = (textarea.value || '').trim();
+        if (!text && stagedFiles.length === 0) return;
+        // your existing send logic goes here (use textarea, stagedFiles, etc.)
+      });
+    }
+
+    // Example: wire plusBtn / attach menu (if present)
+    if (plusBtn && attachMenuVertical) {
+      plusBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const showing = attachMenuVertical.style.display === 'flex';
+        attachMenuVertical.style.display = showing ? 'none' : 'flex';
+        if (!showing) {
+          window.addEventListener('scroll', hideAttachMenuOnce, { once: true });
+        }
+      });
+    }
+
+    // Hook the mic start/stop logic to micBtn (if you use startRecording/stopRecording)
+    if (micBtn) {
+      micBtn.addEventListener('click', () => {
+        if (!isRecording) startRecording();
+        else stopRecording();
+      });
+      // keyboard accessibility if needed
+      micBtn.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); micBtn.click(); }
+      });
+    }
+
+    // ... move other event listener wiring here (menu buttons, poll modal, etc.)
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initChat);
+  } else {
+    initChat();
+  }
+})();
+
 const socket = io();
 let myName = "{{ username }}";
 let lastId = 0;
