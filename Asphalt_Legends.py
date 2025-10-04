@@ -2626,7 +2626,6 @@ sendBtn.addEventListener('click', ()=>{
    Mic (voice message) implementation
    - toggles recording, provides visual state, uploads automatically on stop
    ========================= */
-const micBtn = document.getElementById('mic');
 let mediaRecorder = null;
 let micStream = null;
 let audioChunks = [];
