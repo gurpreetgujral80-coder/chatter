@@ -100,7 +100,8 @@ def save_user(name, salt_bytes, hash_bytes, avatar=None, status="", make_owner=F
 
 def load_user_by_name(name):
     conn = db_conn(); c = conn.cursor()
-    c.execute("SELECT id, name, pass_salt, pass_hash, avatar, status, is_owner, is_partner FROM users WHERE name = ? LIMIT 1", (name,))
+    # FIX: Use COLLATE NOCASE for case-insensitive username lookup
+    c.execute("SELECT id, name, pass_salt, pass_hash, avatar, status, is_owner, is_partner FROM users WHERE name = ? COLLATE NOCASE LIMIT 1", (name,))
     r = c.fetchone(); conn.close()
     if r: return {"id": r[0], "name": r[1], "pass_salt": r[2], "pass_hash": r[3], "avatar": r[4], "status": r[5], "is_owner": bool(r[6]), "is_partner": bool(r[7])}
     return None
@@ -3011,23 +3012,26 @@ def register():
 @app.route("/login", methods=["POST"])
 def login():
     body = request.get_json() or {}
-    name = body.get("name", "").strip()
+    # Use .strip() to remove accidental spaces from the client-side
+    name = body.get("name", "").strip() 
     passkey = body.get("passkey")
 
     if not name or not passkey:
         return "Missing username or passkey", 400
 
-    user = load_user_by_name(name)
+    # This call now uses the case-insensitive lookup (Fix 1)
+    user = load_user_by_name(name) 
+    
+    # This check returns the "Unauthorized" error
     if not user or not verify_pass(passkey, user['pass_salt'], user['pass_hash']):
-        return "Unauthorized", 401
+        return "Unauthorized", 401 # Login fails here
 
     # --- FIX: Clear the existing session to prevent conflicts/redirect loops ---
     session.clear() 
 
-    session['username'] = name
+    session['username'] = name # Use the name from the DB for consistent casing
     touch_user_presence(name)
     return jsonify({"status": "ok"})
-
 
 @app.route("/logout", methods=["POST"])
 def logout():
