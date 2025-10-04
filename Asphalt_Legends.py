@@ -2925,9 +2925,6 @@ setInterval(()=>{
     input && input.addEventListener('blur', ()=> composer.style.transform = 'translateY(0)');
   }
 })();
-const emojiBtn = document.getElementById('emojiBtn');
-const composer = document.querySelector('.composer');
-const textarea = document.getElementById('msg');
 
 // Toggle drawer open/close
 emojiBtn.addEventListener('click', () => {
