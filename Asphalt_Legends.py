@@ -100,7 +100,7 @@ def save_user(name, salt_bytes, hash_bytes, avatar=None, status="", make_owner=F
 
 def load_user_by_name(name):
     conn = db_conn(); c = conn.cursor()
-    # FIX: Use COLLATE NOCASE for case-insensitive username lookup
+    # FIX: Use COLLATE NOCASE for case-insensitive lookup
     c.execute("SELECT id, name, pass_salt, pass_hash, avatar, status, is_owner, is_partner FROM users WHERE name = ? COLLATE NOCASE LIMIT 1", (name,))
     r = c.fetchone(); conn.close()
     if r: return {"id": r[0], "name": r[1], "pass_salt": r[2], "pass_hash": r[3], "avatar": r[4], "status": r[5], "is_owner": bool(r[6]), "is_partner": bool(r[7])}
@@ -2984,53 +2984,55 @@ def profile_update():
 
 @app.route("/register", methods=["POST"])
 def register():
+    # Helper functions: hash_pass is defined in your file
+    # Helper functions: save_user is defined in your file
     body = request.get_json() or {}
-    name = (body.get("name") or "").strip()
-    passkey = body.get("passkey") or ""
-    if not name: return "missing name", 400
-    existing_master = load_first_user()
-    if existing_master is None:
-        if not passkey: return "passkey required for first registration", 400
-        salt, h = hash_pass(passkey)
-        try:
-            save_user(name, salt, h, avatar=None, status="", make_owner=True)
-            session['username'] = name; touch_user_presence(name)
-            return jsonify({"status":"registered","username":name})
-        except Exception as e: return f"db error: {e}", 500
-    else:
-        master = get_owner() or load_first_user()
-        if not passkey: return "passkey required", 400
-        # registration requires knowing master's passkey (shared)
-        if not verify_pass(passkey, master['pass_salt'], master['pass_hash']): return "invalid passkey", 403
-        salt, h = hash_pass(passkey)
-        try:
-            save_user(name, salt, h, avatar=None, status="", make_owner=False)
-            session['username'] = name; touch_user_presence(name)
-            return jsonify({"status":"registered","username":name})
-        except Exception as e: return f"db error: {e}", 500
-
-@app.route("/login", methods=["POST"])
-def login():
-    body = request.get_json() or {}
-    # Use .strip() to remove accidental spaces from the client-side
-    name = body.get("name", "").strip() 
+    name = body.get("name", "").strip()
     passkey = body.get("passkey")
 
     if not name or not passkey:
         return "Missing username or passkey", 400
 
-    # This call now uses the case-insensitive lookup (Fix 1)
-    user = load_user_by_name(name) 
-    
-    # This check returns the "Unauthorized" error
-    if not user or not verify_pass(passkey, user['pass_salt'], user['pass_hash']):
-        return "Unauthorized", 401 # Login fails here
+    # Ensure the user doesn't already exist (case-insensitive check is handled by the DB constraint on name)
+    existing_user = load_user_by_name(name)
+    if existing_user:
+        # A name collision is detected (even if different casing, e.g., 'UserA' and 'usera')
+        return "User name is already taken", 409
 
-    # --- FIX: Clear the existing session to prevent conflicts/redirect loops ---
-    session.clear() 
+    salt, hash_val = hash_pass(passkey)
+    # The first user registered should be marked as the owner
+    first_user = load_first_user()
+    save_user(name, salt, hash_val, make_owner=not first_user)
 
-    session['username'] = name # Use the name from the DB for consistent casing
+    # FIX: Clear the existing session to prevent immediate redirect issues
+    session.clear()
+
+    session['username'] = name
     touch_user_presence(name)
+    return jsonify({"status": "ok"})
+
+@app.route("/login", methods=["POST"])
+def login():
+    body = request.get_json() or {}
+    name = body.get("name", "").strip()
+    passkey = body.get("passkey")
+
+    if not name or not passkey:
+        return "Missing username or passkey", 400
+
+    # This uses the case-insensitive lookup (Fix 1)
+    user = load_user_by_name(name)
+
+    # This check returns the "Unauthorized" 401 error
+    if not user or not verify_pass(passkey, user['pass_salt'], user['pass_hash']):
+        return "Unauthorized", 401
+
+    # FIX: Clear the existing session to prevent conflicts/redirect loops (Original issue)
+    session.clear()
+
+    # Use the name found in the database for consistent casing in the session
+    session['username'] = user['name']
+    touch_user_presence(user['name'])
     return jsonify({"status": "ok"})
 
 @app.route("/logout", methods=["POST"])
