@@ -1825,9 +1825,10 @@ inputEl.addEventListener('input', ()=> {
     if(isTyping){ socket.emit('stop_typing', { from: myName }); isTyping=false; }
   }, 1200);
 });
-const nodeId = 'typing-'+(d.from||'user');
+
 /* Show typing text when socket receives it */
 socket.on('typing', (d)=> {
+  const nodeId = 'typing-'+(d.from||'user');
   if(document.getElementById(nodeId)) return;
   const el = document.createElement('div'); el.id = nodeId; el.className='msg-row';
   el.innerHTML = `<div class="msg-body"><div class="bubble them"><em>${escapeHtml(d.from||'Someone')} is typing…</em></div></div>`;
