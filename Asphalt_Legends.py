@@ -3011,25 +3011,22 @@ def register():
 @app.route("/login", methods=["POST"])
 def login():
     body = request.get_json() or {}
-    name = (body.get("name") or "").strip()
-    passkey = body.get("passkey") or ""
+    name = body.get("name", "").strip()
+    passkey = body.get("passkey")
 
-    if not name:
-        return "missing name", 400
-    if not passkey:
-        return "passkey required", 400
+    if not name or not passkey:
+        return "Missing username or passkey", 400
 
-    owner = get_owner()
-    if not owner:
-        return "no master registered yet", 400
+    user = load_user_by_name(name)
+    if not user or not verify_pass(passkey, user['pass_salt'], user['pass_hash']):
+        return "Unauthorized", 401
 
-    if verify_pass(passkey, owner['pass_salt'], owner['pass_hash']):
-        # Allow any name with correct master passkey
-        session['username'] = name
-        touch_user_presence(name)
-        return jsonify({"status": "ok", "username": name})
-        
-    return "invalid passkey", 403
+    # --- FIX: Clear the existing session to prevent conflicts/redirect loops ---
+    session.clear() 
+
+    session['username'] = name
+    touch_user_presence(name)
+    return jsonify({"status": "ok"})
 
 
 @app.route("/logout", methods=["POST"])
