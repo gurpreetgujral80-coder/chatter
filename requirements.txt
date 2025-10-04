@@ -8,3 +8,4 @@ werkzeug
 cairosvg
 requests
 python-dotenv
+python-telegram-bot==20.6
