@@ -1770,14 +1770,11 @@ CHAT_HTML = r'''<!doctype html>
 
 (function bootChat() {
   function initChat() {
-    // DOM elements (assign once here)
-    const sendBtn = document.getElementById('sendBtn');
-    const emojiDrawer = document.getElementById('stickerPanel');
     const emojiBtn = document.getElementById('emojiBtn');
     const composer = document.querySelector('.composer');
     const textarea = document.getElementById('msg');
     const micBtn = document.getElementById('mic');
-    const recorderBtn = document.getElementById('recorder'); // if you have one
+    const recorder = document.getElementById('mic'); // if you have one
     const plusBtn = document.getElementById('plusBtn');
     const attachMenuVertical = document.getElementById('attachMenuVertical');
     const socket = io();
