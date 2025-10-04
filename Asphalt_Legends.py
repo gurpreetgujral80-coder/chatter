@@ -1594,8 +1594,8 @@ CHAT_HTML = r'''<!doctype html>
 
       <!-- Header -->
       <header>
-        <button id="audioCallBtn" class="call-btn" title="Start audio call" aria-label="Audio call" style="position: fixed; left: 0.50rem;">📞 Audio</button>
-        <button id="videoCallBtn" class="call-btn" title="Start video call" aria-label="Video call" style="position: fixed; left: 0.50rem;">📽️ Video</button>
+        <button id="audioCallBtn" class="call-btn" title="Start audio call" aria-label="Audio call" style="position: fixed; left: 0.50rem; top: 0.50rem;">📞 Audio</button>
+        <button id="videoCallBtn" class="call-btn" title="Start video call" aria-label="Video call" style="position: fixed; left: 0.50rem; top: 3.20rem">📽️ Video</button>
         <div class="heading-wrapper" role="banner" aria-label="App header">
           <img src="{{ heading_img }}" alt="Heading image" />
           <div class="heading-title">Asphalt <span style="color:#be185d;">Legends</span></div>
@@ -1776,7 +1776,6 @@ let lastId = 0;
 let stagedFiles = [];
 let typingTimer = null;
 let isTyping = false;
-let sendBtn = document.getElementById('sendBtn');
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('msg');
 const composerEl = document.getElementById('composer');
