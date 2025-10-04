@@ -1767,37 +1767,38 @@ CHAT_HTML = r'''<!doctype html>
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
 <script>
-const emojiBtn = document.getElementById('emojiBtn');
-const composer = document.querySelector('.composer');
-const textarea = document.getElementById('msg');
-const micBtn = document.getElementById('mic');
-const recorder = document.getElementById('mic'); // if you have one
-const plusBtn = document.getElementById('plusBtn');
-const attachMenuVertical = document.getElementById('attachMenuVertical');
-const socket = io();
-let myName = "{{ username }}";
-let lastId = 0;
-let stagedFiles = [];
-let typingTimer = null;
-let isTyping = false;
-let sendBtn = document.getElementById('sendBtn');
-let emojiDrawer = document.getElementById('stickerPanel');
-const messagesEl = document.getElementById('messages');
-const inputEl = document.getElementById('msg');
-const composerEl = document.getElementById('composer');
-const composerMain = document.getElementById('composerMain');
-const panel = document.getElementById('stickerPanel');
-const incomingCallBanner = document.getElementById('incomingCallBanner');
-const incomingCallerNameEl = document.getElementById('incomingCallerName');
-const acceptCallBtn = document.getElementById('acceptCallBtn');
-const declineCallBtn = document.getElementById('declineCallBtn');
-
-const inCallControls = document.getElementById('inCallControls');
-const btnHangup = document.getElementById('btnHangup');
-const btnMute = document.getElementById('btnMute');
-const btnToggleVideo = document.getElementById('btnToggleVideo');
-const btnSwitchCam = document.getElementById('btnSwitchCam');
-
+document.addEventListener("DOMContentLoaded", () => {
+    const emojiBtn = document.getElementById('emojiBtn');
+    const composer = document.querySelector('.composer');
+    const textarea = document.getElementById('msg');
+    const micBtn = document.getElementById('mic');
+    const recorder = document.getElementById('mic'); // if you have one
+    const plusBtn = document.getElementById('plusBtn');
+    const attachMenuVertical = document.getElementById('attachMenuVertical');
+    const socket = io();
+    let myName = "{{ username }}";
+    let lastId = 0;
+    let stagedFiles = [];
+    let typingTimer = null;
+    let isTyping = false;
+    let sendBtn = document.getElementById('sendBtn');
+    let emojiDrawer = document.getElementById('stickerPanel');
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('msg');
+    const composerEl = document.getElementById('composer');
+    const composerMain = document.getElementById('composerMain');
+    const panel = document.getElementById('stickerPanel');
+    const incomingCallBanner = document.getElementById('incomingCallBanner');
+    const incomingCallerNameEl = document.getElementById('incomingCallerName');
+    const acceptCallBtn = document.getElementById('acceptCallBtn');
+    const declineCallBtn = document.getElementById('declineCallBtn');
+    
+    const inCallControls = document.getElementById('inCallControls');
+    const btnHangup = document.getElementById('btnHangup');
+    const btnMute = document.getElementById('btnMute');
+    const btnToggleVideo = document.getElementById('btnToggleVideo');
+    const btnSwitchCam = document.getElementById('btnSwitchCam');
+});
 
 /* simpler escape */
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
@@ -1926,6 +1927,51 @@ const pcConfig = {
 
 // State tracking
 let activeCallId = null;
+
+function showInCallUI(callId, peerName, isCaller) {
+  // Create or reuse a container div for in-call UI
+  let callUi = document.getElementById('inCallUI');
+  if (!callUi) {
+    callUi = document.createElement('div');
+    callUi.id = 'inCallUI';
+    callUi.style.position = 'fixed';
+    callUi.style.bottom = '20px';
+    callUi.style.right = '20px';
+    callUi.style.zIndex = '10000';
+    callUi.style.padding = '12px';
+    callUi.style.background = 'rgba(0,0,0,0.8)';
+    callUi.style.color = 'white';
+    callUi.style.borderRadius = '10px';
+    callUi.style.fontSize = '0.9rem';
+    document.body.appendChild(callUi);
+  }
+
+  // Display the UI content
+  callUi.innerHTML = `
+    <div>In call with <strong>${peerName}</strong></div>
+    <div>ID: ${callId}</div>
+    <button id="btnHangupUI">Hang Up</button>
+  `;
+
+  // Wire hang-up button
+  const btn = document.getElementById('btnHangupUI');
+  if (btn) {
+    btn.onclick = () => {
+      hideInCallUI();
+      endCall(callId);  // You likely have endCall defined in your WebRTC code
+    };
+  }
+
+  callUi.style.display = 'block';
+}
+
+function hideInCallUI() {
+  const callUi = document.getElementById('inCallUI');
+  if (callUi) {
+    callUi.style.display = 'none';
+    callUi.innerHTML = '';
+  }
+}
 
 // When incoming call arrives
 socket.on('call:incoming', (d) => {
