@@ -1654,9 +1654,15 @@ CHAT_HTML = r'''<!doctype html>
               margin:8px auto;
           "></div>
 
-        <div class="emoji-drawer-header">
-          <div class="drag-bar"></div>
-          <button id="closeStickerPanel" class="ml-auto px-2 py-1 rounded bg-gray-100">Close</button>
+        <!-- Sticker Drawer -->
+        <div id="stickerPanel" class="emoji-drawer" inert hidden>
+          <div class="emoji-drawer-header">
+            <div class="drag-bar"></div>
+          </div>
+          <div class="emoji-drawer-content">
+             <h3 class="text-sm font-semibold mb-2">Stickers</h3>
+             <div id="stickersContainer" class="grid grid-cols-4 gap-2"></div>
+          </div>
         </div>
         <div class="panel-tabs">
           <button id="tab_stickers">Stickers</button>
@@ -2682,35 +2688,7 @@ CHAT_HTML = r'''<!doctype html>
       const isUp = !t || t === 'none' ? false : /matrix|translate/.test(t);
       setComposerElevated(isUp);
     }
-  }, 250);
-  async function loadStickers(){
-      try {
-        const res = await fetch('/stickers_list');
-        if(!res.ok) throw new Error("Failed to load stickers");
-        const stickers = await res.json();
-    
-        const container = document.getElementById('stickersContainer');
-        if(!container) return;
-    
-        container.innerHTML = '';
-        stickers.forEach(url=>{
-          const img = document.createElement('img');
-          img.src = url;
-          img.className = "w-16 h-16 m-1 cursor-pointer rounded";
-          img.onclick = ()=> insertSticker(url);
-          container.appendChild(img);
-        });
-      } catch(err){
-        console.error("Sticker load error:", err);
-      }
-  }
-
-  function insertSticker(url){
-      // example: append sticker as an image message
-      const textarea = document.getElementById('chatInput');
-      textarea.value += ` [sticker:${url}] `;
-      textarea.focus();
-  }
+  }, 250); 
 
   /* ---------------------------
      Event wiring on DOMContentLoaded - single point of initialization
@@ -2975,6 +2953,37 @@ CHAT_HTML = r'''<!doctype html>
   function updateCallStateUI(callId, state){ /* placeholder - extend as needed */ console.log('call state', callId, state); }
 
 })(); // end IIFE
+
+async function loadStickers(){
+  try {
+    const res = await fetch('/stickers_list');
+    if(!res.ok) throw new Error("Failed to load stickers");
+    const stickers = await res.json();
+
+    const container = document.getElementById('stickersContainer');
+    if(!container) return;
+
+    container.innerHTML = '';
+    stickers.forEach(url=>{
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = "sticker";
+      img.className = "w-16 h-16 m-1 cursor-pointer rounded shadow";
+      img.onclick = ()=> insertSticker(url);
+      container.appendChild(img);
+    });
+  } catch(err){
+    console.error("Sticker load error:", err);
+  }
+}
+
+function insertSticker(url){
+  const textarea = document.getElementById('chatInput');
+  if(textarea){
+    textarea.value += ` [sticker:${url}] `;
+    textarea.focus();
+  }
+}
 </script>
 </body>
 </html>
