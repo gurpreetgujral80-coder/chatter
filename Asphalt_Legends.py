@@ -1767,7 +1767,6 @@ CHAT_HTML = r'''<!doctype html>
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
 <script>
-let d = {};
 const emojiBtn = document.getElementById('emojiBtn');
 const composer = document.querySelector('.composer');
 const textarea = document.getElementById('msg');
@@ -1788,7 +1787,6 @@ const inputEl = document.getElementById('msg');
 const composerEl = document.getElementById('composer');
 const composerMain = document.getElementById('composerMain');
 const panel = document.getElementById('stickerPanel');
-const nodeId = 'typing-'+(d.from||'user');
 const incomingCallBanner = document.getElementById('incomingCallBanner');
 const incomingCallerNameEl = document.getElementById('incomingCallerName');
 const acceptCallBtn = document.getElementById('acceptCallBtn');
@@ -1827,7 +1825,7 @@ inputEl.addEventListener('input', ()=> {
     if(isTyping){ socket.emit('stop_typing', { from: myName }); isTyping=false; }
   }, 1200);
 });
-
+const nodeId = 'typing-'+(d.from||'user');
 /* Show typing text when socket receives it */
 socket.on('typing', (d)=> {
   if(document.getElementById(nodeId)) return;
