@@ -1767,6 +1767,7 @@ CHAT_HTML = r'''<!doctype html>
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
 <script>
+let d = {};
 const emojiBtn = document.getElementById('emojiBtn');
 const composer = document.querySelector('.composer');
 const textarea = document.getElementById('msg');
