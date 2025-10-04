@@ -1776,6 +1776,8 @@ let lastId = 0;
 let stagedFiles = [];
 let typingTimer = null;
 let isTyping = false;
+let sendBtn = document.getElementById('sendBtn');
+let emojiDrawer = document.getElementById('stickerPanel');
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('msg');
 const composerEl = document.getElementById('composer');
@@ -2927,9 +2929,7 @@ setInterval(()=>{
 })();
 const emojiBtn = document.getElementById('emojiBtn');
 const composer = document.querySelector('.composer');
-const emojiDrawer = document.getElementById('stickerPanel');
 const textarea = document.getElementById('msg');
-const sendBtn = document.getElementById('sendBtn');
 
 // Toggle drawer open/close
 emojiBtn.addEventListener('click', () => {
