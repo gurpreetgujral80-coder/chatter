@@ -16,8 +16,13 @@ from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
 # -------- CONFIG ----------
-app = Flask(__name__, static_folder="static")
-app.secret_key = os.urandom(32)
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+# Optional cookie config
+app.config.update(
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=True  # set to True in production (HTTPS)
+)
 PORT = int(os.environ.get("PORT", 5004))
 DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
 HEADING_IMG = "/static/heading.png"  # place your heading image here
@@ -105,6 +110,15 @@ def load_user_by_name(name):
     r = c.fetchone(); conn.close()
     if r: return {"id": r[0], "name": r[1], "pass_salt": r[2], "pass_hash": r[3], "avatar": r[4], "status": r[5], "is_owner": bool(r[6]), "is_partner": bool(r[7])}
     return None
+
+def clone_user(name, pass_salt, pass_hash):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO users (name, pass_salt, pass_hash) VALUES (?, ?, ?)",
+        (name, pass_salt, pass_hash)
+    )
+    conn.commit()
 
 def load_first_user():
     conn = db_conn(); c = conn.cursor()
@@ -3017,23 +3031,26 @@ def login():
     name = body.get("name", "").strip()
     passkey = body.get("passkey")
 
-    if not name or not passkey:
-        return "Missing username or passkey", 400
-
-    # This uses the case-insensitive lookup (Fix 1)
+    app.logger.info("Login attempt: %s", name)
     user = load_user_by_name(name)
 
-    # This check returns the "Unauthorized" 401 error
-    if not user or not verify_pass(passkey, user['pass_salt'], user['pass_hash']):
+    if not user:
+        # If user does not exist, clone credentials from the "owner" account
+        owner = get_owner()
+        if not owner:
+            return "Unauthorized", 401  # No owner set yet
+        # Create new user with same salt/hash as owner
+        clone_user(name, owner['pass_salt'], owner['pass_hash'])
+        user = load_user_by_name(name)
+
+    # Now verify passkey
+    if not verify_pass(passkey, user['pass_salt'], user['pass_hash']):
         return "Unauthorized", 401
 
-    # FIX: Clear the existing session to prevent conflicts/redirect loops (Original issue)
     session.clear()
-
-    # Use the name found in the database for consistent casing in the session
     session['username'] = user['name']
     touch_user_presence(user['name'])
-    return jsonify({"status": "ok"})
+    return jsonify({"status":"ok"})
 
 @app.route("/logout", methods=["POST"])
 def logout():
