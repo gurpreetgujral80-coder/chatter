@@ -1479,23 +1479,27 @@ CHAT_HTML = r'''<!doctype html>
       position: fixed;
       left: 0;
       right: 0;
-      bottom: 0;
-      height: 60vh; /* adjustable */
-      background: rgba(255,255,255,0.98);
-      backdrop-filter: blur(12px) saturate(1.25);
-      -webkit-backdrop-filter: blur(12px) saturate(1.25);
-      border-top-left-radius: 18px;
-      border-top-right-radius: 18px;
-      box-shadow: 0 -6px 18px rgba(0,0,0,0.08);
-      transform: translateY(100%);   /* hidden by default */
-      transition: transform 0.28s ease-in-out;
-      z-index: 120;
-      overflow-y: auto;
+      bottom: 0;               /* Stick to bottom */
+      height: 40vh;            /* like phone keyboard */
+      background: #fff;
+      border-top-left-radius: 14px;
+      border-top-right-radius: 14px;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+      transform: translateY(100%);
+      transition: transform 0.25s ease-in-out;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
     }
-    
-    /* When active, slide up */
     #stickerPanel.active {
       transform: translateY(0);
+    }
+    .composer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      transition: bottom 0.25s ease-in-out;
     }
     #emojiGrid .emoji-mart {
       width: 100% !important;
@@ -2704,34 +2708,43 @@ CHAT_HTML = r'''<!doctype html>
     try {
       // Emoji-mart picker wiring (only if emojiBtn exists)
       if(emojiBtn){
-        emojiBtn.addEventListener('click', (ev)=>{
-          ev.stopPropagation();
-          // lazy init
-          if(typeof EmojiMart !== 'undefined' && !window._emojiPicker){
-            window._emojiPicker = new EmojiMart.Picker({
-              onEmojiSelect: (emoji) => {
-                if(inputEl) insertAtCursor(inputEl, emoji.native);
-                inputEl && inputEl.focus();
-              },
-              theme: 'light',
-              previewPosition: "none",
-              skinTonePosition: "none"
-            });
-            const grid = $id('emojiGrid');
-            if(grid && window._emojiPicker) grid.appendChild(window._emojiPicker);
-          }
-          if(emojiDrawer) emojiDrawer.classList.toggle('active');
-          composer && composer.classList.toggle('up');
-        });
+          emojiBtn.addEventListener('click', (ev)=>{
+            ev.stopPropagation();
+        
+            // lazy init (EmojiMart picker injected into emojiGrid)
+            if(typeof EmojiMart !== 'undefined' && !window._emojiPicker){
+              window._emojiPicker = new EmojiMart.Picker({
+                onEmojiSelect: (emoji) => {
+                  if(inputEl) insertAtCursor(inputEl, emoji.native);
+                  inputEl && inputEl.focus();
+                },
+                theme: 'light',
+                previewPosition: "none",
+                skinTonePosition: "none"
+              });
+              const grid = $id('emojiGrid');
+              if(grid && window._emojiPicker) grid.appendChild(window._emojiPicker);
+            }
+        
+            // toggle drawer
+            if(emojiDrawer.classList.contains('active')){
+              emojiDrawer.classList.remove('active');
+              composer.style.bottom = '0px';
+            } else {
+              emojiDrawer.classList.add('active');
+              const h = emojiDrawer.offsetHeight || 280;
+              composer.style.bottom = h + 'px'; // shift composer above drawer
+            }
+          });
       }
 
       // Insert emoji and GIF click delegations
-      document.addEventListener('click', (e)=>{
-        if(e.target.closest && e.target.closest('.emoji-grid span')){
-          if(textarea) { textarea.value += e.target.textContent; sendBtn && sendBtn.click(); }
-        } else if(e.target.closest && e.target.closest('.gif-grid img')){
-          if(textarea){ textarea.value = `[GIF: ${e.target.src}]`; sendBtn && sendBtn.click(); }
-        }
+      document.addEventListener('click', (ev)=>{
+          if(ev.target.closest && !ev.target.closest('.composer') && !ev.target.closest('#stickerPanel')){
+            if(emojiDrawer){ emojiDrawer.classList.remove('active'); }
+            if(composer){ composer.style.bottom = '0px'; }
+            attachMenuVertical && (attachMenuVertical.style.display = 'none');
+          }
       });
 
       // sticker panel close button
