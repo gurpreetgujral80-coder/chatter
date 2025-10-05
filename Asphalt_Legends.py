@@ -1645,7 +1645,7 @@ CHAT_HTML = r'''<!doctype html>
       </main>
     
       <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
-      <div id="stickerPanel" inert hidden class="emoji-drawer">
+        <div id="stickerPanel" class="emoji-drawer">
           <div class="drag-bar" style="
               width:40px;
               height:5px;
@@ -1653,28 +1653,23 @@ CHAT_HTML = r'''<!doctype html>
               border-radius:3px;
               margin:8px auto;
           "></div>
-
-        <!-- Sticker Drawer -->
-        <div id="stickerPanel" class="emoji-drawer" inert hidden>
-          <div class="emoji-drawer-header">
-            <div class="drag-bar"></div>
+        
+          <!-- Tabs -->
+          <div class="panel-tabs">
+            <button id="tab_stickers">Stickers</button>
+            <button id="tab_gifs">GIFs</button>
+            <button id="tab_avatars">Avatars</button>
+            <button id="tab_emoji">Emoji</button>
           </div>
-          <div class="emoji-drawer-content">
-             <h3 class="text-sm font-semibold mb-2">Stickers</h3>
-             <div id="stickersContainer" class="grid grid-cols-4 gap-2"></div>
+        
+          <!-- Content area -->
+          <div id="panelContent" class="emoji-drawer-content">
+            <div id="stickersContainer" class="grid grid-cols-4 gap-2 hidden"></div>
+            <div id="gifGrid" class="gif-grid hidden"></div>
+            <div id="avatarGrid" class="emoji-grid hidden"></div>
+            <div id="emojiGrid" class="emoji-grid hidden"></div>
           </div>
         </div>
-        <div class="panel-tabs">
-          <button id="tab_stickers">Stickers</button>
-          <button id="tab_gifs">GIFs</button>
-          <button id="tab_avatars">Avatars</button>
-          <button id="tab_emoji">Emoji</button>
-        </div>
-        <div id="panelContent" class="emoji-drawer-content">
-          <div id="gifGrid" class="gif-grid hidden"></div>
-          <div id="emojiGrid" class="emoji-grid hidden"></div>
-        </div>
-      </div>
     
       <!-- Composer -->
       <div class="composer" id="composer" aria-label="Composer area">
