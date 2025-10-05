@@ -1667,7 +1667,7 @@ CHAT_HTML = r'''<!doctype html>
             <div id="stickersContainer" class="grid grid-cols-4 gap-2 hidden"></div>
             <div id="gifGrid" class="gif-grid hidden"></div>
             <div id="avatarGrid" class="emoji-grid hidden"></div>
-            <div id="emojiGrid" class="emoji-grid hidden"></div>
+            <div id="emojiGrid" class="emoji-grid"></div>
           </div>
         </div>
     
@@ -1766,7 +1766,6 @@ CHAT_HTML = r'''<!doctype html>
           <button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button>
         </div>
       </div>
-    <div id="emojiPanel" class="emoji-panel"></div>
 
 <!-- include socket.io and other scripts (socket server expected) -->
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -2051,10 +2050,12 @@ CHAT_HTML = r'''<!doctype html>
   }
     
   function closeStickerPanel(){
-      const p = document.getElementById('stickerPanel');
-      p.inert = true;
-      p.hidden = true;
-      document.getElementById('chatInput').focus(); // return focus to input
+      const panel = document.getElementById('stickerPanel');
+      if(panel) panel.classList.remove('active');
+      const composer = document.querySelector('.composer');
+      if(composer) composer.style.bottom = '0px';
+      // if you want to set aria-hidden for accessibility:
+      if(panel) panel.setAttribute('aria-hidden', 'true');
   }
 
   /* ---------------------------
@@ -2771,17 +2772,17 @@ CHAT_HTML = r'''<!doctype html>
           });
       }
 
-      // Insert emoji and GIF click delegations
       document.addEventListener('click', (ev)=>{
-          const isInsideDrawer = ev.target.closest('#emojiGrid') || ev.target.closest('#stickerPanel');
-          const isComposerBtn = ev.target.closest('.composer') || ev.target.closest('#emojiBtn');
-          if(!isInsideDrawer && !isComposerBtn){
-            if(emojiDrawer){ emojiDrawer.classList.remove('active'); }
-            if(composer){ composer.style.bottom = '0px'; }
-            attachMenuVertical && (attachMenuVertical.style.display = 'none');
+          const insidePanel = ev.target.closest('#stickerPanel');
+          const insideComposer = ev.target.closest('.composer');
+          const clickedEmojiBtn = ev.target.closest('#emojiBtn');
+        
+          if (!insidePanel && !insideComposer && !clickedEmojiBtn) {
+            emojiDrawer?.classList.remove('active');
+            composer?.style.bottom = '0px';
+            if (attachMenuVertical) attachMenuVertical.style.display = 'none';
           }
       });
-
 
       // sticker panel close button
       const closeStickerPanelBtn = $id('closeStickerPanel');
