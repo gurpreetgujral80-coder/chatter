@@ -2844,21 +2844,25 @@ CHAT_HTML = r'''<!doctype html>
 
       // sticker/gif/avatar tab wiring (guard)
         const tab_stickers = $id('tab_stickers'), tab_gifs = $id('tab_gifs'), tab_avatars = $id('tab_avatars'), tab_emoji = $id('tab_emoji');
+        
         if (tab_stickers) {
           tab_stickers.addEventListener('click', async () => {
             if (typeof loadStickers === 'function') await loadStickers();
           });
         }
+        
         if (tab_gifs) {
           tab_gifs.addEventListener('click', async () => {
             if (typeof loadGIFs === 'function') await loadGIFs();
           });
         }
+        
         if (tab_avatars) {
           tab_avatars.addEventListener('click', async () => {
             if (typeof loadAvatars === 'function') await loadAvatars();
           });
         }
+        
         if (tab_emoji) {
           tab_emoji.addEventListener('click', () => {
             if (emojiBtn) emojiBtn.click();
