@@ -2042,21 +2042,51 @@ CHAT_HTML = r'''<!doctype html>
     return atts;
   }
 
-  // Show/hide sticker panel
-  function openStickerPanel(){
-      const p = document.getElementById('stickerPanel');
-      p.hidden = false;
-      p.inert = false;
-  }
-    
-  function closeStickerPanel(){
+  // Show / hide sticker panel — fixed + accessible version
+    function openStickerPanel() {
       const panel = document.getElementById('stickerPanel');
-      if(panel) panel.classList.remove('active');
       const composer = document.querySelector('.composer');
-      if(composer) composer.style.bottom = '0px';
-      // if you want to set aria-hidden for accessibility:
-      if(panel) panel.setAttribute('aria-hidden', 'true');
-  }
+    
+      if (!panel) return;
+    
+      // Show panel
+      panel.hidden = false;
+      panel.inert = false;
+      panel.classList.add('active');
+      panel.setAttribute('aria-hidden', 'false');
+    
+      // Move composer above the panel
+      if (composer) {
+        const h = panel.offsetHeight || 280;
+        composer.style.bottom = `${h}px`;
+      }
+    
+      // Focus first focusable item to avoid accessibility warnings
+      const firstFocusable = panel.querySelector(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (firstFocusable) firstFocusable.focus();
+    }
+    
+    function closeStickerPanel() {
+      const panel = document.getElementById('stickerPanel');
+      const composer = document.querySelector('.composer');
+      const input = document.getElementById('chatInput');
+    
+      if (!panel) return;
+    
+      // Hide panel visually & from accessibility tree
+      panel.classList.remove('active');
+      panel.hidden = true;
+      panel.inert = true;
+      panel.setAttribute('aria-hidden', 'true');
+    
+      // Reset composer position
+      if (composer) composer.style.bottom = '0px';
+    
+      // Move focus back to chat input to prevent focus being hidden
+      if (input) input.focus();
+    }
 
   /* ---------------------------
      WebRTC / calls
@@ -2760,14 +2790,38 @@ CHAT_HTML = r'''<!doctype html>
                 }
               }
             
-              // toggle drawer
-              if(emojiDrawer.classList.contains('active')){
-                emojiDrawer.classList.remove('active');
-                composer.style.bottom = '0px';
+              // toggle drawer — ensure emojiGrid is visible when open
+              const grid = $id('emojiGrid');
+              if (emojiDrawer.classList.contains('active')) {
+                  emojiDrawer.classList.remove('active');
+                  composer.style.bottom = '0px';
+                  if (grid) grid.classList.add('hidden');
+                  // mark panel inert/hidden for accessibility
+                  if (panel) { panel.setAttribute('aria-hidden', 'true'); panel.inert = true; }
               } else {
-                emojiDrawer.classList.add('active');
-                const h = emojiDrawer.offsetHeight || 280;
-                composer.style.bottom = h + 'px'; // shift composer above drawer
+                  emojiDrawer.classList.add('active');
+                  const h = emojiDrawer.offsetHeight || 280;
+                  composer.style.bottom = h + 'px'; // shift composer above drawer
+                  if (grid) {
+                    grid.classList.remove('hidden');
+                    // append the picker only once
+                    if (typeof EmojiMart !== 'undefined' && !window._emojiPicker) {
+                      window._emojiPicker = new EmojiMart.Picker({
+                        onEmojiSelect: (emoji) => {
+                          if (inputEl) insertAtCursor(inputEl, emoji.native);
+                          if (inputEl) inputEl.focus();
+                        },
+                        theme: 'light',
+                        previewPosition: "none",
+                        skinTonePosition: "none"
+                      });
+                      grid.appendChild(window._emojiPicker);
+                    } else if (window._emojiPicker && !grid.contains(window._emojiPicker)) {
+                      grid.appendChild(window._emojiPicker);
+                    }
+                  }
+                  // make panel accessible
+                  if (panel) { panel.setAttribute('aria-hidden', 'false'); panel.inert = false; }
               }
           });
       }
@@ -2789,11 +2843,27 @@ CHAT_HTML = r'''<!doctype html>
       if(closeStickerPanelBtn) closeStickerPanelBtn.addEventListener('click', hideStickerPanel);
 
       // sticker/gif/avatar tab wiring (guard)
-      const tab_stickers = $id('tab_stickers'), tab_gifs = $id('tab_gifs'), tab_avatars = $id('tab_avatars'), tab_emoji = $id('tab_emoji');
-      if(tab_stickers) tab_stickers.addEventListener('click', async ()=>{ await loadStickers?.(); });
-      if(tab_gifs) tab_gifs.addEventListener('click', async ()=>{ await loadGIFs(); });
-      if(tab_avatars) tab_avatars.addEventListener('click', async ()=>{ await loadAvatars(); });
-      if(tab_emoji) tab_emoji.addEventListener('click', ()=>{ emojiBtn && emojiBtn.click(); });
+        const tab_stickers = $id('tab_stickers'), tab_gifs = $id('tab_gifs'), tab_avatars = $id('tab_avatars'), tab_emoji = $id('tab_emoji');
+        if (tab_stickers) {
+          tab_stickers.addEventListener('click', async () => {
+            if (typeof loadStickers === 'function') await loadStickers();
+          });
+        }
+        if (tab_gifs) {
+          tab_gifs.addEventListener('click', async () => {
+            if (typeof loadGIFs === 'function') await loadGIFs();
+          });
+        }
+        if (tab_avatars) {
+          tab_avatars.addEventListener('click', async () => {
+            if (typeof loadAvatars === 'function') await loadAvatars();
+          });
+        }
+        if (tab_emoji) {
+          tab_emoji.addEventListener('click', () => {
+            if (emojiBtn) emojiBtn.click();
+          });
+        }
 
       // sticker picker button
       const stickerPickerBtn = $id('stickerPickerBtn');
