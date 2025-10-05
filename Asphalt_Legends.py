@@ -1809,7 +1809,9 @@ CHAT_HTML = r'''<!doctype html>
 
   // sendMessage: can be called as sendMessage() (reads input) or sendMessage(text, attachments)
   async function sendMessage(textArg, attsArg) {
-    const text = (typeof textArg === 'string') ? textArg : (inputEl ? (inputEl.value || '').trim() : '');
+    const text = (typeof textArg === 'string')
+    ? textArg
+    : (window.inputEl ? (window.inputEl.value || '').trim() : '');
     const atts = Array.isArray(attsArg) ? attsArg : cs.stagedFiles.slice();
 
     if(!text && atts.length === 0) return;
@@ -2726,7 +2728,7 @@ CHAT_HTML = r'''<!doctype html>
   const emojiBtn = $id('emojiBtn');
   const composer = document.querySelector('.composer');
   const textarea = $id('msg') || $id('textarea');
-  const inputEl = textarea;
+  window.inputEl = textarea;
   const micBtn = $id('mic');
   const plusBtn = $id('plusBtn');
   const attachMenuVertical = $id('attachMenuVertical') || (function () {
