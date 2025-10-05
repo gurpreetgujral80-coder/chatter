@@ -1809,74 +1809,89 @@ CHAT_HTML = r'''<!doctype html>
 
   // sendMessage: can be called as sendMessage() (reads input) or sendMessage(text, attachments)
   async function sendMessage(textArg, attsArg) {
-    const text = (typeof textArg === 'string')
-    ? textArg
-    : (window.inputEl ? (window.inputEl.value || '').trim() : '');
-    const atts = Array.isArray(attsArg) ? attsArg : cs.stagedFiles.slice();
-
-    if(!text && atts.length === 0) return;
-
-    // optimistic UI
-    const tempId = 'temp-' + Date.now();
-    const wrapper = document.createElement('div'); wrapper.className='msg-row';
-    const body = document.createElement('div'); body.className='msg-body';
-    const bubble = document.createElement('div'); bubble.className='bubble me'; bubble.dataset.tempId = tempId;
-    if(text) bubble.appendChild(document.createTextNode(text));
-
-    const objectUrls = [];
-    for(const file of atts){
-      if(file && file.type){
-        if(file.type.startsWith('image/')){
+      const text = (typeof textArg === 'string')
+        ? textArg
+        : (window.inputEl ? (window.inputEl.value || '').trim() : '');
+    
+      const atts = Array.isArray(attsArg) ? attsArg : (cs && Array.isArray(cs.stagedFiles) ? cs.stagedFiles.slice() : []);
+    
+      if (!text && (!atts || atts.length === 0)) {
+        console.log('sendMessage: nothing to send (empty text and no attachments)');
+        return;
+      }
+    
+      // optimistic UI
+      const tempId = 'temp-' + Date.now();
+      const wrapper = document.createElement('div'); wrapper.className = 'msg-row';
+      const body = document.createElement('div'); body.className = 'msg-body';
+      const bubble = document.createElement('div'); bubble.className = 'bubble me';
+      bubble.setAttribute('data-temp-id', tempId);
+      if (text) bubble.appendChild(document.createTextNode(text));
+    
+      const objectUrls = [];
+      for (const file of (atts || [])) {
+        if (!file || !file.type) continue;
+        if (file.type.startsWith('image/')) {
           const img = document.createElement('img'); const url = URL.createObjectURL(file); objectUrls.push(url);
-          img.src = url; img.className='image-attachment'; bubble.appendChild(img);
-        } else if(file.type.startsWith('video/')){
-          const container = document.createElement('div'); container.style.position='relative'; container.style.display='inline-block';
-          const placeholder = document.createElement('img'); placeholder.className='thumb'; placeholder.alt = file.name || '';
+          img.src = url; img.className = 'image-attachment'; bubble.appendChild(img);
+        } else if (file.type.startsWith('video/')) {
+          const container = document.createElement('div'); container.style.position = 'relative'; container.style.display = 'inline-block';
+          const placeholder = document.createElement('img'); placeholder.className = 'thumb'; placeholder.alt = file.name || '';
           container.appendChild(placeholder);
           bubble.appendChild(container);
-          // async thumbnail
-          createVideoThumbnailFromFile(file, 0.7).then(d=>{ if(d) placeholder.src = d; }).catch(()=>{});
-        } else if(file.type.startsWith('audio/')){
+          // async thumbnail (if available)
+          if (typeof createVideoThumbnailFromFile === 'function') {
+            createVideoThumbnailFromFile(file, 0.7).then(d => { if (d) placeholder.src = d; }).catch(() => { });
+          }
+        } else if (file.type.startsWith('audio/')) {
           const au = document.createElement('audio'); const url = URL.createObjectURL(file); objectUrls.push(url);
           au.src = url; au.controls = true; bubble.appendChild(au);
         } else {
-          const d = document.createElement('div'); d.className='preview-item-doc'; d.textContent = file.name || 'file'; bubble.appendChild(d);
+          const d = document.createElement('div'); d.className = 'preview-item-doc'; d.textContent = file.name || 'file'; bubble.appendChild(d);
         }
       }
-    }
-
-    body.appendChild(bubble); wrapper.appendChild(body);
-    if(messagesEl) { messagesEl.appendChild(wrapper); messagesEl.scrollTop = messagesEl.scrollHeight; }
-
-    // prepare payload
-    try {
-      const fd = new FormData();
-      fd.append('text', text);
-      fd.append('sender', cs.myName);
-      for(const f of atts) fd.append('file', f, f.name);
-
-      const res = await fetch('/send_composite_message', { method: 'POST', body: fd });
-      if(res.ok){
-        // remove optimistic
-        const el = document.querySelector('[data-temp-id="'+tempId+'"]'); if(el) el.parentElement.removeChild(el);
-        if(inputEl) inputEl.value = '';
-        cs.stagedFiles = [];
-        const preview = $id('attachmentPreview') || $id('previewContainer');
-        if(preview){ preview.innerHTML = ''; preview.style.display = 'none'; }
-        cs.lastId = 0;
-        if(typeof window.poll === 'function') await window.poll();
-      } else {
-        const txt = await res.text();
-        alert('Send failed: ' + txt);
+    
+      body.appendChild(bubble); wrapper.appendChild(body);
+      if (messagesEl) { messagesEl.appendChild(wrapper); messagesEl.scrollTop = messagesEl.scrollHeight; }
+    
+      // prepare payload
+      try {
+        const fd = new FormData();
+        fd.append('text', text);
+        fd.append('sender', (cs && cs.myName) ? cs.myName : '');
+        for (const f of (atts || [])) {
+          if (f) fd.append('file', f, f.name);
+        }
+    
+        console.log('sendMessage: sending', { text, attachments: (atts || []).length });
+        const res = await fetch('/send_composite_message', { method: 'POST', body: fd });
+    
+        if (res.ok) {
+          // remove optimistic row
+          const el = document.querySelector('[data-temp-id="' + tempId + '"]');
+          if (el) {
+            const row = el.closest('.msg-row');
+            if (row && row.parentElement) row.parentElement.removeChild(row);
+          }
+    
+          if (window.inputEl) window.inputEl.value = '';
+          if (cs) cs.stagedFiles = [];
+          const preview = $id('attachmentPreview') || $id('previewContainer');
+          if (preview) { preview.innerHTML = ''; preview.style.display = 'none'; }
+          if (cs) cs.lastId = 0;
+          if (typeof window.poll === 'function') await window.poll();
+        } else {
+          const txt = await res.text();
+          alert('Send failed: ' + txt);
+        }
+      } catch (err) {
+        console.error('sendMessage error', err);
+        alert('Send error: ' + (err && err.message ? err.message : err));
+      } finally {
+        objectUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (_) { } });
       }
-    } catch(err) {
-      console.error('sendMessage error', err);
-      alert('Send error: ' + (err && err.message ? err.message : err));
-    } finally {
-      objectUrls.forEach(u=>URL.revokeObjectURL(u));
-    }
   }
-  window.sendMessage = sendMessage;
+window.sendMessage = sendMessage;
 
   // Attachment preview setter (exposed)
   function setAttachmentPreview(files){
@@ -2728,7 +2743,9 @@ CHAT_HTML = r'''<!doctype html>
   const emojiBtn = $id('emojiBtn');
   const composer = document.querySelector('.composer');
   const textarea = $id('msg') || $id('textarea');
-  window.inputEl = textarea;
+  const inputEl = textarea;          // keep local ref for this block
+  window.inputEl = inputEl || null;  // expose global so sendMessage() can access it
+  console.log('✅ bound inputEl (local & global):', inputEl, window.inputEl);
   const micBtn = $id('mic');
   const plusBtn = $id('plusBtn');
   const attachMenuVertical = $id('attachMenuVertical') || (function () {
@@ -2967,9 +2984,18 @@ CHAT_HTML = r'''<!doctype html>
 
     // message send wiring
     if (sendBtn) {
-      try { sendBtn.removeAttribute && sendBtn.removeAttribute('onclick'); } catch (_) { /* ignore */ }
-      sendBtn.addEventListener('click', () => sendMessage && sendMessage());
+      try { sendBtn.removeAttribute && sendBtn.removeAttribute('onclick'); } catch (_) {}
+      sendBtn.addEventListener('click', async (e) => {
+        e && e.preventDefault && e.preventDefault();
+        e && e.stopPropagation && e.stopPropagation();
+        if (typeof window.sendMessage === 'function') {
+          try { await window.sendMessage(); } catch (err) { console.error('sendBtn -> sendMessage failed', err); }
+        } else {
+          console.warn('sendBtn clicked but sendMessage not ready');
+        }
+      });
     }
+
 
     if (inputEl) {
       inputEl.addEventListener('keydown', function (e) {
