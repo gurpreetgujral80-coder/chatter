@@ -2833,7 +2833,9 @@ CHAT_HTML = r'''<!doctype html>
         
           if (!insidePanel && !insideComposer && !clickedEmojiBtn) {
             emojiDrawer?.classList.remove('active');
-            composer?.style.bottom = '0px';
+            if (composer && composer.style) {
+                composer.style.bottom = '0px';
+            }
             if (attachMenuVertical) attachMenuVertical.style.display = 'none';
           }
       });
