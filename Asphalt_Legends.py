@@ -208,26 +208,60 @@ def get_partner():
     if r: return {"id": r[0], "name": r[1]}
     return None
 
-# message helpers
 def save_message(sender, text, attachments=None):
-    conn = db_conn(); c = conn.cursor()
+    """
+    Save a message to the SQLite messages table and return the inserted id.
+    attachments should be a list (will be stored as JSON string).
+    """
+    conn = db_conn()
+    c = conn.cursor()
     ts = int(time.time())
     att = json.dumps(attachments or [])
-    c.execute("INSERT INTO messages (sender, text, attachments, created_at) VALUES (?, ?, ?, ?)", (sender, text, att, ts))
-    conn.commit(); conn.close()
-    trim_messages_limit(MAX_MESSAGES)
+    c.execute(
+        "INSERT INTO messages (sender, text, attachments, created_at) VALUES (?, ?, ?, ?)",
+        (sender, text, att, ts)
+    )
+    mid = c.lastrowid
+    conn.commit()
+    conn.close()
 
-def fetch_messages(since_id=0):
-    conn = db_conn(); c = conn.cursor()
-    c.execute("SELECT id, sender, text, attachments, reactions, edited, created_at FROM messages WHERE id > ? ORDER BY id ASC", (since_id,))
-    rows = c.fetchall(); conn.close()
-    out = []
-    for r in rows:
-        mid, sender, text, attachments_json, reactions_json, edited, created_at = r
-        attachments = json.loads(attachments_json or "[]")
-        reactions = json.loads(reactions_json or "[]")
-        out.append({"id": mid, "sender": sender, "text": text, "attachments": attachments, "reactions": reactions, "edited": bool(edited), "created_at": created_at})
-    return out
+    # trim to configured maximum messages
+    try:
+        trim_messages_limit(MAX_MESSAGES)
+    except Exception:
+        # ignore trimming errors, but do not break sending
+        pass
+
+    return mid
+
+def fetch_message_by_id(mid):
+    """
+    Helper to fetch a single message row by id and return a dict in the same
+    shape as fetch_messages() returns for consistency.
+    """
+    conn = db_conn()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, sender, text, attachments, reactions, edited, created_at FROM messages WHERE id = ? LIMIT 1",
+        (mid,)
+    )
+    r = c.fetchone()
+    conn.close()
+    if not r:
+        return None
+    mid, sender, text, attachments_json, reactions_json, edited, created_at = r
+    attachments = json.loads(attachments_json or "[]")
+    reactions = json.loads(reactions_json or "[]")
+    return {
+        "id": mid,
+        "sender": sender,
+        "text": text,
+        "attachments": attachments,
+        "reactions": reactions,
+        "edited": bool(edited),
+        "created_at": created_at
+    }
+
 
 def trim_messages_limit(max_messages=80):
     conn = db_conn(); c = conn.cursor()
@@ -388,10 +422,7 @@ def fetch_call_log_by_id(call_id):
     return None
 
 def next_message_id():
-    try:
-        return max(int(m.get('id', 0)) for m in messages_store) + 1 if messages_store else 1
-    except Exception:
-        return (messages_store[-1].get('id', 0) if messages_store else 0) + 1
+    return len(messages_store) + 1
 
 # --------- crypto for shared passkey ----------
 PBKDF2_ITER = 200_000
@@ -3804,51 +3835,45 @@ def send_composite_message():
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
-    data = request.get_json() or {}
-    text = data.get('text', '')
-    attachments = data.get('attachments', [])
-    sender = data.get('sender') or data.get('from') or 'Unknown'
+    """
+    Accepts JSON { text, sender?, attachments? } and stores the message to DB.
+    Returns the stored message object (with id).
+    """
+    try:
+        data = request.get_json() or {}
+        text = (data.get('text') or "").strip()
+        attachments = data.get('attachments') or []
+        # Prefer authenticated session username when available
+        sender = data.get('sender') or session.get('username') or data.get('from') or 'Unknown'
 
-    # generate message ID (use timestamp or incremental)
-    mid = int(time.time() * 1000)
-    # build message dict
-    msg = {
-        'id': mid,
-        'sender': sender,
-        'text': text,
-        'attachments': []
-    }
+        if not text and (not attachments or len(attachments) == 0):
+            return jsonify({'error': 'Empty message'}), 400
 
-    for a in attachments:
-        at = {}
-        if a.get('type') == 'poll':
-            opts = a.get('options', [])
-            allow_multi = a.get('allow_multi', False)
-            # create poll store entry
-            polls_store[str(mid)] = {
-                'question': text,
-                'options': opts,
-                'allow_multi': allow_multi,
-                'votes': {}  # username → set of indices
-            }
-            at = {'type': 'poll', 'options': opts}
-        else:
-            # handle other attachments normally
-            at = a.copy()
-        msg['attachments'].append(at)
+        mid = save_message(sender, text, attachments)
 
-    # store message
-    messages_store.append(msg)
-    # broadcast new message to connected sockets
-    socketio.emit('new_message', msg)
-    return jsonify({'ok': True, 'id': mid})
+        # fetch authoritative message representation from DB
+        message = fetch_message_by_id(mid)
+        if not message:
+            return jsonify({'error': 'Failed to fetch saved message'}), 500
+
+        # Broadcast to socket clients (keeps real-time clients in sync)
+        try:
+            socketio.emit('new_message', message)
+        except Exception:
+            # don't fail the HTTP response if sockets fail
+            app.logger.exception("socket emit failed for new_message")
+
+        return jsonify({'ok': True, 'message': message}), 200
+
+    except Exception as e:
+        current_app.logger.exception('send_message error')
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/poll_messages')
 def poll_messages():
     since = request.args.get('since', 0, type=int)
-    # filter messages whose id > since
-    new_msgs = [m for m in messages_store if m['id'] > since]
-    return jsonify(new_msgs)
+    msgs = fetch_messages(since)
+    return jsonify(msgs)
 
 @app.route("/edit_message", methods=["POST"])
 def route_edit_message():
@@ -4067,11 +4092,9 @@ def handle_vote_poll(data):
 @app.route('/messages')
 @app.route('/get_messages')
 def poll_alias():
-    # accept either param name: lastId or since
     since = request.args.get('lastId', request.args.get('since', 0, type=int), type=int)
-    # same behavior as your /poll_messages route: return messages with id > since
-    new_msgs = [m for m in messages_store if int(m.get('id', 0)) > int(since)]
-    return jsonify(new_msgs)
+    msgs = fetch_messages(since)
+    return jsonify(msgs)
 
 # ----- run -----
 if __name__ == "__main__":
