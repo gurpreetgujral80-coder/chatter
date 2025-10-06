@@ -234,34 +234,36 @@ def save_message(sender, text, attachments=None):
 
     return mid
 
-def fetch_message_by_id(mid):
+def fetch_messages(since=0):
     """
-    Helper to fetch a single message row by id and return a dict in the same
-    shape as fetch_messages() returns for consistency.
+    Fetch all messages from SQLite whose id > since.
+    Returns a list of dicts in the shape expected by your JS frontend.
     """
     conn = db_conn()
     c = conn.cursor()
     c.execute(
-        "SELECT id, sender, text, attachments, reactions, edited, created_at FROM messages WHERE id = ? LIMIT 1",
-        (mid,)
+        "SELECT id, sender, text, attachments, reactions, edited, created_at "
+        "FROM messages WHERE id > ? ORDER BY id ASC", 
+        (since,)
     )
-    r = c.fetchone()
+    rows = c.fetchall()
     conn.close()
-    if not r:
-        return None
-    mid, sender, text, attachments_json, reactions_json, edited, created_at = r
-    attachments = json.loads(attachments_json or "[]")
-    reactions = json.loads(reactions_json or "[]")
-    return {
-        "id": mid,
-        "sender": sender,
-        "text": text,
-        "attachments": attachments,
-        "reactions": reactions,
-        "edited": bool(edited),
-        "created_at": created_at
-    }
 
+    messages = []
+    for r in rows:
+        mid, sender, text, attachments_json, reactions_json, edited, created_at = r
+        attachments = json.loads(attachments_json or "[]")
+        reactions = json.loads(reactions_json or "[]")
+        messages.append({
+            "id": mid,
+            "sender": sender,
+            "text": text,
+            "attachments": attachments,
+            "reactions": reactions,
+            "edited": bool(edited),
+            "created_at": created_at
+        })
+    return messages
 
 def trim_messages_limit(max_messages=80):
     conn = db_conn(); c = conn.cursor()
