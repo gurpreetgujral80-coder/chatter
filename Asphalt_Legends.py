@@ -2274,101 +2274,192 @@ window.sendMessage = sendMessage;
      --------------------------- */
 
   // render and poll messages
-  async function poll(){
-    try{
-      const resp = await fetch('/poll_messages?since=' + (cs.lastId || 0));
-      if(!resp.ok) return;
-      const data = await resp.json();
-      if(!data || !data.length) return;
-      for(const m of data){
-        const me = (m.sender === cs.myName);
-        const wrapper = document.createElement('div'); wrapper.className='msg-row';
-        const body = document.createElement('div'); body.className='msg-body';
-
-        const meta = document.createElement('div'); meta.className='msg-meta-top';
-        const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
-        const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
-        meta.appendChild(leftMeta); meta.appendChild(rightMeta);
-        body.appendChild(meta);
-
-        const hasText = m.text && m.text.trim().length>0;
-        const attachments = (m.attachments || []);
-        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
-
-        if(hasText) {
-          const textNode = document.createElement('div');
-          textNode.innerHTML = escapeHtml(m.text) + (m.edited ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'');
-          bubble.appendChild(textNode);
+    async function poll() {
+      try {
+        const lastId = cs.lastId || 0;
+        const endpoints = [
+          `/poll_messages?since=${lastId}`,
+          `/poll_messages?lastId=${lastId}`,
+          `/poll?lastId=${lastId}`,
+          `/messages?lastId=${lastId}`,
+          `/get_messages?lastId=${lastId}`
+        ];
+    
+        const base = (typeof window.SERVER_URL === 'string' && window.SERVER_URL)
+          ? window.SERVER_URL.replace(/\/$/, '')
+          : '';
+    
+        let data = null;
+    
+        for (const ep of endpoints) {
+          const url = base + ep;
+          try {
+            const resp = await fetch(url, { credentials: 'same-origin' });
+            if (!resp.ok) {
+              console.debug(`poll() - ${url} -> ${resp.status}`);
+              continue;
+            }
+            data = await resp.json();
+            if (!data || !data.length) return;
+            console.debug('poll() succeeded with', url);
+            break;
+          } catch (err) {
+            console.warn('poll() - fetch failed for', ep, err);
+          }
         }
-
-        if(attachments && attachments.length){
-          for(const a of attachments){
-            if(a.type === 'sticker'){
-              const s = document.createElement('img'); s.src = a.url; s.className = 'sticker'; s.style.marginTop='8px'; s.style.maxWidth='180px'; s.style.borderRadius='8px';
-              bubble.appendChild(s);
-            } else if(a.type === 'poll'){
-              // render poll: question on top once & options as vertical list (as user requested originally)
-              const p = document.createElement('div'); p.className='poll'; p.style.marginTop='8px';
-              // changed to show question only once (no "Poll:" prefix twice)
-              if(m.text && m.text.trim()) {
-                const qEl = document.createElement('div'); qEl.style.fontWeight='600'; qEl.style.marginBottom='6px';
-                qEl.textContent = m.text;
-                p.appendChild(qEl);
-              }
-              if(a.options && a.options.length){
-                const list = document.createElement('div'); list.style.display='flex'; list.style.flexDirection='column'; list.style.gap='6px';
-                // If poll contains counts & who voted, show them. We'll render as "✅ Label — N votes" if server sends counts.
-                const counts = a.counts || new Array(a.options.length).fill(0);
-                const multi = !!a.multi; // server may send whether multi-select allowed
-                a.options.forEach((op, i)=>{
-                  const optBtn = document.createElement('button');
-                  optBtn.className = 'poll-option w-full px-3 py-2 rounded bg-gray-100 text-left';
-                  // show tick only after user voted — front-end will update on poll_update event
-                  const count = counts[i] || 0;
-                  optBtn.innerHTML = `${op} <span class="poll-count" style="float:right">— ${count} vote${count !== 1 ? 's' : ''}</span>`;
-                  optBtn.dataset.messageId = m.id;
-                  optBtn.dataset.index = i;
-                  optBtn.dataset.multi = multi ? '1' : '0';
-                  optBtn.addEventListener('click', async (ev)=>{
-                    ev.preventDefault();
-                    // send vote: server expected to accept { message_id, option, user, multi }
-                    try {
-                      await fetch('/vote_poll', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message_id: m.id, option: i, user: cs.myName }) });
-                      // optimistic: increment count locally (but server will emit poll_update)
-                      // after vote we refresh messages to get authoritative counts
-                      cs.lastId = 0; if(typeof poll === 'function') await poll();
-                    } catch(err){ console.warn('vote failed', err); }
+    
+        if (!data || !data.length) return;
+    
+        for (const m of data) {
+          const me = (m.sender === cs.myName);
+          const wrapper = document.createElement('div');
+          wrapper.className = 'msg-row';
+          const body = document.createElement('div');
+          body.className = 'msg-body';
+    
+          // === META ===
+          const meta = document.createElement('div');
+          meta.className = 'msg-meta-top';
+          const leftMeta = document.createElement('div');
+          leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
+          const rightMeta = document.createElement('div');
+          rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+          meta.appendChild(leftMeta);
+          meta.appendChild(rightMeta);
+          body.appendChild(meta);
+    
+          // === BUBBLE ===
+          const hasText = m.text && m.text.trim().length > 0;
+          const attachments = m.attachments || [];
+          const bubble = document.createElement('div');
+          bubble.className = 'bubble ' + (me ? 'me' : 'them');
+    
+          if (hasText) {
+            const textNode = document.createElement('div');
+            textNode.innerHTML =
+              escapeHtml(m.text) +
+              (m.edited
+                ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>'
+                : '');
+            bubble.appendChild(textNode);
+          }
+    
+          // === ATTACHMENTS ===
+          if (attachments && attachments.length) {
+            for (const a of attachments) {
+              if (a.type === 'sticker') {
+                const s = document.createElement('img');
+                s.src = a.url;
+                s.className = 'sticker';
+                s.style.marginTop = '8px';
+                s.style.maxWidth = '180px';
+                s.style.borderRadius = '8px';
+                bubble.appendChild(s);
+              } else if (a.type === 'poll') {
+                const p = document.createElement('div');
+                p.className = 'poll';
+                p.style.marginTop = '8px';
+    
+                if (m.text && m.text.trim()) {
+                  const qEl = document.createElement('div');
+                  qEl.style.fontWeight = '600';
+                  qEl.style.marginBottom = '6px';
+                  qEl.textContent = m.text;
+                  p.appendChild(qEl);
+                }
+    
+                if (a.options && a.options.length) {
+                  const list = document.createElement('div');
+                  list.style.display = 'flex';
+                  list.style.flexDirection = 'column';
+                  list.style.gap = '6px';
+                  const counts = a.counts || new Array(a.options.length).fill(0);
+                  const multi = !!a.multi;
+                  a.options.forEach((op, i) => {
+                    const optBtn = document.createElement('button');
+                    optBtn.className =
+                      'poll-option w-full px-3 py-2 rounded bg-gray-100 text-left';
+                    const count = counts[i] || 0;
+                    optBtn.innerHTML = `${op} <span class="poll-count" style="float:right">— ${count} vote${count !== 1 ? 's' : ''}</span>`;
+                    optBtn.dataset.messageId = m.id;
+                    optBtn.dataset.index = i;
+                    optBtn.dataset.multi = multi ? '1' : '0';
+                    optBtn.addEventListener('click', async (ev) => {
+                      ev.preventDefault();
+                      try {
+                        await fetch('/vote_poll', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            message_id: m.id,
+                            option: i,
+                            user: cs.myName
+                          })
+                        });
+                        // Optimistic refresh
+                        cs.lastId = 0;
+                        if (typeof poll === 'function') await poll();
+                      } catch (err) {
+                        console.warn('vote failed', err);
+                      }
+                    });
+                    list.appendChild(optBtn);
                   });
-                  list.appendChild(optBtn);
-                });
-                p.appendChild(list);
+                  p.appendChild(list);
+                }
+                bubble.appendChild(p);
+              } else {
+                const { element } = createAttachmentElement(a);
+                if (element) bubble.appendChild(element);
               }
-              bubble.appendChild(p);
-            } else {
-              const { element } = createAttachmentElement(a);
-              if(element) bubble.appendChild(element);
             }
           }
-        }
-
-        if(m.reactions && m.reactions.length){
-          const agg = {};
-          for(const r of m.reactions){
-            agg[r.emoji] = agg[r.emoji] || new Set();
-            agg[r.emoji].add(r.user);
+    
+          // === REACTIONS ===
+          if (m.reactions && m.reactions.length) {
+            const agg = {};
+            for (const r of m.reactions) {
+              agg[r.emoji] = agg[r.emoji] || new Set();
+              agg[r.emoji].add(r.user);
+            }
+            const reactionBar = document.createElement('div');
+            reactionBar.className = 'reaction-bar';
+            for (const emoji in agg) {
+              const userset = agg[emoji];
+              const pill = document.createElement('div');
+              pill.className = 'reaction-pill';
+              const em = document.createElement('div');
+              em.className = 'reaction-emoji';
+              em.innerText = emoji;
+              const count = document.createElement('div');
+              count.style.fontSize = '0.85rem';
+              count.style.color = '#374151';
+              count.innerText = userset.size;
+              pill.appendChild(em);
+              pill.appendChild(count);
+              reactionBar.appendChild(pill);
+            }
+            bubble.appendChild(reactionBar);
           }
-          const reactionBar = document.createElement('div'); reactionBar.className = 'reaction-bar';
-          for(const emoji in agg){
-            const userset = agg[emoji];
-            const pill = document.createElement('div'); pill.className = 'reaction-pill';
-            const em = document.createElement('div'); em.className='reaction-emoji'; em.innerText = emoji;
-            const count = document.createElement('div'); count.style.fontSize='0.85rem'; count.style.color='#374151'; count.innerText = userset.size;
-            pill.appendChild(em); pill.appendChild(count);
-            reactionBar.appendChild(pill);
-          }
-          bubble.appendChild(reactionBar);
+    
+          body.appendChild(bubble);
+          wrapper.appendChild(body);
+          const messagesEl =
+            document.getElementById('messages') ||
+            document.querySelector('.messages');
+          if (messagesEl) messagesEl.appendChild(wrapper);
+    
+          if (m.id && Number(m.id) > (cs.lastId || 0)) cs.lastId = Number(m.id);
         }
-
+    
+        // === AUTO SCROLL ===
+        const container =
+          document.getElementById('messages') || document.querySelector('.messages');
+        if (container) container.scrollTop = container.scrollHeight;
+      } catch (err) {
+        console.error('poll() error', err);
+      }
+    }
         // message menu
         const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
         menuBtn.onclick = (ev)=>{
