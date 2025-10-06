@@ -2733,6 +2733,281 @@ window.sendMessage = sendMessage;
     }
   }, 250); 
 
+/* ====== Minimal helper implementations to make UI work ======
+   Paste this block BEFORE your DOMContentLoaded block or above sendMessage()
+   These are defensive, minimal, and practical - adapt styling/markup as needed.
+*/
+
+(function(){
+  // Ensure global app state container exists
+  window.cs = window.cs || { stagedFiles: [], lastId: 0, isTyping: false, typingTimer: null, socket: null, myName: 'me' };
+
+  // Append message to messages container (used both for optimistic and incoming messages)
+  window.appendMessage = function appendMessage(msg) {
+    try {
+      const messagesEl = document.getElementById('messages') || document.querySelector('.messages') || document.querySelector('#chatContainer');
+      if (!messagesEl) return console.warn('appendMessage: messages container not found');
+      const wrapper = document.createElement('div');
+      wrapper.className = msg.isSystem ? 'msg-row system' : (msg.from === cs.myName ? 'msg-row me' : 'msg-row them');
+      const body = document.createElement('div');
+      body.className = 'msg-body';
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      if (msg.text) bubble.appendChild(document.createTextNode(msg.text));
+      // attachments (simple handling)
+      if (Array.isArray(msg.attachments)) {
+        msg.attachments.forEach(a => {
+          if (!a) return;
+          if (a.type === 'image' || (a.url && a.url.match(/\.(jpeg|jpg|gif|png|webp)$/i))) {
+            const img = document.createElement('img');
+            img.className = 'image-attachment';
+            img.src = a.url || a.preview || '';
+            bubble.appendChild(img);
+          } else if (a.type === 'audio' || (a.url && a.url.match(/\.(mp3|wav|ogg)$/i))) {
+            const au = document.createElement('audio');
+            au.controls = true;
+            au.src = a.url || a.preview || '';
+            bubble.appendChild(au);
+          } else if (a.type === 'location') {
+            const link = document.createElement('a');
+            link.href = a.url || '#';
+            link.target = '_blank';
+            link.textContent = a.url || `${a.lat},${a.lng}`;
+            bubble.appendChild(link);
+          } else { // generic file
+            const d = document.createElement('div'); d.className = 'preview-item-doc'; d.textContent = a.name || 'file';
+            bubble.appendChild(d);
+          }
+        });
+      }
+      body.appendChild(bubble);
+      wrapper.appendChild(body);
+      messagesEl.appendChild(wrapper);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return wrapper;
+    } catch (err) {
+      console.error('appendMessage error', err);
+    }
+  };
+
+  // insertAtCursor: insert text into input/textarea at caret
+  window.insertAtCursor = function insertAtCursor(input, text) {
+    try {
+      if (!input) return;
+      if (input.selectionStart || input.selectionStart === 0) {
+        const start = input.selectionStart, end = input.selectionEnd;
+        const val = input.value;
+        input.value = val.substring(0, start) + text + val.substring(end);
+        const pos = start + text.length;
+        input.selectionStart = input.selectionEnd = pos;
+      } else {
+        input.value += text;
+      }
+      // trigger input events
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+    } catch (err) { console.error('insertAtCursor error', err); }
+  };
+
+  // createVideoThumbnailFromFile(file, scale=0.7) => Promise<dataURL|string|null>
+  window.createVideoThumbnailFromFile = async function createVideoThumbnailFromFile(file, scale) {
+    scale = scale || 0.7;
+    if (!file) return null;
+    return new Promise((resolve) => {
+      try {
+        const url = URL.createObjectURL(file);
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.muted = true;
+        v.src = url;
+        v.addEventListener('loadeddata', () => {
+          try {
+            // choose a frame ~0.5s or the middle
+            const canvas = document.createElement('canvas');
+            const w = v.videoWidth || 320;
+            const h = v.videoHeight || 180;
+            canvas.width = Math.max(1, Math.floor(w * scale));
+            canvas.height = Math.max(1, Math.floor(h * scale));
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+            const data = canvas.toDataURL('image/jpeg', 0.8);
+            URL.revokeObjectURL(url);
+            resolve(data);
+          } catch (err) {
+            URL.revokeObjectURL(url);
+            resolve(null);
+          }
+        }, { once: true });
+        // timeout fallback
+        setTimeout(() => { try { URL.revokeObjectURL(url); } catch(_){}; resolve(null); }, 4000);
+      } catch (err) { console.error('createVideoThumbnailFromFile', err); resolve(null); }
+    });
+  };
+
+  // show/hide sticker panel
+  window.showStickerPanel = function showStickerPanel() {
+    const panel = document.getElementById('stickerPanel') || document.querySelector('.sticker-panel');
+    if (!panel) return;
+    panel.classList.add('active');
+    panel.style.display = panel.style.display || 'block';
+    try { panel.inert = false; } catch(_) {}
+  };
+  window.hideStickerPanel = function hideStickerPanel() {
+    const panel = document.getElementById('stickerPanel') || document.querySelector('.sticker-panel');
+    if (!panel) return;
+    panel.classList.remove('active');
+    panel.style.display = 'none';
+    try { panel.inert = true; } catch(_) {}
+  };
+  window.closeDrawer = window.hideStickerPanel;
+
+  // file pickers: adds selected files to cs.stagedFiles and visits preview
+  window.setAttachmentPreview = function setAttachmentPreview() {
+    const preview = document.getElementById('attachmentPreview') || document.getElementById('previewContainer');
+    if (!preview) return;
+    preview.innerHTML = '';
+    if (!Array.isArray(cs.stagedFiles) || cs.stagedFiles.length === 0) {
+      preview.style.display = 'none';
+      return;
+    }
+    preview.style.display = 'block';
+    cs.stagedFiles.forEach(f => {
+      const node = document.createElement('div');
+      node.className = 'attachment-preview-item';
+      if (f.type && f.type.startsWith('image/')) {
+        const img = document.createElement('img'); img.src = URL.createObjectURL(f); img.className='preview-img';
+        node.appendChild(img);
+      } else {
+        node.textContent = f.name || 'file';
+      }
+      preview.appendChild(node);
+    });
+  };
+
+  // openFileSelector(camera:boolean) -> lets user pick files and stores them in cs.stagedFiles
+  window.openFileSelector = function openFileSelector(camera) {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*,video/*';
+    if (camera) inp.capture = 'environment';
+    inp.multiple = true;
+    inp.addEventListener('change', (ev) => {
+      const files = Array.from(ev.target.files || []);
+      cs.stagedFiles = cs.stagedFiles.concat(files);
+      setAttachmentPreview();
+    });
+    inp.click();
+  };
+  window.openDocSelector = function openDocSelector() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.pdf,.doc,.docx,.txt,application/*';
+    inp.multiple = true;
+    inp.addEventListener('change', (ev) => {
+      const files = Array.from(ev.target.files || []);
+      cs.stagedFiles = cs.stagedFiles.concat(files);
+      setAttachmentPreview();
+    });
+    inp.click();
+  };
+  window.openAudioSelector = function openAudioSelector() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'audio/*';
+    inp.multiple = true;
+    inp.addEventListener('change', (ev) => {
+      const files = Array.from(ev.target.files || []);
+      cs.stagedFiles = cs.stagedFiles.concat(files);
+      setAttachmentPreview();
+    });
+    inp.click();
+  };
+
+  // Basic poll implementation: GET /poll?lastId=... or /messages?lastId=...
+  window.poll = async function poll() {
+    try {
+      const lastId = (typeof cs.lastId !== 'undefined') ? cs.lastId : 0;
+      const urls = [
+        `/poll?lastId=${lastId}`,
+        `/messages?lastId=${lastId}`,
+        `/get_messages?lastId=${lastId}`
+      ];
+      for (const u of urls) {
+        try {
+          const res = await fetch(u, { credentials: 'same-origin' });
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (!Array.isArray(data) || data.length === 0) continue;
+          // render incoming messages (simple)
+          for (const m of data) {
+            try {
+              // if messages provide id, update cs.lastId
+              if (m.id && m.id > cs.lastId) cs.lastId = m.id;
+              appendMessage(m);
+            } catch (err) { console.error('render incoming msg error', err); }
+          }
+          return;
+        } catch (err) {
+          // try next url
+        }
+      }
+    } catch (err) {
+      console.error('poll error', err);
+    }
+  };
+
+  // Register socket handlers if a socket (e.g. socket.io) exists on cs.socket
+  window.registerSocketHandlers = function registerSocketHandlers() {
+    try {
+      const s = cs.socket;
+      if (!s) return;
+      // generic message handler
+      if (typeof s.on === 'function') {
+        s.on('message', (m) => {
+          appendMessage(m);
+        });
+        s.on('connect', () => console.log('socket connected'));
+        s.on('typing', (d) => console.log('peer typing', d));
+      }
+    } catch (err) { console.error('registerSocketHandlers', err); }
+  };
+
+  // toggleRecording: simple stub using getUserMedia & MediaRecorder if available
+  window.toggleRecording = async function toggleRecording() {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return alert('Audio recording not supported in this browser.');
+      }
+      if (!window._mediaRecorder) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        window._mediaRecorder = new MediaRecorder(stream);
+        const chunks = [];
+        window._mediaRecorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+        window._mediaRecorder.onstop = async () => {
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          const file = new File([blob], `recording-${Date.now()}.webm`, { type: blob.type });
+          cs.stagedFiles.push(file);
+          setAttachmentPreview();
+        };
+        window._mediaRecorder.start();
+        console.log('Recording started');
+      } else {
+        if (window._mediaRecorder.state === 'recording') {
+          window._mediaRecorder.stop();
+          window._mediaRecorder = null;
+          console.log('Recording stopped and saved to stagedFiles');
+        } else {
+          // restart
+          window._mediaRecorder.start();
+        }
+      }
+    } catch (err) {
+      console.error('toggleRecording error', err);
+    }
+  };
+
+})(); // end helper IIFE
+
   /* ---------------------------
      Event wiring on DOMContentLoaded - single point of initialization
      --------------------------- */
@@ -2743,9 +3018,8 @@ window.sendMessage = sendMessage;
   const emojiBtn = $id('emojiBtn');
   const composer = document.querySelector('.composer');
   const textarea = $id('msg') || $id('textarea');
-  const inputEl = textarea;          // keep local ref for this block
-  window.inputEl = inputEl || null;  // expose global so sendMessage() can access it
-  console.log('✅ bound inputEl (local & global):', inputEl, window.inputEl);
+  const inputEl = textarea;
+  window.inputEl = inputEl || null;
   const micBtn = $id('mic');
   const plusBtn = $id('plusBtn');
   const attachMenuVertical = $id('attachMenuVertical') || (function () {
