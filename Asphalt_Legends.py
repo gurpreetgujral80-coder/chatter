@@ -93,6 +93,43 @@ def db_conn():
 
 init_db()
 
+# Accepts JSON { text, sender?, attachments? } and appends to messages_store
+@app.route('/send_message', methods=['POST'])
+def send_message_json():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Invalid JSON'}), 400
+
+        text = (data.get('text') or '').strip()
+        attachments = data.get('attachments') or []
+        sender = data.get('sender') or 'anonymous'
+
+        if not text and (not attachments or len(attachments) == 0):
+            return jsonify({'error': 'Empty message'}), 400
+
+        mid = next_message_id()
+        message = {
+            'id': mid,
+            'sender': sender,
+            'text': text,
+            'attachments': attachments,
+            'reactions': [],
+            'ts': datetime.utcnow().isoformat() + 'Z'
+        }
+        messages_store.append(message)
+
+        # If you persist to disk elsewhere, call that save function here (optional)
+        try:
+            save_messages_store()
+        except Exception:
+            pass
+
+        return jsonify({'ok': True, 'message': message}), 200
+    except Exception as e:
+        current_app.logger.exception('send_message error')
+        return jsonify({'error': str(e)}), 500
+
 # user helpers
 def save_user(name, salt_bytes, hash_bytes, avatar=None, status="", make_owner=False, make_partner=False):
     conn = db_conn(); c = conn.cursor()
@@ -349,6 +386,12 @@ def fetch_call_log_by_id(call_id):
     if r:
         return {"id": r[0], "caller": r[1], "callee": r[2], "is_video": bool(r[3]), "started_at": r[4], "ended_at": r[5], "status": r[6]}
     return None
+
+def next_message_id():
+    try:
+        return max(int(m.get('id', 0)) for m in messages_store) + 1 if messages_store else 1
+    except Exception:
+        return (messages_store[-1].get('id', 0) if messages_store else 0) + 1
 
 # --------- crypto for shared passkey ----------
 PBKDF2_ITER = 200_000
@@ -4019,6 +4062,16 @@ def handle_vote_poll(data):
         socketio.emit('poll_private', private, to=sid)
     else:
         emit('poll_private_missing', {'message': 'You must connect via socket to see private poll'})
+
+@app.route('/poll')
+@app.route('/messages')
+@app.route('/get_messages')
+def poll_alias():
+    # accept either param name: lastId or since
+    since = request.args.get('lastId', request.args.get('since', 0, type=int), type=int)
+    # same behavior as your /poll_messages route: return messages with id > since
+    new_msgs = [m for m in messages_store if int(m.get('id', 0)) > int(since)]
+    return jsonify(new_msgs)
 
 # ----- run -----
 if __name__ == "__main__":
