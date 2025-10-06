@@ -2278,11 +2278,7 @@ window.sendMessage = sendMessage;
       try {
         const lastId = cs.lastId || 0;
         const endpoints = [
-          `/poll_messages?since=${lastId}`,
-          `/poll_messages?lastId=${lastId}`,
-          `/poll?lastId=${lastId}`,
-          `/messages?lastId=${lastId}`,
-          `/get_messages?lastId=${lastId}`
+          `/poll_messages?since=${lastId}`
         ];
     
         const base = (typeof window.SERVER_URL === 'string' && window.SERVER_URL)
