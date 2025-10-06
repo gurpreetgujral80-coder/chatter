@@ -1826,21 +1826,6 @@ CHAT_HTML = r'''<!doctype html>
 
 <script>
 
-const socket = io(); // connect to server
-
-// Register yourself (optional)
-socket.emit('register_socket', { username: cs.myName });
-
-// Send message
-async function sendMessage(text) {
-  socket.emit('send_message', { text, sender: cs.myName });
-}
-
-// Listen for new messages
-socket.on('new_message', (m) => {
-  appendMessage(m);  // Use your existing function to render messages
-});
-
 (function () {
   'use strict';
 
@@ -1855,6 +1840,21 @@ socket.on('new_message', (m) => {
     calls: {},     // call_id -> call state
     pcConfig: { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] }
   };
+
+  const socket = io(); // connect to server
+
+  // Register yourself (optional)
+  socket.emit('register_socket', { username: cs.myName });
+
+  // Send message
+  async function sendMessage(text) {
+    socket.emit('send_message', { text, sender: cs.myName });
+  }
+
+  // Listen for new messages
+  socket.on('new_message', (m) => {
+    appendMessage(m);  // Use your existing function to render messages
+  });
 
   // Safe DOM refs (assigned on DOMContentLoaded)
   let emojiBtn, composer, textarea, micBtn, plusBtn, attachMenuVertical;
