@@ -2396,7 +2396,6 @@ window.sendMessage = sendMessage;
                             user: cs.myName
                           })
                         });
-                        // Optimistic refresh
                         cs.lastId = 0;
                         if (typeof poll === 'function') await poll();
                       } catch (err) {
@@ -2442,11 +2441,100 @@ window.sendMessage = sendMessage;
             bubble.appendChild(reactionBar);
           }
     
+          // === MESSAGE MENU ===
+          const menuBtn = document.createElement('button');
+          menuBtn.className = 'three-dot';
+          menuBtn.innerText = '⋯';
+          menuBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            document.querySelectorAll('.menu:not(#profileMenu)').forEach(n => n.remove());
+            const menu = document.createElement('div');
+            menu.className = 'menu';
+            menu.style.position = 'absolute';
+            menu.style.zIndex = 200;
+            menu.style.background = 'white';
+            menu.style.border = '1px solid #e5e7eb';
+            menu.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)';
+            menu.style.borderRadius = '8px';
+            menu.style.padding = '8px';
+            menu.style.top = (menuBtn.getBoundingClientRect().bottom + 8) + 'px';
+            menu.style.left = (menuBtn.getBoundingClientRect().left - 160) + 'px';
+    
+            const del = document.createElement('div');
+            del.innerText = 'Delete';
+            del.style.cursor = 'pointer';
+            del.style.padding = '6px 8px';
+            del.onclick = async (e) => {
+              e.stopPropagation();
+              if (confirm('Delete this message?')) {
+                await fetch('/delete_message', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: m.id })
+                });
+                const messagesEl =
+                  document.getElementById('messages') || document.querySelector('.messages');
+                if (messagesEl) messagesEl.innerHTML = '';
+                cs.lastId = 0;
+                await poll();
+              }
+            };
+    
+            const forward = document.createElement('div');
+            forward.innerText = 'Forward';
+            forward.style.cursor = 'pointer';
+            forward.style.padding = '6px 8px';
+            forward.onclick = () => {
+              navigator.clipboard.writeText(m.text || '');
+              alert('Message copied for forwarding');
+            };
+    
+            const copy = document.createElement('div');
+            copy.innerText = 'Copy';
+            copy.style.cursor = 'pointer';
+            copy.style.padding = '6px 8px';
+            copy.onclick = () => {
+              navigator.clipboard.writeText(m.text || '');
+              alert('Copied to clipboard');
+            };
+    
+            const reshare = document.createElement('div');
+            reshare.innerText = 'Reshare';
+            reshare.style.cursor = 'pointer';
+            reshare.style.padding = '6px 8px';
+            reshare.onclick = () => {
+              alert('Reshare placeholder');
+            };
+    
+            const react = document.createElement('div');
+            react.innerText = 'React';
+            react.style.cursor = 'pointer';
+            react.style.padding = '6px 8px';
+            react.onclick = (ev2) => {
+              ev2.stopPropagation();
+              showEmojiPickerForMessage(m.id, menuBtn);
+            };
+    
+            menu.appendChild(copy);
+            menu.appendChild(forward);
+            menu.appendChild(reshare);
+            if (m.sender === cs.myName) menu.appendChild(del);
+            menu.appendChild(react);
+            document.body.appendChild(menu);
+    
+            const hide = () => {
+              menu.remove();
+              document.removeEventListener('click', hide);
+            };
+            setTimeout(() => document.addEventListener('click', hide), 50);
+          };
+    
+          bubble.appendChild(menuBtn);
           body.appendChild(bubble);
           wrapper.appendChild(body);
+    
           const messagesEl =
-            document.getElementById('messages') ||
-            document.querySelector('.messages');
+            document.getElementById('messages') || document.querySelector('.messages');
           if (messagesEl) messagesEl.appendChild(wrapper);
     
           if (m.id && Number(m.id) > (cs.lastId || 0)) cs.lastId = Number(m.id);
@@ -2456,48 +2544,13 @@ window.sendMessage = sendMessage;
         const container =
           document.getElementById('messages') || document.querySelector('.messages');
         if (container) container.scrollTop = container.scrollHeight;
-      } catch (err) {
-        console.error('poll() error', err);
+    
+      } catch (e) {
+        console.error('poll error', e);
       }
     }
-        // message menu
-        const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
-        menuBtn.onclick = (ev)=>{
-          ev.stopPropagation();
-          document.querySelectorAll('.menu:not(#profileMenu)').forEach(n=>n.remove());
-          const menu = document.createElement('div'); menu.className='menu';
-          menu.style.position='absolute'; menu.style.zIndex=200; menu.style.background='white'; menu.style.border='1px solid #e5e7eb'; menu.style.boxShadow='0 6px 18px rgba(0,0,0,0.08)'; menu.style.borderRadius='8px'; menu.style.padding='8px';
-          menu.style.top = (menuBtn.getBoundingClientRect().bottom + 8) + 'px';
-          menu.style.left = (menuBtn.getBoundingClientRect().left - 160) + 'px';
-          const del = document.createElement('div'); del.innerText='Delete'; del.style.cursor='pointer'; del.style.padding='6px 8px';
-          del.onclick = async (e)=>{ e.stopPropagation(); if(confirm('Delete this message?')){ await fetch('/delete_message',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({id:m.id})}); if(messagesEl){ messagesEl.innerHTML=''; } cs.lastId=0; await poll(); } };
-          const forward = document.createElement('div'); forward.innerText='Forward'; forward.style.cursor='pointer'; forward.style.padding='6px 8px';
-          forward.onclick = ()=>{ navigator.clipboard.writeText(m.text || ''); alert('Message copied for forwarding'); };
-          const copy = document.createElement('div'); copy.innerText='Copy'; copy.style.cursor='pointer'; copy.style.padding='6px 8px';
-          copy.onclick = ()=>{ navigator.clipboard.writeText(m.text || ''); alert('Copied to clipboard'); };
-          const reshare = document.createElement('div'); reshare.innerText='Reshare'; reshare.style.cursor='pointer'; reshare.style.padding='6px 8px';
-          reshare.onclick = ()=>{ alert('Reshare placeholder'); };
-          const react = document.createElement('div'); react.innerText='React'; react.style.cursor='pointer'; react.style.padding='6px 8px';
-          react.onclick = (ev2)=>{ ev2.stopPropagation(); showEmojiPickerForMessage(m.id, menuBtn); };
-
-          menu.appendChild(copy); menu.appendChild(forward); menu.appendChild(reshare);
-          if(m.sender === cs.myName) menu.appendChild(del);
-          menu.appendChild(react);
-          document.body.appendChild(menu);
-          const hide = ()=>{ menu.remove(); document.removeEventListener('click', hide); };
-          setTimeout(()=> document.addEventListener('click', hide), 50);
-        };
-
-        bubble.appendChild(menuBtn);
-        body.appendChild(bubble);
-        wrapper.appendChild(body);
-        if(messagesEl) messagesEl.appendChild(wrapper);
-        cs.lastId = m.id;
-      }
-      if(messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
-    }catch(e){ console.error('poll error', e); }
-  }
-  window.poll = poll;
+    
+    window.poll = poll;
 
   // Reaction picker
   function showEmojiPickerForMessage(msgId, anchorEl){
