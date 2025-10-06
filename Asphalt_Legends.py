@@ -3068,9 +3068,7 @@ window.sendMessage = sendMessage;
     try {
       const lastId = (typeof cs.lastId !== 'undefined') ? cs.lastId : 0;
       const urls = [
-        `/poll?lastId=${lastId}`,
-        `/messages?lastId=${lastId}`,
-        `/get_messages?lastId=${lastId}`
+        `/poll_messages?since=${lastId}`
       ];
       for (const u of urls) {
         try {
