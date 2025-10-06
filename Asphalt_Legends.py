@@ -93,43 +93,20 @@ def db_conn():
 
 init_db()
 
-# Accepts JSON { text, sender?, attachments? } and appends to messages_store
-@app.route('/send_message', methods=['POST'])
-def send_message_json():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'Invalid JSON'}), 400
-
-        text = (data.get('text') or '').strip()
-        attachments = data.get('attachments') or []
-        sender = data.get('sender') or 'anonymous'
-
-        if not text and (not attachments or len(attachments) == 0):
-            return jsonify({'error': 'Empty message'}), 400
-
-        mid = next_message_id()
-        message = {
-            'id': mid,
-            'sender': sender,
-            'text': text,
-            'attachments': attachments,
-            'reactions': [],
-            'ts': datetime.utcnow().isoformat() + 'Z'
-        }
-        messages_store.append(message)
-
-        # If you persist to disk elsewhere, call that save function here (optional)
-        try:
-            save_messages_store()
-        except Exception:
-            pass
-
-        return jsonify({'ok': True, 'message': message}), 200
-    except Exception as e:
-        current_app.logger.exception('send_message error')
-        return jsonify({'error': str(e)}), 500
-
+@socketio.on('send_message')
+def handle_send_message(data):
+    # Save message
+    new_msg = {
+        "id": len(messages_store) + 1,
+        "sender": data.get('sender'),
+        "text": data.get('text'),
+        "attachments": data.get('attachments', []),
+        "reactions": []
+    }
+    messages_store.append(new_msg)
+    # Broadcast to all connected clients
+    socketio.emit('new_message', new_msg)
+    
 # user helpers
 def save_user(name, salt_bytes, hash_bytes, avatar=None, status="", make_owner=False, make_partner=False):
     conn = db_conn(); c = conn.cursor()
@@ -1849,6 +1826,21 @@ CHAT_HTML = r'''<!doctype html>
 
 <script>
 
+const socket = io(); // connect to server
+
+// Register yourself (optional)
+socket.emit('register_socket', { username: cs.myName });
+
+// Send message
+async function sendMessage(text) {
+  socket.emit('send_message', { text, sender: cs.myName });
+}
+
+// Listen for new messages
+socket.on('new_message', (m) => {
+  appendMessage(m);  // Use your existing function to render messages
+});
+
 (function () {
   'use strict';
 
@@ -1880,95 +1872,53 @@ CHAT_HTML = r'''<!doctype html>
   // Expose escapeHtml (some other code may call it)
   window.escapeHtml = escapeHtml;
 
-  /* ---------------------------
-     Core functions exposed on window
-     --------------------------- */
-
-  // sendMessage: can be called as sendMessage() (reads input) or sendMessage(text, attachments)
   async function sendMessage(textArg, attsArg) {
-      const text = (typeof textArg === 'string')
-        ? textArg
-        : (window.inputEl ? (window.inputEl.value || '').trim() : '');
+      const text = (typeof textArg === 'string') ? textArg : (inputEl ? (inputEl.value || '').trim() : '');
+      const atts = Array.isArray(attsArg) ? attsArg : cs.stagedFiles.slice();
     
-      const atts = Array.isArray(attsArg) ? attsArg : (cs && Array.isArray(cs.stagedFiles) ? cs.stagedFiles.slice() : []);
+      if(!text && atts.length === 0) return;
     
-      if (!text && (!atts || atts.length === 0)) {
-        console.log('sendMessage: nothing to send (empty text and no attachments)');
-        return;
-      }
-    
-      // optimistic UI
-      const tempId = 'temp-' + Date.now();
-      const wrapper = document.createElement('div'); wrapper.className = 'msg-row';
-      const body = document.createElement('div'); body.className = 'msg-body';
-      const bubble = document.createElement('div'); bubble.className = 'bubble me';
-      bubble.setAttribute('data-temp-id', tempId);
-      if (text) bubble.appendChild(document.createTextNode(text));
-    
-      const objectUrls = [];
-      for (const file of (atts || [])) {
-        if (!file || !file.type) continue;
-        if (file.type.startsWith('image/')) {
-          const img = document.createElement('img'); const url = URL.createObjectURL(file); objectUrls.push(url);
-          img.src = url; img.className = 'image-attachment'; bubble.appendChild(img);
-        } else if (file.type.startsWith('video/')) {
-          const container = document.createElement('div'); container.style.position = 'relative'; container.style.display = 'inline-block';
-          const placeholder = document.createElement('img'); placeholder.className = 'thumb'; placeholder.alt = file.name || '';
-          container.appendChild(placeholder);
-          bubble.appendChild(container);
-          // async thumbnail (if available)
-          if (typeof createVideoThumbnailFromFile === 'function') {
-            createVideoThumbnailFromFile(file, 0.7).then(d => { if (d) placeholder.src = d; }).catch(() => { });
-          }
-        } else if (file.type.startsWith('audio/')) {
-          const au = document.createElement('audio'); const url = URL.createObjectURL(file); objectUrls.push(url);
-          au.src = url; au.controls = true; bubble.appendChild(au);
-        } else {
-          const d = document.createElement('div'); d.className = 'preview-item-doc'; d.textContent = file.name || 'file'; bubble.appendChild(d);
-        }
-      }
-    
-      body.appendChild(bubble); wrapper.appendChild(body);
-      if (messagesEl) { messagesEl.appendChild(wrapper); messagesEl.scrollTop = messagesEl.scrollHeight; }
-    
-      // prepare payload
       try {
-        const fd = new FormData();
-        fd.append('text', text);
-        fd.append('sender', (cs && cs.myName) ? cs.myName : '');
-        for (const f of (atts || [])) {
-          if (f) fd.append('file', f, f.name);
-        }
-    
-        console.log('sendMessage: sending', { text, attachments: (atts || []).length });
-        const res = await fetch('/send_composite_message', { method: 'POST', body: fd });
-    
-        if (res.ok) {
-          // remove optimistic row
-          const el = document.querySelector('[data-temp-id="' + tempId + '"]');
-          if (el) {
-            const row = el.closest('.msg-row');
-            if (row && row.parentElement) row.parentElement.removeChild(row);
+        // if there are files, use FormData so server uses send_composite_message
+        if(atts.length > 0) {
+          const fd = new FormData();
+          fd.append('text', text);
+          fd.append('sender', cs.myName);
+          for(const f of atts) fd.append('file', f, f.name);
+          const res = await fetch('/send_composite_message', { method:'POST', body: fd });
+          const json = await res.json();
+          if(res.ok && json && json.message) {
+            // append authoritative message (dedupe prevents duplicates)
+            appendMessage(json.message);
+            cs.stagedFiles = [];
+            if(inputEl) inputEl.value = '';
+            const preview = $id('attachmentPreview') || $id('previewContainer');
+            if(preview){ preview.innerHTML=''; preview.style.display='none'; }
+            cs.lastId = json.message.id || cs.lastId;
+            return;
+          } else {
+            // fallback: reset lastId and poll
+            cs.lastId = 0; await poll();
           }
-    
-          if (window.inputEl) window.inputEl.value = '';
-          if (cs) cs.stagedFiles = [];
-          const preview = $id('attachmentPreview') || $id('previewContainer');
-          if (preview) { preview.innerHTML = ''; preview.style.display = 'none'; }
-          if (cs) cs.lastId = 0;
-          if (typeof window.poll === 'function') await window.poll();
         } else {
-          const txt = await res.text();
-          alert('Send failed: ' + txt);
+          // no files - send JSON to /send_message
+          const res = await fetch('/send_message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text, sender: cs.myName })});
+          const json = await res.json();
+          if(res.ok && json && json.message) {
+            appendMessage(json.message);
+            if(inputEl) inputEl.value = '';
+            cs.lastId = json.message.id || cs.lastId;
+            return;
+          } else {
+            cs.lastId = 0; await poll();
+          }
         }
-      } catch (err) {
+      } catch(err) {
         console.error('sendMessage error', err);
         alert('Send error: ' + (err && err.message ? err.message : err));
-      } finally {
-        objectUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (_) { } });
       }
   }
-window.sendMessage = sendMessage;
+  window.sendMessage = sendMessage;
 
   // Attachment preview setter (exposed)
   function setAttachmentPreview(files){
@@ -3228,7 +3178,9 @@ window.sendMessage = sendMessage;
      --------------------------- */
   document.addEventListener('DOMContentLoaded', () => {
   'use strict';
-
+  
+  window._renderedMessageIds = window._renderedMessageIds || new Set();
+  
   // assign DOM refs (use const/let to avoid globals)
   const emojiBtn = $id('emojiBtn');
   const composer = document.querySelector('.composer');
@@ -3261,6 +3213,51 @@ window.sendMessage = sendMessage;
   const btnToggleVideo = $id('btnToggleVideo');
   const btnSwitchCam = $id('btnSwitchCam');
 
+  window.appendMessage = function appendMessage(m){
+      try {
+        if(!m || typeof m.id === 'undefined') return;
+        const mid = Number(m.id);
+        if(window._renderedMessageIds.has(mid)) return; // skip duplicate
+        window._renderedMessageIds.add(mid);
+    
+        const me = (m.sender === cs.myName);
+        const wrapper = document.createElement('div'); wrapper.className = 'msg-row';
+        const body = document.createElement('div'); body.className = 'msg-body';
+    
+        const meta = document.createElement('div'); meta.className = 'msg-meta-top';
+        const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
+        const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+        meta.appendChild(leftMeta); meta.appendChild(rightMeta);
+        body.appendChild(meta);
+    
+        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
+        if(m.text) {
+          const textNode = document.createElement('div');
+          textNode.innerHTML = escapeHtml(m.text) + (m.edited ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>' : '');
+          bubble.appendChild(textNode);
+        }
+    
+        // simple attachments handling (images/documents)
+        (m.attachments || []).forEach(a => {
+          if(a.type === 'image' || a.url && (a.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))) {
+            const img = document.createElement('img'); img.src = a.url; img.className = 'image-attachment'; bubble.appendChild(img);
+          } else {
+            const d = document.createElement('div'); d.className = 'preview-item-doc'; d.textContent = a.name || (a.url||'file'); bubble.appendChild(d);
+          }
+        });
+    
+        body.appendChild(bubble);
+        wrapper.appendChild(body);
+    
+        const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
+        if(messagesEl) {
+          messagesEl.appendChild(wrapper);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+      } catch(err){
+        console.error('appendMessage error', err);
+      }
+  };
   try {
     // Debug: list of found elements (helps confirm selectors)
     console.log('init elements:', {
@@ -3801,12 +3798,12 @@ def chat():
     touch_user_presence(username)
     return render_template_string(CHAT_HTML, username=username, user_status=user.get('status',''), user_avatar=user.get('avatar',''), is_owner=is_owner, is_partner=is_partner, owner_name=owner_name, partner_name=partner_name, is_member=is_member, heading_img=HEADING_IMG)
 
-# Route for sending messages that might have an attachment
 @app.route("/send_composite_message", methods=["POST"])
 def send_composite_message():
     username = session.get('username')
-    if not username: return "not signed in", 401
-    
+    if not username:
+        return "not signed in", 401
+
     text = request.form.get('text', '').strip()
     files = request.files.getlist('file') or []
     attachments = []
@@ -3828,12 +3825,39 @@ def send_composite_message():
                 kind = "audio"
             attachments.append({"type": kind, "url": url, "name": fn})
 
-    if text or attachments:
-        save_message(username, text, attachments=attachments)
-        touch_user_presence(username)
-    
-    return jsonify({"status": "ok"})
+    if not text and not attachments:
+        return jsonify({'error': 'Empty message'}), 400
 
+    # save to DB and get inserted id
+    mid = save_message(username, text, attachments=attachments)
+
+    # build authoritative message obj from DB
+    conn = db_conn(); c = conn.cursor()
+    c.execute("SELECT id, sender, text, attachments, reactions, edited, created_at FROM messages WHERE id = ? LIMIT 1", (mid,))
+    r = c.fetchone()
+    conn.close()
+    if not r:
+        return jsonify({'error': 'Failed to read saved message'}), 500
+
+    _id, sender, txt, attachments_json, reactions_json, edited, created_at = r
+    message = {
+        "id": int(_id),
+        "sender": sender,
+        "text": txt,
+        "attachments": json.loads(attachments_json or "[]"),
+        "reactions": json.loads(reactions_json or "[]"),
+        "edited": bool(edited),
+        "created_at": created_at
+    }
+
+    # emit to socket clients (do not fail the HTTP response if emit fails)
+    try:
+        socketio.emit('new_message', message)
+    except Exception:
+        app.logger.exception("socket emit failed for new_message")
+
+    touch_user_presence(username)
+    return jsonify({"ok": True, "message": message}), 200
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
