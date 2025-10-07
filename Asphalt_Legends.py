@@ -1841,11 +1841,6 @@ CHAT_HTML = r'''<!doctype html>
     pcConfig: { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] }
   };
 
-  const socket = io(); // connect to server
-
-  // Register yourself (optional)
-  socket.emit('register_socket', { username: cs.myName });
-
   // Safe DOM refs (assigned on DOMContentLoaded)
   let emojiBtn, composer, textarea, micBtn, plusBtn, attachMenuVertical;
   let sendBtn, emojiDrawer, messagesEl, inputEl, composerEl, composerMain, panel;
@@ -3202,7 +3197,7 @@ CHAT_HTML = r'''<!doctype html>
   const btnMute = $id('btnMute');
   const btnToggleVideo = $id('btnToggleVideo');
   const btnSwitchCam = $id('btnSwitchCam');
-
+ 
   window.appendMessage = function appendMessage(m){
       try {
         if(!m || typeof m.id === 'undefined') return;
@@ -3335,6 +3330,15 @@ CHAT_HTML = r'''<!doctype html>
       });
     }
 
+    const socket = io(); // connect to server
+
+    // Register yourself (optional)
+    socket.emit('register_socket', { username: cs.myName });
+
+    // Listen for messages from the server
+    socket.on('new_message', (m) => {
+      appendMessage(m);
+    });
     // click outside handlers to close drawers/panels
     document.addEventListener('click', (ev) => {
       const insidePanel = ev.target && ev.target.closest && ev.target.closest('#stickerPanel');
