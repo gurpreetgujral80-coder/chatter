@@ -36,7 +36,7 @@ ALLOWED_VIDEO_EXT = {"mp4", "webm", "ogg"}
 ALLOWED_AUDIO_EXT = {"mp3", "wav", "ogg", "m4a", "webm"}
 messages_store = []
 polls_store = {}
-user_sid_map = {}
+USER_SID = {}
 
 # ensure static subfolders
 pathlib.Path(os.path.join(app.static_folder, "uploads")).mkdir(parents=True, exist_ok=True)
