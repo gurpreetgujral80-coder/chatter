@@ -2153,13 +2153,20 @@ CHAT_HTML = r'''<!doctype html>
         wrapper.appendChild(body);
     
         // append to messages container (choose #messages or .messages)
-        const container = document.getElementById('messages') || document.querySelector('.messages');
-        if (container) {
-          container.appendChild(wrapper);
-          container.scrollTop = container.scrollHeight;
-        } else {
-          document.body.appendChild(wrapper);
-        }
+           const container =
+              document.getElementById('messages') || document.querySelector('.messages');
+        
+            if (container) {
+              container.appendChild(wrapper);
+              container.scrollTop = container.scrollHeight;
+            } else {
+              // fallback
+              document.body.appendChild(wrapper);
+            }
+        
+          } catch (err) {
+            console.error('appendMessage error', err);
+          }
     };
     
     // === Socket handler — only append if not already rendered ===
