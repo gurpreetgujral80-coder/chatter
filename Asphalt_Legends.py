@@ -1664,6 +1664,11 @@ CHAT_HTML = r'''<!doctype html>
       width: 250px;
       height: 40px;
     }
+    .message-wrapper { padding:8px; margin:6px 0; background:#f7f7f7; border-radius:8px; position:relative; overflow:visible; }
+    .message-header { display:flex; align-items:center; gap:8px; justify-content:space-between; }
+    .msg-opts-btn { background:transparent; border:0; cursor:pointer; font-size:18px; line-height:1; padding:4px; margin-left:8px; visibility:visible; z-index:20; }
+    .msg-menu { position:absolute; right:8px; top:36px; background:#fff; border:1px solid #ddd; border-radius:6px; padding:6px; z-index:100000; box-shadow:0 8px 16px rgba(0,0,0,0.12); display:none; }
+    .msg-menu.visible { display:block; }
   </style>
 </head>
 <body>
@@ -1710,132 +1715,129 @@ CHAT_HTML = r'''<!doctype html>
           </div>
         </div>
       </header>
-    
-      <!-- Messages -->
-      <main>
-        <div id="messages" class="mb-6" aria-live="polite" style="padding-top:calc(80px + 1rem);"></div>
-      </main>
-    
-      <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
-        <div id="stickerPanel" class="emoji-drawer">
-          <div class="drag-bar" style="
-              width:40px;
-              height:5px;
-              background:#ccc;
-              border-radius:3px;
-              margin:8px auto;
-          "></div>
+      <div id="chat-wrap" style="position:relative; min-height:360px; display:flex; flex-direction:column;">
+            <div id="messages" aria-live="polite" style="flex:1 1 auto; overflow:auto; padding-top:calc(80px + 1rem);"></div>
         
-          <!-- Tabs -->
-          <div class="panel-tabs">
-            <button id="tab_stickers">Stickers</button>
-            <button id="tab_gifs">GIFs</button>
-            <button id="tab_avatars">Avatars</button>
-            <button id="tab_emoji">Emoji</button>
+            <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
+            <div id="stickerPanel" class="emoji-drawer">
+              <div class="drag-bar" style="
+                  width:40px;
+                  height:5px;
+                  background:#ccc;
+                  border-radius:3px;
+                  margin:8px auto;
+              "></div>
+            
+              <!-- Tabs -->
+              <div class="panel-tabs">
+                <button id="tab_stickers">Stickers</button>
+                <button id="tab_gifs">GIFs</button>
+                <button id="tab_avatars">Avatars</button>
+                <button id="tab_emoji">Emoji</button>
+              </div>
+            
+              <!-- Content area -->
+              <div id="panelContent" class="emoji-drawer-content">
+                <div id="stickersContainer" class="grid grid-cols-4 gap-2 hidden"></div>
+                <div id="gifGrid" class="gif-grid hidden"></div>
+                <div id="avatarGrid" class="emoji-grid hidden"></div>
+                <div id="emojiGrid" class="emoji-grid"></div>
+              </div>
+            </div>
+        
+          <!-- Composer -->
+          <div class="composer" id="composer" aria-label="Composer area">
+            <div class="composer-inner">
+              <div id="attachmentPreview"></div>
+        
+              <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
+                <button id="plusBtn" class="plus-small bg-white shadow" style="font-size:2rem;" aria-label="Attach">＋</button>
+        
+                <textarea id="msg" class="textarea" placeholder="Type a message..." maxlength="1200"
+                  aria-label="Message input"></textarea>
+        
+                <!-- emoji button opens drawer -->
+                <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white" aria-label="Emoji">😊</button>
+        
+                <!-- mic button -->
+                <button id="mic" class="mic-btn" aria-label="Voice message" aria-pressed="false"
+                  title="Hold to record or click to toggle">🎙️</button>
+        
+                <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white" aria-label="Send">Send</button>
+              </div>
+            </div>
+          </div>
+          <div id="attachMenuVertical" class="attach-menu-vertical" style="display: none;">
+              <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
+              <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
+              <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
+              <div class="attach-card" data-action="audio">🎧<div>  Audio</div></div>
+              <div class="attach-card" data-action="location">🌐<div>  Location</div></div>
+              <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
+          </div>
+          <!-- Poll modal -->
+          <div id="pollModal" class="hidden" style="display:none;">
+            <div class="modal">
+              <div class="modal-card">
+                <h3>Create Poll</h3>
+                <form id="pollForm">
+                  <div><input id="poll_question" placeholder="Your question" class="w-full p-2 border rounded mb-2"></div>
+                  <div id="pollOptions">
+                    <input name="option" placeholder="Option 1" class="w-full p-2 border rounded mb-2">
+                    <input name="option" placeholder="Option 2" class="w-full p-2 border rounded mb-2">
+                  </div>
+                  <div class="flex gap-2">
+                    <button id="addPollOption" type="button" class="px-3 py-1 bg-gray-100 rounded">Add option</button>
+                    <button class="px-3 py-1 bg-indigo-600 text-white rounded">Create Poll</button>
+                    <button id="cancelPoll" type="button" class="px-3 py-1 bg-gray-200 rounded">Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         
-          <!-- Content area -->
-          <div id="panelContent" class="emoji-drawer-content">
-            <div id="stickersContainer" class="grid grid-cols-4 gap-2 hidden"></div>
-            <div id="gifGrid" class="gif-grid hidden"></div>
-            <div id="avatarGrid" class="emoji-grid hidden"></div>
-            <div id="emojiGrid" class="emoji-grid"></div>
-          </div>
-        </div>
-    
-      <!-- Composer -->
-      <div class="composer" id="composer" aria-label="Composer area">
-        <div class="composer-inner">
-          <div id="attachmentPreview"></div>
-    
-          <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
-            <button id="plusBtn" class="plus-small bg-white shadow" style="font-size:2rem;" aria-label="Attach">＋</button>
-    
-            <textarea id="msg" class="textarea" placeholder="Type a message..." maxlength="1200"
-              aria-label="Message input"></textarea>
-    
-            <!-- emoji button opens drawer -->
-            <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white" aria-label="Emoji">😊</button>
-    
-            <!-- mic button -->
-            <button id="mic" class="mic-btn" aria-label="Voice message" aria-pressed="false"
-              title="Hold to record or click to toggle">🎙️</button>
-    
-            <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white" aria-label="Send">Send</button>
-          </div>
-        </div>
-      </div>
-      <div id="attachMenuVertical" class="attach-menu-vertical" style="display:inline-block;">
-          <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
-          <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
-          <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
-          <div class="attach-card" data-action="audio">🎧<div>  Audio</div></div>
-          <div class="attach-card" data-action="location">🌐<div>  Location</div></div>
-          <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
-      </div>
-      <!-- Poll modal -->
-      <div id="pollModal" class="hidden" style="display:none;">
-        <div class="modal">
-          <div class="modal-card">
-            <h3>Create Poll</h3>
-            <form id="pollForm">
-              <div><input id="poll_question" placeholder="Your question" class="w-full p-2 border rounded mb-2"></div>
-              <div id="pollOptions">
-                <input name="option" placeholder="Option 1" class="w-full p-2 border rounded mb-2">
-                <input name="option" placeholder="Option 2" class="w-full p-2 border rounded mb-2">
+          <!-- Profile Modal -->
+          <div id="profileModal" class="hidden fixed inset-0 items-center justify-center bg-black/40 z-[60]">
+            <div class="bg-white rounded-lg p-4 w-96">
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <div class="text-lg font-bold">Profile</div>
+                </div>
+                <button id="closeProfile" class="text-gray-500">✕</button>
               </div>
-              <div class="flex gap-2">
-                <button id="addPollOption" type="button" class="px-3 py-1 bg-gray-100 rounded">Add option</button>
-                <button class="px-3 py-1 bg-indigo-600 text-white rounded">Create Poll</button>
-                <button id="cancelPoll" type="button" class="px-3 py-1 bg-gray-200 rounded">Cancel</button>
-              </div>
-            </form>
+              <form id="profileForm" enctype="multipart/form-data">
+                <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name"
+                    class="w-full p-2 border rounded" value="{{ username }}" /></div>
+                <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status"
+                    class="w-full p-2 border rounded" value="{{ user_status }}" /></div>
+                <div class="mb-2">
+                  <label class="text-xs">Avatar</label>
+                  <div style="display:flex;gap:8px;">
+                    <button id="createAvatarBtn" type="button" class="px-3 py-2 bg-green-600 text-white rounded">Create
+                      Avatar</button>
+                    <div id="currentAvatarPreview"
+                      style="min-width:64px;min-height:64px;background:#f3f4f6;border-radius:8px;"></div>
+                  </div>
+                </div>
+                <div class="flex gap-2">
+                  <button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button>
+                  <button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button>
+                </div>
+                <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
+              </form>
+            </div>
           </div>
-        </div>
-      </div>
-    
-      <!-- Profile Modal -->
-      <div id="profileModal" class="hidden fixed inset-0 items-center justify-center bg-black/40 z-[60]">
-        <div class="bg-white rounded-lg p-4 w-96">
-          <div class="flex items-center justify-between mb-3">
-            <div>
-              <div class="text-lg font-bold">Profile</div>
+        
+          <!-- Incoming call banner -->
+          <div id="incomingCall"
+            style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
+            <div id="incomingText">Incoming call</div>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button>
+              <button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button>
             </div>
-            <button id="closeProfile" class="text-gray-500">✕</button>
           </div>
-          <form id="profileForm" enctype="multipart/form-data">
-            <div class="mb-2"><label class="text-xs">Display name</label><input id="profile_display_name" name="name"
-                class="w-full p-2 border rounded" value="{{ username }}" /></div>
-            <div class="mb-2"><label class="text-xs">Status</label><input id="profile_status" name="status"
-                class="w-full p-2 border rounded" value="{{ user_status }}" /></div>
-            <div class="mb-2">
-              <label class="text-xs">Avatar</label>
-              <div style="display:flex;gap:8px;">
-                <button id="createAvatarBtn" type="button" class="px-3 py-2 bg-green-600 text-white rounded">Create
-                  Avatar</button>
-                <div id="currentAvatarPreview"
-                  style="min-width:64px;min-height:64px;background:#f3f4f6;border-radius:8px;"></div>
-              </div>
-            </div>
-            <div class="flex gap-2">
-              <button type="submit" class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button>
-              <button id="profileCancel" type="button" class="px-3 py-2 rounded bg-gray-200">Cancel</button>
-            </div>
-            <div id="profileMsg" class="text-sm mt-2 text-gray-500"></div>
-          </form>
-        </div>
       </div>
-    
-      <!-- Incoming call banner -->
-      <div id="incomingCall"
-        style="display:none; position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:100; background:#fff; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
-        <div id="incomingText">Incoming call</div>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button id="acceptCall" class="px-3 py-1 rounded bg-green-600 text-white">Accept</button>
-          <button id="declineCall" class="px-3 py-1 rounded bg-red-500 text-white">Decline</button>
-        </div>
-      </div>
-
 <!-- include socket.io and other scripts (socket server expected) -->
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
@@ -1843,6 +1845,7 @@ CHAT_HTML = r'''<!doctype html>
 
 (function () {
   'use strict';
+  const socket = (typeof cs !== 'undefined' && cs.socket) ? cs.socket : (typeof io === 'function' ? io() : null);
 
   // Central state container to avoid accidental globals
   const cs = {
@@ -1940,65 +1943,227 @@ CHAT_HTML = r'''<!doctype html>
 
     // === Dedup & safe append helpers ===
     window._renderedMessageIds = window._renderedMessageIds || new Set();
+
+    // --- helpers ---
+    function createOptsMenu() {
+        const menu = document.createElement('div');
+        menu.className = 'msg-menu';
+        menu.innerHTML = '<button class="msg-action edit">Edit</button><button class="msg-action delete">Delete</button><button class="msg-action react">React</button>';
+        document.body.appendChild(menu);
+        return menu;
+    }
     
-    // idempotent appendMessage: will not add the same message twice
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+    
+    // create or return a shared message menu (single DOM node)
+    function getSharedMsgMenu() {
+      if (window._sharedMsgMenu) return window._sharedMsgMenu;
+    
+      const menu = document.createElement('div');
+      menu.className = 'msg-menu';
+      menu.style.position = 'fixed';
+      menu.style.display = 'none';
+      menu.style.zIndex = '100000';
+      menu.innerHTML = [
+        '<button class="msg-action edit">Edit</button>',
+        '<button class="msg-action delete">Delete</button>',
+        '<button class="msg-action react">React</button>'
+      ].join('');
+      document.body.appendChild(menu);
+    
+      // click handler for actions (delegated)
+      menu.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        const action = ev.target.closest('.msg-action');
+        if (!action) return;
+        const mid = menu.dataset.mid; // message id for which the menu was opened
+        const wrapper = mid ? document.querySelector(`[data-message-id="${mid}"]`) : null;
+    
+        if (action.classList.contains('edit')) {
+          const cur = wrapper ? (wrapper.querySelector('.msg-text') ? wrapper.querySelector('.msg-text').textContent : '') : '';
+          const newText = prompt('Edit message:', cur);
+          if (newText == null) { hideMenu(); return; }
+          fetch('/edit_message', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: mid, text: newText })
+          }).then(r => {
+            if (r.ok && wrapper) {
+              const textEl = wrapper.querySelector('.msg-text');
+              if (textEl) textEl.textContent = newText;
+              // mark edited if you like
+              const editedFlag = wrapper.querySelector('.msg-edited');
+              if (!editedFlag) {
+                const sp = document.createElement('span'); sp.className='msg-edited'; sp.style.fontSize='.7rem'; sp.style.color='#9ca3af'; sp.textContent=' (edited)';
+                const meta = wrapper.querySelector('.msg-meta-top');
+                meta && meta.appendChild(sp);
+              }
+            } else {
+              alert('Edit failed');
+            }
+          }).catch(()=>alert('Edit failed'));
+        } else if (action.classList.contains('delete')) {
+          if (!confirm('Delete this message?')) { hideMenu(); return; }
+          fetch('/delete_message', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: mid })
+          }).then(r => {
+            if (r.ok && wrapper) wrapper.remove();
+            else alert('Delete failed');
+          }).catch(()=>alert('Delete failed'));
+        } else if (action.classList.contains('react')) {
+          const emoji = prompt('React with emoji (e.g. ❤️):', '👍');
+          if (!emoji) { hideMenu(); return; }
+          fetch('/react_message', {
+            method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: mid, emoji })
+          }).then(r => {
+            if (r.ok && wrapper) {
+              const rspan = document.createElement('span'); rspan.className='reaction'; rspan.textContent = emoji;
+              wrapper.querySelector('.msg-meta-top')?.appendChild(rspan);
+            } else alert('React failed');
+          }).catch(()=>alert('React failed'));
+        }
+    
+        hideMenu();
+      });
+    
+      function hideMenu() {
+        menu.style.display = 'none';
+        delete menu.dataset.mid;
+      }
+    
+      // close on outside click
+      document.addEventListener('click', function(){
+        if (menu.style.display === 'block') hideMenu();
+      });
+    
+      window._sharedMsgMenu = menu;
+      return menu;
+    }
+    
+    // Append message function (keeps structure consistent with your renderer)
     window.appendMessage = window.appendMessage || function appendMessage(m){
       try {
         if (!m) return;
-        // messages from the server should have numeric id
-        const mid = (typeof m.id !== 'undefined') ? Number(m.id) : null;
+        // numeric id expected from server, but tolerate missing
+        const mid = (typeof m.id !== 'undefined') ? String(m.id) : String(Date.now());
     
-        if (mid !== null) {
-          if (window._renderedMessageIds.has(mid)) return; // already rendered
-          window._renderedMessageIds.add(mid);
+        // prevent duplicate render
+        if (typeof m.id !== 'undefined') {
+          const numeric = Number(m.id);
+          if (!Number.isNaN(numeric)) {
+            if (window._renderedMessageIds.has(numeric)) return;
+            window._renderedMessageIds.add(numeric);
+          }
         }
     
-        // create DOM as your code expects (keep consistent with your existing renderer)
         const me = (m.sender === (window.cs && window.cs.myName));
-        const wrapper = document.createElement('div'); wrapper.className = 'msg-row';
-        const body = document.createElement('div'); body.className = 'msg-body';
     
-        const meta = document.createElement('div'); meta.className = 'msg-meta-top';
-        const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender||'')}</strong>`;
-        const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+        // create DOM
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg-row';
+        wrapper.dataset.messageId = mid; // used by menu positioning and later queries
+    
+        const body = document.createElement('div');
+        body.className = 'msg-body';
+    
+        const meta = document.createElement('div');
+        meta.className = 'msg-meta-top';
+        const leftMeta = document.createElement('div');
+        leftMeta.innerHTML = `<strong>${escapeHtml(m.sender||'')}</strong>`;
+        const rightMeta = document.createElement('div');
+        rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
         meta.appendChild(leftMeta); meta.appendChild(rightMeta);
+    
         body.appendChild(meta);
     
-        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble ' + (me ? 'me' : 'them');
     
+        // message text
+        const textNode = document.createElement('div');
+        textNode.className = 'msg-text';
         if (m.text) {
-          const textNode = document.createElement('div');
-          textNode.innerHTML = escapeHtml(m.text) + (m.edited ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'');
-          bubble.appendChild(textNode);
+          textNode.textContent = m.text; // use textContent to avoid HTML injection
+          if (m.edited) {
+            const editedSpan = document.createElement('span');
+            editedSpan.className = 'msg-edited';
+            editedSpan.style.fontSize = '.7rem';
+            editedSpan.style.color = '#9ca3af';
+            editedSpan.textContent = ' (edited)';
+            textNode.appendChild(editedSpan);
+          }
         }
+        bubble.appendChild(textNode);
     
         // attachments (basic)
         (m.attachments || []).forEach(a=>{
+          if (!a) return;
           if (a.type === 'image') {
-            const img = document.createElement('img'); img.src = a.url; img.className = 'image-attachment';
+            const img = document.createElement('img');
+            img.src = a.url;
+            img.className = 'image-attachment';
+            img.alt = a.name || '';
             bubble.appendChild(img);
           } else {
-            const d = document.createElement('div'); d.className = 'preview-item-doc'; d.textContent = a.name || a.url || '';
+            const d = document.createElement('div');
+            d.className = 'preview-item-doc';
+            d.textContent = a.name || a.url || '';
             bubble.appendChild(d);
           }
         });
     
-        // attach menu button (three-dot)
-        const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
-        menuBtn.onclick = function(ev){
+        // three-dot options button
+        const menuBtn = document.createElement('button');
+        menuBtn.className = 'three-dot';
+        menuBtn.type = 'button';
+        menuBtn.setAttribute('aria-label', 'Message options');
+        menuBtn.innerText = '⋯';
+        menuBtn.style.marginLeft = '8px';
+        menuBtn.style.background = 'transparent';
+        menuBtn.style.border = 'none';
+        menuBtn.style.cursor = 'pointer';
+        menuBtn.style.fontSize = '18px';
+        menuBtn.style.zIndex = '20';
+    
+        // open shared menu and position it
+        menuBtn.addEventListener('click', function(ev){
           ev.stopPropagation();
-          // your existing logic to show menu...
-          // (if you already have a menu creation function, call it here)
-        };
+          const menu = getSharedMsgMenu();
+          // set which message id the menu is for
+          menu.dataset.mid = mid;
+    
+          // position menu near button (with viewport bounds check)
+          const rect = menuBtn.getBoundingClientRect();
+          menu.style.display = 'block';
+          // ensure menu width is available (it may be 0 if not measured yet)
+          const menuW = menu.offsetWidth || 160;
+          const left = Math.min(window.innerWidth - menuW - 8, rect.right - menuW + 8);
+          menu.style.left = Math.max(8, left) + 'px';
+          menu.style.top = (rect.bottom + 8) + 'px';
+        });
+    
         bubble.appendChild(menuBtn);
     
         body.appendChild(bubble);
         wrapper.appendChild(body);
     
+        // append to messages container (choose #messages or .messages)
         const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
         if (messagesEl) {
           messagesEl.appendChild(wrapper);
+          // scroll to bottom
           messagesEl.scrollTop = messagesEl.scrollHeight;
+        } else {
+          // fallback: append to body to avoid losing messages
+          document.body.appendChild(wrapper);
         }
       } catch (err) {
         console.error('appendMessage error', err);
@@ -2007,16 +2172,23 @@ CHAT_HTML = r'''<!doctype html>
     
     // === Socket handler — only append if not already rendered ===
     if (window.socket && typeof window.socket.on === 'function') {
-      window.socket.off && window.socket.off('new_message'); // remove prior if present
+      try {
+        if (window.socket.off) window.socket.off('new_message');
+      } catch(e){}
       window.socket.on('new_message', (m) => {
         try {
-          if(!m) return;
-          // If message has numeric id and already rendered, skip
+          if (!m) return;
           const mid = (typeof m.id !== 'undefined') ? Number(m.id) : null;
-          if (mid !== null && window._renderedMessageIds.has(mid)) return;
+          if (mid !== null && !Number.isNaN(mid) && window._renderedMessageIds.has(mid)) return;
           appendMessage(m);
-          if (window.cs) window.cs.lastId = Math.max(window.cs.lastId || 0, mid || window.cs.lastId || 0);
-        } catch(e){ console.error('socket new_message handler error', e); }
+          if (window.cs) {
+            // update lastId safely
+            const numeric = (mid !== null && !Number.isNaN(mid)) ? mid : (window.cs.lastId || 0);
+            window.cs.lastId = Math.max(window.cs.lastId || 0, numeric);
+          }
+        } catch(e){
+          console.error('socket new_message handler error', e);
+        }
       });
     }
 
