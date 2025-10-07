@@ -2405,7 +2405,7 @@ CHAT_HTML = r'''<!doctype html>
 
   // render and poll messages
     async function poll() {
-      const me = (m.sender === cs.myName);
+      const me = cs.myName;
       try {
         const lastId = cs.lastId || 0;
         const endpoints = [
