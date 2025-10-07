@@ -3854,24 +3854,24 @@ def send_message():
         data = request.get_json() or {}
         text = (data.get('text') or "").strip()
         attachments = data.get('attachments') or []
+
         # Prefer authenticated session username when available
         sender = data.get('sender') or session.get('username') or data.get('from') or 'Unknown'
 
         if not text and (not attachments or len(attachments) == 0):
             return jsonify({'error': 'Empty message'}), 400
 
-        mid = save_message(sender, text, attachments)
+        # Directly save and use the returned message dict
+        message = save_message(sender, text, attachments)
 
-        # fetch authoritative message representation from DB
-        message = fetch_message_by_id(mid)
         if not message:
-            return jsonify({'error': 'Failed to fetch saved message'}), 500
+            return jsonify({'error': 'Failed to save message'}), 500
 
         # Broadcast to socket clients (keeps real-time clients in sync)
         try:
             socketio.emit('new_message', message)
         except Exception:
-            # don't fail the HTTP response if sockets fail
+            # Don't fail the HTTP response if sockets fail
             app.logger.exception("socket emit failed for new_message")
 
         return jsonify({'ok': True, 'message': message}), 200
