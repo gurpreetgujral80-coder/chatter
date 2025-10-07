@@ -1767,7 +1767,7 @@ CHAT_HTML = r'''<!doctype html>
               </div>
             </div>
           </div>
-          <div id="attachMenuVertical" class="attach-menu-vertical" style="display: none;">
+          <div id="attachMenuVertical" class="attach-menu-vertical" style="display: none; cursor: pointer;">
               <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
               <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
               <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
@@ -1845,7 +1845,6 @@ CHAT_HTML = r'''<!doctype html>
 
 (function () {
   'use strict';
-  const socket = (typeof cs !== 'undefined' && cs.socket) ? cs.socket : (typeof io === 'function' ? io() : null);
 
   // Central state container to avoid accidental globals
   const cs = {
@@ -1858,7 +1857,7 @@ CHAT_HTML = r'''<!doctype html>
     calls: {},     // call_id -> call state
     pcConfig: { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] }
   };
-
+  const socket = (typeof cs !== 'undefined' && cs.socket) ? cs.socket : (typeof io === 'function' ? io() : null);
   // Safe DOM refs (assigned on DOMContentLoaded)
   let emojiBtn, composer, textarea, micBtn, plusBtn, attachMenuVertical;
   let sendBtn, emojiDrawer, messagesEl, inputEl, composerEl, composerMain, panel;
@@ -2263,100 +2262,174 @@ CHAT_HTML = r'''<!doctype html>
   }
   window.createVideoThumbnailFromFile = createVideoThumbnailFromFile;
 
-  // Recording/voice message helpers - single source of truth
-  let mediaRecorder = null;
-  let micStream = null;
-  let audioChunks = [];
-  let recording = false;
-
-  async function startRecording(){
-    if(recording) return;
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ alert('Microphone not supported in this browser.'); return; }
-    try{
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(micStream);
-      audioChunks = [];
-      mediaRecorder.addEventListener('dataavailable', e => { if(e.data && e.data.size) audioChunks.push(e.data); });
-      mediaRecorder.addEventListener('stop', async ()=>{
-        const blob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
-        const fileName = `voice_${Date.now()}.webm`;
-        const file = new File([blob], fileName, { type: blob.type });
-
-        // show preview in attachment area
-        cs.stagedFiles = [file];
-        setAttachmentPreview(cs.stagedFiles);
-
-        // send automatically
-        try{
+    // Recording / Voice Message Helpers - fixed version
+    let mediaRecorder = null;
+    let micStream = null;
+    let audioChunks = [];
+    let recording = false;
+    
+    async function startRecording() {
+      if (recording) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Microphone not supported in this browser.');
+        return;
+      }
+    
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(micStream);
+        audioChunks = [];
+    
+        mediaRecorder.addEventListener('dataavailable', e => {
+          if (e.data && e.data.size) audioChunks.push(e.data);
+        });
+    
+        mediaRecorder.addEventListener('stop', async () => {
+          try {
+            const blob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
+            const fileName = `voice_${Date.now()}.webm`;
+            const file = new File([blob], fileName, { type: blob.type });
+    
+            // Show a preview in the attachment area instead of auto-sending
+            cs.stagedFiles = [file];
+            setAttachmentPreview(cs.stagedFiles);
+    
+            // Optionally show Send/Discard buttons inside preview
+            showVoicePreviewControls(file);
+          } catch (err) {
+            console.error('Voice process error:', err);
+            alert('Could not prepare voice message: ' + err.message);
+          } finally {
+            audioChunks = [];
+          }
+        });
+    
+        mediaRecorder.start();
+        recording = true;
+        updateMicUI(true);
+      } catch (err) {
+        console.error('Microphone error', err);
+        alert('Could not start microphone: ' + (err.message || err));
+        if (micStream) {
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+        }
+        recording = false;
+        updateMicUI(false);
+      }
+    }
+    
+    function stopRecording() {
+      if (!recording) return;
+      try {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      } catch (e) {
+        console.warn(e);
+      }
+      if (micStream) {
+        micStream.getTracks().forEach(t => t.stop());
+        micStream = null;
+      }
+      recording = false;
+      updateMicUI(false);
+    }
+    
+    function toggleRecording() {
+      if (recording) stopRecording();
+      else startRecording();
+    }
+    
+    function updateMicUI(state) {
+      if (!micBtn) return;
+      if (state) {
+        micBtn.classList.add('recording');
+        micBtn.setAttribute('aria-pressed', 'true');
+        micBtn.title = 'Recording… click to stop';
+        micBtn.innerText = '⏸️';
+      } else {
+        micBtn.classList.remove('recording');
+        micBtn.setAttribute('aria-pressed', 'false');
+        micBtn.title = 'Record voice message';
+        micBtn.innerText = '🎙️';
+      }
+    }
+    
+    // Show preview with playback + send/discard controls
+    function showVoicePreviewControls(file) {
+      const previewContainer = document.querySelector('#previewContainer');
+      if (!previewContainer) return;
+    
+      // Clear old preview controls
+      const oldControls = document.querySelector('.voice-controls');
+      if (oldControls) oldControls.remove();
+    
+      const wrapper = document.createElement('div');
+      wrapper.className = 'voice-controls';
+      wrapper.style.display = 'flex';
+      wrapper.style.alignItems = 'center';
+      wrapper.style.gap = '8px';
+      wrapper.style.marginTop = '6px';
+    
+      // Audio player
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.src = URL.createObjectURL(file);
+      audio.style.maxWidth = '200px';
+    
+      // Send button
+      const sendBtn = document.createElement('button');
+      sendBtn.textContent = 'Send';
+      sendBtn.className = 'btn btn-primary';
+      sendBtn.onclick = async () => {
+        try {
           const fd = new FormData();
           fd.append('text', '');
           fd.append('file', file, file.name);
+    
           const r = await fetch('/send_composite_message', { method: 'POST', body: fd });
-          if(r.ok){
+          if (r.ok) {
             cs.stagedFiles = [];
             setAttachmentPreview([]);
-            if(messagesEl){ messagesEl.innerHTML=''; }
+            wrapper.remove();
+            if (messagesEl) messagesEl.innerHTML = '';
             cs.lastId = 0;
-            if(typeof window.poll === 'function') await window.poll();
+            if (typeof window.poll === 'function') await window.poll();
           } else {
             const txt = await r.text();
             alert('Voice send failed: ' + txt);
           }
-        }catch(err){
+        } catch (err) {
           alert('Voice send error: ' + (err && err.message ? err.message : err));
-        }finally{
-          audioChunks = [];
+        }
+      };
+    
+      // Discard button
+      const discardBtn = document.createElement('button');
+      discardBtn.textContent = 'Discard';
+      discardBtn.className = 'btn btn-secondary';
+      discardBtn.onclick = () => {
+        cs.stagedFiles = [];
+        setAttachmentPreview([]);
+        wrapper.remove();
+      };
+    
+      wrapper.appendChild(audio);
+      wrapper.appendChild(sendBtn);
+      wrapper.appendChild(discardBtn);
+      previewContainer.appendChild(wrapper);
+    }
+    
+    // Utility: gather attachments from preview container (legacy)
+    function gatherAttachments() {
+      const items = document.querySelectorAll('#previewContainer .preview-item');
+      const atts = [];
+      items.forEach(p => {
+        if (p.type === 'audio') {
+          atts.push({ type: 'audio', blob: p.blob });
         }
       });
-      mediaRecorder.start();
-      recording = true;
-      updateMicUI(true);
-    }catch(err){
-      console.error('microphone error', err);
-      alert('Could not start microphone: ' + (err && err.message ? err.message : err));
-      if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
-      recording = false;
-      updateMicUI(false);
+      return atts;
     }
-  }
-
-  function stopRecording(){
-    if(!recording) return;
-    try{ if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); }catch(e){ console.warn(e); }
-    if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
-    recording = false;
-    updateMicUI(false);
-  }
-
-  function toggleRecording(){ if(recording) stopRecording(); else startRecording(); }
-
-  function updateMicUI(state){
-    if(!micBtn) return;
-    if(state){
-      micBtn.classList.add('recording');
-      micBtn.setAttribute('aria-pressed','true');
-      micBtn.title = 'Recording… click to stop';
-      micBtn.innerText = '⏸️';
-    } else {
-      micBtn.classList.remove('recording');
-      micBtn.setAttribute('aria-pressed','false');
-      micBtn.title = 'Record voice message';
-      micBtn.innerText = '🎙️';
-    }
-  }
-
-  // Utility: gather attachments from preview container (legacy)
-  function gatherAttachments(){
-    const items = document.querySelectorAll('#previewContainer .preview-item');
-    const atts = [];
-    items.forEach(p=>{
-      if(p.type === 'audio'){
-        atts.push({ type:'audio', blob: p.blob });
-      }
-      // other handling omitted for brevity - prefer cs.stagedFiles
-    });
-    return atts;
-  }
 
   // Show / hide sticker panel — fixed + accessible version
     function openStickerPanel() {
