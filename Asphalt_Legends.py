@@ -2639,49 +2639,52 @@ CHAT_HTML = r'''<!doctype html>
   window.endCall = endCall;
   window.shareScreen = shareScreen;
 
-  /* ---------------------------
-     Polling, rendering messages & reactions
-     --------------------------- */
+    /* ---------------------------
+       Polling, rendering messages & reactions
+       --------------------------- */
 
-  // render and poll messages
+    // Fetch new messages and render them via appendMessage
     async function poll() {
-      const me = cs.myName;
       try {
         const lastId = cs.lastId || 0;
-        const endpoints = [`/poll_messages?since=${lastId}`];
-    
         const base = (typeof window.SERVER_URL === 'string' && window.SERVER_URL)
           ? window.SERVER_URL.replace(/\/$/, '')
           : '';
+        const url = base + `/poll_messages?since=${lastId}`;
     
-        let data = null;
+        const resp = await fetch(url, { credentials: 'same-origin' });
+        if (!resp.ok) {
+          console.debug(`poll() -> ${resp.status}`);
+          return;
+        }
     
-        for (const ep of endpoints) {
-          const url = base + ep;
-          try {
-            const resp = await fetch(url, { credentials: 'same-origin' });
-            if (!resp.ok) {
-              console.debug(`poll() - ${url} -> ${resp.status}`);
-              continue;
-            }
-            data = await resp.json();
-            if (!data || !data.length) return;
-            console.debug('poll() succeeded with', url);
-            break;
-          } catch (err) {
-            console.warn('poll() - fetch failed for', ep, err);
+        const data = await resp.json();
+        if (!data || !data.length) return;
+    
+        for (const m of data) {
+          const mid = Number(m.id || 0);
+          if (mid && window._renderedMessageIds.has(mid)) continue;
+    
+          // Delegate full DOM creation to appendMessage
+          appendMessage(m);
+    
+          if (mid) {
+            window._renderedMessageIds.add(mid);
+            cs.lastId = Math.max(cs.lastId || 0, mid);
           }
         }
     
-        if (!data || !data.length) return;
+        // Auto-scroll to bottom
+        const container = document.getElementById('messages') || document.querySelector('.messages');
+        if (container) container.scrollTop = container.scrollHeight;
     
-        // inside poll() after you fetch messages array `data`
-        for (const m of data) {
-          if (m.id && window._renderedMessageIds.has(Number(m.id))) continue;
-          appendMessage(m);
-          if (m.id) window._renderedMessageIds.add(Number(m.id));
-          if (m.id && Number(m.id) > (cs.lastId||0)) cs.lastId = Number(m.id);
+      } catch (err) {
+        console.error('poll error', err);
+      }
+    }
     
+    window.poll = poll;
+
           // === META ===
           const meta = document.createElement('div');
           meta.className = 'msg-meta-top';
