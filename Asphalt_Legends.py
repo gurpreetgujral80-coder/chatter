@@ -2638,50 +2638,50 @@ CHAT_HTML = r'''<!doctype html>
   window.endCall = endCall;
   window.shareScreen = shareScreen;
 
-    /* ---------------------------
-       Polling, rendering messages & reactions
-       --------------------------- */
+      /* ---------------------------
+         Polling, rendering messages & reactions
+         --------------------------- */
 
-    async function poll() {
-      try {
-        const lastId = cs.lastId || 0;
-        const base = (typeof window.SERVER_URL === 'string' && window.SERVER_URL)
-          ? window.SERVER_URL.replace(/\/$/, '')
-          : '';
-        const url = base + `/poll_messages?since=${lastId}`;
-    
-        const resp = await fetch(url, { credentials: 'same-origin' });
-        if (!resp.ok) {
-          console.debug(`poll() -> ${resp.status}`);
-          return;
-        }
-    
-        const data = await resp.json();
-        if (!data || !data.length) return;
-    
-        for (const m of data) {
-          const mid = Number(m.id || 0);
-          if (mid && window._renderedMessageIds.has(mid)) continue;
-    
-          // Delegate full rendering to appendMessage
-          appendMessage(m);
-    
-          if (mid) {
-            window._renderedMessageIds.add(mid);
-            cs.lastId = Math.max(cs.lastId || 0, mid);
+          async function poll() {
+              try {
+                const lastId = cs.lastId || 0;
+                const base = (typeof window.SERVER_URL === 'string' && window.SERVER_URL)
+                  ? window.SERVER_URL.replace(/\/$/, '')
+                  : '';
+                const url = base + `/poll_messages?since=${lastId}`;
+            
+                const resp = await fetch(url, { credentials: 'same-origin' });
+                if (!resp.ok) {
+                  console.debug(`poll() -> ${resp.status}`);
+                  return;
+                }
+            
+                const data = await resp.json();
+                if (!data || !data.length) return;
+            
+                for (const m of data) {
+                  const mid = Number(m.id || 0);
+                  if (mid && window._renderedMessageIds.has(mid)) continue;
+            
+                  // Delegate full rendering to appendMessage
+                  appendMessage(m);
+            
+                  if (mid) {
+                    window._renderedMessageIds.add(mid);
+                    cs.lastId = Math.max(cs.lastId || 0, mid);
+                  }
+                }
+            
+                // Auto-scroll handled inside appendMessage, or fallback:
+                const container = document.getElementById('messages') || document.querySelector('.messages');
+                if (container) container.scrollTop = container.scrollHeight;
+            
+              } catch (err) {
+                console.error('poll error', err);
+              }
           }
-        }
-    
-        // Auto-scroll handled inside appendMessage, or fallback:
-        const container = document.getElementById('messages') || document.querySelector('.messages');
-        if (container) container.scrollTop = container.scrollHeight;
-    
-      } catch (err) {
-        console.error('poll error', err);
-      }
-    }
-    
-    window.poll = poll;
+        
+          window.poll = poll;
 
           // === META ===
           const meta = document.createElement('div');
@@ -2912,7 +2912,6 @@ CHAT_HTML = r'''<!doctype html>
       }
     }
     
-    window.poll = poll;
 
   // Reaction picker
   function showEmojiPickerForMessage(msgId, anchorEl){
