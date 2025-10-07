@@ -2897,8 +2897,6 @@ CHAT_HTML = r'''<!doctype html>
           bubble.appendChild(menuBtn);
           wrapper.appendChild(body);
     
-          const messagesEl =
-            document.getElementById('messages') || document.querySelector('.messages');
           if (messagesEl) messagesEl.appendChild(wrapper);
     
           if (m.id && Number(m.id) > (cs.lastId || 0)) cs.lastId = Number(m.id);
