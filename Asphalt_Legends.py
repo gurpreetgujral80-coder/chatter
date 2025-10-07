@@ -1867,52 +1867,70 @@ CHAT_HTML = r'''<!doctype html>
   window.escapeHtml = escapeHtml;
 
   async function sendMessage(textArg, attsArg) {
-      const text = (typeof textArg === 'string') ? textArg : (inputEl ? (inputEl.value || '').trim() : '');
-      const atts = Array.isArray(attsArg) ? attsArg : cs.stagedFiles.slice();
+      const inputEl = document.querySelector('#msg') || document.querySelector('#textarea');
+      const text = (typeof textArg === 'string') ? textArg.trim() : (inputEl ? (inputEl.value || '').trim() : '');
+      const atts = Array.isArray(attsArg) ? attsArg : (cs.stagedFiles || []).slice();
     
-      if(!text && atts.length === 0) return;
+      if (!text && (!atts || atts.length === 0)) return;
     
       try {
-        // if there are files, use FormData so server uses send_composite_message
-        if(atts.length > 0) {
+        let res, json;
+    
+        if (atts.length > 0) {
+          // send files + text
           const fd = new FormData();
           fd.append('text', text);
           fd.append('sender', cs.myName);
-          for(const f of atts) fd.append('file', f, f.name);
-          const res = await fetch('/send_composite_message', { method:'POST', body: fd });
-          const json = await res.json();
-          if(res.ok && json && json.message) {
-            // append authoritative message (dedupe prevents duplicates)
+          for (const f of atts) fd.append('file', f, f.name);
+    
+          res = await fetch('/send_composite_message', { method: 'POST', body: fd, credentials: 'same-origin' });
+          json = await res.json().catch(() => null);
+    
+          if (res.ok && json && json.message) {
             appendMessage(json.message);
             cs.stagedFiles = [];
-            if(inputEl) inputEl.value = '';
-            const preview = $id('attachmentPreview') || $id('previewContainer');
-            if(preview){ preview.innerHTML=''; preview.style.display='none'; }
+            if (inputEl) inputEl.value = '';
+            const preview = document.getElementById('attachmentPreview') || document.getElementById('previewContainer');
+            if (preview) { preview.innerHTML = ''; preview.style.display = 'none'; }
             cs.lastId = json.message.id || cs.lastId;
-            return;
+            return json.message;
           } else {
-            // fallback: reset lastId and poll
-            cs.lastId = 0; await poll();
+            cs.lastId = 0;
+            if (typeof poll === 'function') await poll();
+            return null;
           }
         } else {
-          // no files - send JSON to /send_message
-          const res = await fetch('/send_message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text, sender: cs.myName })});
-          const json = await res.json();
-          if(res.ok && json && json.message) {
+          // send text only
+          res = await fetch('/send_message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, sender: cs.myName }),
+            credentials: 'same-origin'
+          });
+    
+          json = await res.json().catch(() => null);
+    
+          if (res.ok && json && json.message) {
             appendMessage(json.message);
-            if(inputEl) inputEl.value = '';
+            if (inputEl) inputEl.value = '';
+            cs.stagedFiles = [];
             cs.lastId = json.message.id || cs.lastId;
-            return;
+            return json.message;
           } else {
-            cs.lastId = 0; await poll();
+            cs.lastId = 0;
+            if (typeof poll === 'function') await poll();
+            return null;
           }
         }
-      } catch(err) {
+      } catch (err) {
         console.error('sendMessage error', err);
         alert('Send error: ' + (err && err.message ? err.message : err));
+        return null;
       }
   }
-  window.sendMessage = sendMessage;
+    
+    // expose globally
+    window.sendMessage = sendMessage;
 
   // Attachment preview setter (exposed)
   function setAttachmentPreview(files){
