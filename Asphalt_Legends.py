@@ -1716,7 +1716,7 @@ CHAT_HTML = r'''<!doctype html>
         </div>
       </header>
       <div id="chat-wrap" style="position:relative; min-height:360px; display:flex; flex-direction:column;">
-            <div id="messages" class="mb-6" aria-live="polite" style="padding-top:calc(80px + 1rem);"></div>
+            <div id="messages" class="mb-6" aria-live="polite" style="padding: 12px;"></div>
         
             <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
             <div id="stickerPanel" class="emoji-drawer">
@@ -2695,7 +2695,6 @@ CHAT_HTML = r'''<!doctype html>
           rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
           meta.appendChild(leftMeta);
           meta.appendChild(rightMeta);
-          body.appendChild(meta);
     
           // === BUBBLE ===
           const hasText = m.text && m.text.trim().length > 0;
