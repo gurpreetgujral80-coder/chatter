@@ -1716,7 +1716,7 @@ CHAT_HTML = r'''<!doctype html>
         </div>
       </header>
       <div id="chat-wrap" style="position:relative; min-height:360px; display:flex; flex-direction:column;">
-            <div id="messages" aria-live="polite" style="flex:1 1 auto; overflow:auto; padding-top:calc(80px + 1rem);"></div>
+            <div id="messages" class="mb-6" aria-live="polite" style="padding-top:calc(80px + 1rem);"></div>
         
             <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
             <div id="stickerPanel" class="emoji-drawer">
@@ -1767,7 +1767,7 @@ CHAT_HTML = r'''<!doctype html>
               </div>
             </div>
           </div>
-          <div id="attachMenuVertical" class="attach-menu-vertical" style="display: none; cursor: pointer;">
+          <div id="attachMenuVertical" class="attach-menu-vertical" style="display: none;">
               <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
               <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
               <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
