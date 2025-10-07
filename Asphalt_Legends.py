@@ -1232,7 +1232,7 @@ CHAT_HTML = r'''<!doctype html>
     .bubble{ position:relative; padding: 10px 36px 10px 14px; border-radius:12px; display:inline-block; word-break:break-word; white-space:pre-wrap; background-clip:padding-box; box-shadow: 0 6px 18px rgba(2,6,23,0.04); }
     .me{ background: linear-gradient(90deg,#e6ffed,#dcffe6); border-bottom-right-radius:6px; align-self:flex-end; margin-left:auto; }
     .them{ background: rgba(255,255,255,0.95); border-bottom-left-radius:6px; margin-right:auto; }
-    .bubble .three-dot { position:absolute; top:8px; right:8px; background:transparent; border:none; font-size:1.05rem; padding:4px; cursor:pointer; color:#111827; border-radius:6px; }
+    .bubble .three-dot { position:absolute; top:8px; right:8px; background:transparent; border:none; font-size:1.05rem; padding:4px; cursor:pointer; color:#111827; border-radius:6px; z-index: 5;}
     .msg-meta-top{ font-size:0.75rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; width:100%; transition: color 0.2s ease; }
 
     /* attachments & previews */
@@ -1760,7 +1760,7 @@ CHAT_HTML = r'''<!doctype html>
                 <button id="emojiBtn" title="Emoji" class="w-11 h-11 rounded-lg bg-white" aria-label="Emoji">😊</button>
         
                 <!-- mic button -->
-                <button id="mic" class="mic-btn" aria-label="Voice message" aria-pressed="false"
+                <button id="micBtn" class="mic-btn" aria-label="Voice message" aria-pressed="false"
                   title="Hold to record or click to toggle">🎙️</button>
         
                 <button id="sendBtn" class="px-4 py-2 rounded bg-green-600 text-white" aria-label="Send">Send</button>
@@ -3482,39 +3482,65 @@ CHAT_HTML = r'''<!doctype html>
     } catch (err) { console.error('registerSocketHandlers', err); }
   };
 
-  // toggleRecording: simple stub using getUserMedia & MediaRecorder if available
-  window.toggleRecording = async function toggleRecording() {
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        return alert('Audio recording not supported in this browser.');
-      }
-      if (!window._mediaRecorder) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        window._mediaRecorder = new MediaRecorder(stream);
-        const chunks = [];
-        window._mediaRecorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunks.push(ev.data); };
-        window._mediaRecorder.onstop = async () => {
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          const file = new File([blob], `recording-${Date.now()}.webm`, { type: blob.type });
-          cs.stagedFiles.push(file);
-          setAttachmentPreview();
-        };
-        window._mediaRecorder.start();
-        console.log('Recording started');
-      } else {
-        if (window._mediaRecorder.state === 'recording') {
-          window._mediaRecorder.stop();
-          window._mediaRecorder = null;
-          console.log('Recording stopped and saved to stagedFiles');
-        } else {
-          // restart
-          window._mediaRecorder.start();
+    // === MICROPHONE TOGGLE ===
+    window.toggleRecording = async function toggleRecording() {
+      try {
+        const micBtn = document.getElementById('micBtn') || document.querySelector('.mic-button');
+        const micIcon = micBtn?.querySelector('i');
+    
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          return alert('Audio recording not supported in this browser.');
         }
+    
+        // --- START RECORDING ---
+        if (!window._mediaRecorder || window._mediaRecorder.state === 'inactive') {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          window._chunks = [];
+          window._mediaRecorder = new MediaRecorder(stream);
+    
+          window._mediaRecorder.ondataavailable = (ev) => {
+            if (ev.data && ev.data.size) window._chunks.push(ev.data);
+          };
+    
+          window._mediaRecorder.onstop = async () => {
+            const blob = new Blob(window._chunks, { type: 'audio/webm' });
+            const file = new File([blob], `recording-${Date.now()}.webm`, { type: blob.type });
+    
+            // Add to stagedFiles (preview will show but not auto-send)
+            cs.stagedFiles.push(file);
+            setAttachmentPreview();
+    
+            // Clean up
+            window._mediaRecorder = null;
+            window._chunks = [];
+          };
+    
+          window._mediaRecorder.start();
+          console.log('Recording started');
+    
+          // Change mic icon to stop
+          if (micIcon) {
+            micIcon.classList.remove('fa-microphone');
+            micIcon.classList.add('fa-stop');
+          }
+    
+        } else if (window._mediaRecorder.state === 'recording') {
+          // --- STOP RECORDING ---
+          window._mediaRecorder.stop();
+          console.log('Recording stopped and saved to stagedFiles');
+    
+          // Change icon back to mic
+          if (micIcon) {
+            micIcon.classList.remove('fa-stop');
+            micIcon.classList.add('fa-microphone');
+          }
+        }
+    
+      } catch (err) {
+        console.error('toggleRecording error', err);
+        alert('Recording failed: ' + err.message);
       }
-    } catch (err) {
-      console.error('toggleRecording error', err);
-    }
-  };
+    };
 
 })(); // end helper IIFE
 
