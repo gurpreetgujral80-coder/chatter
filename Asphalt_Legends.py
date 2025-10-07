@@ -2153,17 +2153,13 @@ CHAT_HTML = r'''<!doctype html>
         wrapper.appendChild(body);
     
         // append to messages container (choose #messages or .messages)
-        if (messagesEl) {
-          messagesEl.appendChild(wrapper);
-          // scroll to bottom
-          messagesEl.scrollTop = messagesEl.scrollHeight;
+        const container = document.getElementById('messages') || document.querySelector('.messages');
+        if (container) {
+          container.appendChild(wrapper);
+          container.scrollTop = container.scrollHeight;
         } else {
-          // fallback: append to body to avoid losing messages
           document.body.appendChild(wrapper);
         }
-      } catch (err) {
-        console.error('appendMessage error', err);
-      }
     };
     
     // === Socket handler — only append if not already rendered ===
@@ -2837,9 +2833,8 @@ CHAT_HTML = r'''<!doctype html>
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ id: m.id })
                 });
-                const messagesEl =
-                  document.getElementById('messages') || document.querySelector('.messages');
-                if (messagesEl) messagesEl.innerHTML = '';
+                const container = document.getElementById('messages') || document.querySelector('.messages');
+                if (container) container.innerHTML = '';
                 cs.lastId = 0;
                 await poll();
               }
@@ -2900,7 +2895,7 @@ CHAT_HTML = r'''<!doctype html>
           if (messagesEl) messagesEl.appendChild(wrapper);
     
           if (m.id && Number(m.id) > (cs.lastId || 0)) cs.lastId = Number(m.id);
-        }
+        
     
         // === AUTO SCROLL ===
         const container =
@@ -3865,7 +3860,10 @@ CHAT_HTML = r'''<!doctype html>
       if (!q || opts.length < 2) return alert('Question and at least 2 options required');
       await fetch('/send_message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: q, attachments: [{ type: 'poll', options: opts }] }) });
       const modal = $id('pollModal'); if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
-      if (messagesEl) messagesEl.innerHTML = ''; cs.lastId = 0; await poll();
+      const container = document.getElementById('messages') || document.querySelector('.messages');
+      if (container) container.innerHTML = '';
+      cs.lastId = 0;
+      await poll();
     });
 
     // message send wiring
