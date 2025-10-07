@@ -1522,7 +1522,16 @@ CHAT_HTML = r'''<!doctype html>
       bottom: 280px;  /* match emoji panel height */
     }
     
-    .attach-menu-vertical{ position:fixed; right:18px; bottom:100px; display:flex; flex-direction:column; gap:10px; border-radius:12px; z-index:80; }
+    .attach-menu-vertical {
+        position: fixed;
+        right: 18px;
+        bottom: 100px;
+        display: none; /* start hidden */
+        flex-direction: column;
+        gap: 10px;
+        border-radius: 12px;
+        z-index: 80;
+    }
     .attach-card{ background:white; padding:10px 14px; min-width:140px; box-shadow:0 10px 30px rgba(0,0,0,0.12); display:flex; gap:8px; align-items:center; cursor:pointer; }
 
     /* sticker panel */
