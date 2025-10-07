@@ -1715,7 +1715,7 @@ CHAT_HTML = r'''<!doctype html>
           </div>
         </div>
       </header>
-      <div id="chat-wrap" style="position:relative; min-height:360px; display:flex; flex-direction:column;">
+      <div id="chat-wrap" style="position:relative; min-height:360px; display:flex; flex-direction:column; top:6.5rem;">
             <div id="messages" class="mb-6" aria-live="polite" style="padding: 12px;"></div>
         
             <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
@@ -2650,9 +2650,7 @@ CHAT_HTML = r'''<!doctype html>
       const me = cs.myName;
       try {
         const lastId = cs.lastId || 0;
-        const endpoints = [
-          `/poll_messages?since=${lastId}`
-        ];
+        const endpoints = [`/poll_messages?since=${lastId}`];
     
         const base = (typeof window.SERVER_URL === 'string' && window.SERVER_URL)
           ? window.SERVER_URL.replace(/\/$/, '')
