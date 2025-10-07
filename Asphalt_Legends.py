@@ -1932,6 +1932,88 @@ CHAT_HTML = r'''<!doctype html>
     // expose globally
     window.sendMessage = sendMessage;
 
+    // === Dedup & safe append helpers ===
+    window._renderedMessageIds = window._renderedMessageIds || new Set();
+    
+    // idempotent appendMessage: will not add the same message twice
+    window.appendMessage = window.appendMessage || function appendMessage(m){
+      try {
+        if (!m) return;
+        // messages from the server should have numeric id
+        const mid = (typeof m.id !== 'undefined') ? Number(m.id) : null;
+    
+        if (mid !== null) {
+          if (window._renderedMessageIds.has(mid)) return; // already rendered
+          window._renderedMessageIds.add(mid);
+        }
+    
+        // create DOM as your code expects (keep consistent with your existing renderer)
+        const me = (m.sender === (window.cs && window.cs.myName));
+        const wrapper = document.createElement('div'); wrapper.className = 'msg-row';
+        const body = document.createElement('div'); body.className = 'msg-body';
+    
+        const meta = document.createElement('div'); meta.className = 'msg-meta-top';
+        const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender||'')}</strong>`;
+        const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+        meta.appendChild(leftMeta); meta.appendChild(rightMeta);
+        body.appendChild(meta);
+    
+        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
+    
+        if (m.text) {
+          const textNode = document.createElement('div');
+          textNode.innerHTML = escapeHtml(m.text) + (m.edited ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>':'');
+          bubble.appendChild(textNode);
+        }
+    
+        // attachments (basic)
+        (m.attachments || []).forEach(a=>{
+          if (a.type === 'image') {
+            const img = document.createElement('img'); img.src = a.url; img.className = 'image-attachment';
+            bubble.appendChild(img);
+          } else {
+            const d = document.createElement('div'); d.className = 'preview-item-doc'; d.textContent = a.name || a.url || '';
+            bubble.appendChild(d);
+          }
+        });
+    
+        // attach menu button (three-dot)
+        const menuBtn = document.createElement('button'); menuBtn.className='three-dot'; menuBtn.innerText='⋯';
+        menuBtn.onclick = function(ev){
+          ev.stopPropagation();
+          // your existing logic to show menu...
+          // (if you already have a menu creation function, call it here)
+        };
+        bubble.appendChild(menuBtn);
+    
+        body.appendChild(bubble);
+        wrapper.appendChild(body);
+    
+        const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
+        if (messagesEl) {
+          messagesEl.appendChild(wrapper);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+      } catch (err) {
+        console.error('appendMessage error', err);
+      }
+    };
+    
+    // === Socket handler — only append if not already rendered ===
+    if (window.socket && typeof window.socket.on === 'function') {
+      window.socket.off && window.socket.off('new_message'); // remove prior if present
+      window.socket.on('new_message', (m) => {
+        try {
+          if(!m) return;
+          // If message has numeric id and already rendered, skip
+          const mid = (typeof m.id !== 'undefined') ? Number(m.id) : null;
+          if (mid !== null && window._renderedMessageIds.has(mid)) return;
+          appendMessage(m);
+          if (window.cs) window.cs.lastId = Math.max(window.cs.lastId || 0, mid || window.cs.lastId || 0);
+        } catch(e){ console.error('socket new_message handler error', e); }
+      });
+    }
+
   // Attachment preview setter (exposed)
   function setAttachmentPreview(files){
     cs.stagedFiles = Array.from(files||[]);
@@ -2345,12 +2427,12 @@ CHAT_HTML = r'''<!doctype html>
     
         if (!data || !data.length) return;
     
+        // inside poll() after you fetch messages array `data`
         for (const m of data) {
-          const me = (m.sender === cs.myName);
-          const wrapper = document.createElement('div');
-          wrapper.className = 'msg-row';
-          const body = document.createElement('div');
-          body.className = 'msg-body';
+          if (m.id && window._renderedMessageIds.has(Number(m.id))) continue;
+          appendMessage(m);
+          if (m.id) window._renderedMessageIds.add(Number(m.id));
+          if (m.id && Number(m.id) > (cs.lastId||0)) cs.lastId = Number(m.id);
     
           // === META ===
           const meta = document.createElement('div');
