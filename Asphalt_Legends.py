@@ -1752,7 +1752,7 @@ CHAT_HTML = r'''<!doctype html>
             <button id="plusBtn" class="plus-small bg-white shadow" style="font-size:2rem;" aria-label="Attach">＋</button>
     
             <!-- vertical attachment menu -->
-            <div id="attachMenuVertical" class="attach-menu-vertical" style="display:none;">
+            <div id="attachMenuVertical" class="attach-menu-vertical" style="display:inline-block;">
               <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
               <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
               <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
