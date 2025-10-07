@@ -1846,16 +1846,6 @@ CHAT_HTML = r'''<!doctype html>
   // Register yourself (optional)
   socket.emit('register_socket', { username: cs.myName });
 
-  // Send message
-  async function sendMessage(text) {
-    socket.emit('send_message', { text, sender: cs.myName });
-  }
-
-  // Listen for new messages
-  socket.on('new_message', (m) => {
-    appendMessage(m);  // Use your existing function to render messages
-  });
-
   // Safe DOM refs (assigned on DOMContentLoaded)
   let emojiBtn, composer, textarea, micBtn, plusBtn, attachMenuVertical;
   let sendBtn, emojiDrawer, messagesEl, inputEl, composerEl, composerMain, panel;
