@@ -3330,15 +3330,6 @@ CHAT_HTML = r'''<!doctype html>
       });
     }
 
-    const socket = io(); // connect to server
-
-    // Register yourself (optional)
-    socket.emit('register_socket', { username: cs.myName });
-
-    // Listen for messages from the server
-    socket.on('new_message', (m) => {
-      appendMessage(m);
-    });
     // click outside handlers to close drawers/panels
     document.addEventListener('click', (ev) => {
       const insidePanel = ev.target && ev.target.closest && ev.target.closest('#stickerPanel');
