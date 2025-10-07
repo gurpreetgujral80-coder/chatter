@@ -1751,16 +1751,6 @@ CHAT_HTML = r'''<!doctype html>
           <div class="composer-main" id="composerMain" role="form" aria-label="Message composer">
             <button id="plusBtn" class="plus-small bg-white shadow" style="font-size:2rem;" aria-label="Attach">＋</button>
     
-            <!-- vertical attachment menu -->
-            <div id="attachMenuVertical" class="attach-menu-vertical" style="display:inline-block;">
-              <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
-              <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
-              <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
-              <div class="attach-card" data-action="audio">🎧<div>  Audio</div></div>
-              <div class="attach-card" data-action="location">🌐<div>  Location</div></div>
-              <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
-            </div>
-    
             <textarea id="msg" class="textarea" placeholder="Type a message..." maxlength="1200"
               aria-label="Message input"></textarea>
     
@@ -1775,7 +1765,14 @@ CHAT_HTML = r'''<!doctype html>
           </div>
         </div>
       </div>
-    
+      <div id="attachMenuVertical" class="attach-menu-vertical" style="display:inline-block;">
+          <div class="attach-card" data-action="document">📁<div>  Documents</div></div>
+          <div class="attach-card" data-action="camera">📷<div>  Camera</div></div>
+          <div class="attach-card" data-action="gallery">🌇<div>  Gallery</div></div>
+          <div class="attach-card" data-action="audio">🎧<div>  Audio</div></div>
+          <div class="attach-card" data-action="location">🌐<div>  Location</div></div>
+          <div class="attach-card" id="pollBtn">🗳️<div>  Poll</div></div>
+      </div>
       <!-- Poll modal -->
       <div id="pollModal" class="hidden" style="display:none;">
         <div class="modal">
