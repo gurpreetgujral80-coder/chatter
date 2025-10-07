@@ -2153,7 +2153,6 @@ CHAT_HTML = r'''<!doctype html>
         wrapper.appendChild(body);
     
         // append to messages container (choose #messages or .messages)
-        const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
         if (messagesEl) {
           messagesEl.appendChild(wrapper);
           // scroll to bottom
