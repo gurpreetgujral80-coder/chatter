@@ -2405,6 +2405,7 @@ CHAT_HTML = r'''<!doctype html>
 
   // render and poll messages
     async function poll() {
+      const me = (m.sender === cs.myName);
       try {
         const lastId = cs.lastId || 0;
         const endpoints = [
@@ -3496,25 +3497,39 @@ CHAT_HTML = r'''<!doctype html>
 
     // attach menu (plus button)
     if (plusBtn && attachMenuVertical) {
+      // toggle menu
       plusBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const showing = attachMenuVertical.style.display === 'flex';
+        const showing = window.getComputedStyle(attachMenuVertical).display === 'flex';
         attachMenuVertical.style.display = showing ? 'none' : 'flex';
+        attachMenuVertical.style.flexDirection = 'column';
         if (!showing) {
+          // auto-hide on next scroll
           window.addEventListener('scroll', () => { attachMenuVertical.style.display = 'none'; }, { once: true });
         }
       });
-
-      // attach-card click handlers
-      Array.from(attachMenuVertical.querySelectorAll('.attach-card') || []).forEach(c => {
-        c.addEventListener('click', (ev) => {
-          const action = c.dataset && c.dataset.action;
+    
+      // click outside closes menu
+      document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('#attachMenuVertical') && !ev.target.closest('#plusBtn')) {
+          attachMenuVertical.style.display = 'none';
+        }
+      });
+    
+      // attach-card actions (delegation)
+      attachMenuVertical.addEventListener('click', async (ev) => {
+        const card = ev.target.closest('.attach-card');
+        if (!card) return;
+        const action = card.dataset.action;
+        attachMenuVertical.style.display = 'none';
+    
+        try {
           if (action === 'camera') openFileSelector && openFileSelector(true);
           else if (action === 'gallery') openFileSelector && openFileSelector(false);
           else if (action === 'document') openDocSelector && openDocSelector();
           else if (action === 'audio') openAudioSelector && openAudioSelector();
           else if (action === 'location') {
-            if (!navigator.geolocation) { alert('Geolocation not supported on this device.'); return; }
+            if (!navigator.geolocation) return alert('Geolocation not supported.');
             navigator.geolocation.getCurrentPosition(async (pos) => {
               const lat = pos.coords.latitude.toFixed(6);
               const lng = pos.coords.longitude.toFixed(6);
@@ -3524,18 +3539,18 @@ CHAT_HTML = r'''<!doctype html>
                 await fetch('/send_message', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ text: '', attachments: [{ type: 'location', lat, lng, url, map: mapImg }] })
+                  body: JSON.stringify({ text: '', attachments: [{ type: 'location', lat, lng, url, map: mapImg }] }),
+                  credentials: 'same-origin'
                 });
-                if (messagesEl) messagesEl.innerHTML = '';
                 cs.lastId = 0;
-                await poll();
-              } catch (err) {
-                console.error('send location error', err);
-              }
+                if (typeof poll === 'function') await poll();
+              } catch (err) { console.error('send location error', err); }
             }, (err) => { alert('Could not get location: ' + err.message); });
           }
-          attachMenuVertical.style.display = 'none';
-        });
+        } catch (err) {
+          console.error('attach action error', err);
+          alert('Attach action failed: ' + (err.message || err));
+        }
       });
     }
 
