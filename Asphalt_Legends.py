@@ -3794,64 +3794,70 @@ def chat():
 
 @app.route("/send_composite_message", methods=["POST"])
 def send_composite_message():
-    username = session.get('username')
-    if not username:
-        return "not signed in", 401
+    """
+    Handles multipart messages with text + attachments (files).
+    Returns the authoritative message object just like /send_message.
+    """
+    try:
+        username = session.get('username')
+        if not username:
+            return jsonify({"error": "not signed in"}), 401
 
-    text = request.form.get('text', '').strip()
-    files = request.files.getlist('file') or []
-    attachments = []
+        text = (request.form.get('text') or '').strip()
+        files = request.files.getlist('file') or []
+        attachments = []
 
-    for file in files:
-        if file and file.filename:
+        # process each uploaded file
+        for file in files:
+            if not file or not file.filename:
+                continue
+
             fn = secure_filename(file.filename)
             save_name = f"uploads/{secrets.token_hex(8)}_{fn}"
-            path = os.path.join(app.static_folder, save_name)
-            file.save(path)
+            abs_path = os.path.join(app.static_folder, save_name)
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            file.save(abs_path)
+
             url = url_for('static', filename=save_name)
-            ext = fn.rsplit(".", 1)[-1].lower() if "." in fn else ""
-            kind = "doc"
+            ext = fn.rsplit('.', 1)[-1].lower() if '.' in fn else ''
             if ext in ALLOWED_IMAGE_EXT:
-                kind = "image"
+                kind = 'image'
             elif ext in ALLOWED_VIDEO_EXT:
-                kind = "video"
+                kind = 'video'
             elif ext in ALLOWED_AUDIO_EXT:
-                kind = "audio"
-            attachments.append({"type": kind, "url": url, "name": fn})
+                kind = 'audio'
+            else:
+                kind = 'doc'
 
-    if not text and not attachments:
-        return jsonify({'error': 'Empty message'}), 400
+            attachments.append({
+                "type": kind,
+                "url": url,
+                "name": fn
+            })
 
-    # save to DB and get inserted id
-    mid = save_message(username, text, attachments=attachments)
+        if not text and not attachments:
+            return jsonify({'error': 'Empty message'}), 400
 
-    # build authoritative message obj from DB
-    conn = db_conn(); c = conn.cursor()
-    c.execute("SELECT id, sender, text, attachments, reactions, edited, created_at FROM messages WHERE id = ? LIMIT 1", (mid,))
-    r = c.fetchone()
-    conn.close()
-    if not r:
-        return jsonify({'error': 'Failed to read saved message'}), 500
+        # save message (returns full message dict)
+        message = save_message(username, text, attachments=attachments)
 
-    _id, sender, txt, attachments_json, reactions_json, edited, created_at = r
-    message = {
-        "id": int(_id),
-        "sender": sender,
-        "text": txt,
-        "attachments": json.loads(attachments_json or "[]"),
-        "reactions": json.loads(reactions_json or "[]"),
-        "edited": bool(edited),
-        "created_at": created_at
-    }
+        # broadcast via socket
+        try:
+            socketio.emit('new_message', message)
+        except Exception:
+            app.logger.exception("socket emit failed for new_message")
 
-    # emit to socket clients (do not fail the HTTP response if emit fails)
-    try:
-        socketio.emit('new_message', message)
-    except Exception:
-        app.logger.exception("socket emit failed for new_message")
+        # optional: update user activity timestamp
+        try:
+            touch_user_presence(username)
+        except Exception:
+            pass
 
-    touch_user_presence(username)
-    return jsonify({"ok": True, "message": message}), 200
+        return jsonify({"ok": True, "message": message}), 200
+
+    except Exception as e:
+        current_app.logger.exception("send_composite_message error")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
