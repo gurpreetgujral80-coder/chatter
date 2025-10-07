@@ -2643,7 +2643,6 @@ CHAT_HTML = r'''<!doctype html>
        Polling, rendering messages & reactions
        --------------------------- */
 
-    // Fetch new messages and render them via appendMessage
     async function poll() {
       try {
         const lastId = cs.lastId || 0;
@@ -2665,7 +2664,7 @@ CHAT_HTML = r'''<!doctype html>
           const mid = Number(m.id || 0);
           if (mid && window._renderedMessageIds.has(mid)) continue;
     
-          // Delegate full DOM creation to appendMessage
+          // Delegate full rendering to appendMessage
           appendMessage(m);
     
           if (mid) {
@@ -2674,7 +2673,7 @@ CHAT_HTML = r'''<!doctype html>
           }
         }
     
-        // Auto-scroll to bottom
+        // Auto-scroll handled inside appendMessage, or fallback:
         const container = document.getElementById('messages') || document.querySelector('.messages');
         if (container) container.scrollTop = container.scrollHeight;
     
@@ -3582,137 +3581,159 @@ CHAT_HTML = r'''<!doctype html>
   const btnToggleVideo = $id('btnToggleVideo');
   const btnSwitchCam = $id('btnSwitchCam');
  
-  window.appendMessage = function appendMessage(m){
+    window.appendMessage = function appendMessage(m) {
       try {
-        if(!m || typeof m.id === 'undefined') return;
+        if (!m || typeof m.id === 'undefined') return;
         const mid = Number(m.id);
-        if(window._renderedMessageIds.has(mid)) return; // skip duplicate
+        if (window._renderedMessageIds.has(mid)) return; // skip duplicate
         window._renderedMessageIds.add(mid);
     
         const me = (m.sender === cs.myName);
-        const wrapper = document.createElement('div'); wrapper.className = 'msg-row';
-        const body = document.createElement('div'); body.className = 'msg-body';
     
-        const meta = document.createElement('div'); meta.className = 'msg-meta-top';
-        const leftMeta = document.createElement('div'); leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
-        const rightMeta = document.createElement('div'); rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
-        meta.appendChild(leftMeta); meta.appendChild(rightMeta);
+        // Wrapper row
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg-row';
+    
+        // Message body
+        const body = document.createElement('div');
+        body.className = 'msg-body';
+    
+        // Meta (sender + tick)
+        const meta = document.createElement('div');
+        meta.className = 'msg-meta-top';
+        const leftMeta = document.createElement('div');
+        leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
+        const rightMeta = document.createElement('div');
+        rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+        meta.appendChild(leftMeta);
+        meta.appendChild(rightMeta);
         body.appendChild(meta);
     
-        const bubble = document.createElement('div'); bubble.className = 'bubble ' + (me ? 'me' : 'them');
-        if(m.text) {
+        // Bubble
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble ' + (me ? 'me' : 'them');
+    
+        // Text
+        if (m.text && m.text.trim().length > 0) {
           const textNode = document.createElement('div');
-          textNode.innerHTML = escapeHtml(m.text) + (m.edited ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>' : '');
+          textNode.innerHTML =
+            escapeHtml(m.text) +
+            (m.edited ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>' : '');
           bubble.appendChild(textNode);
         }
     
-        // simple attachments handling (images/documents)
+        // Attachments
         (m.attachments || []).forEach(a => {
-          if(a.type === 'image' || a.url && (a.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))) {
-            const img = document.createElement('img'); img.src = a.url; img.className = 'image-attachment'; bubble.appendChild(img);
+          if (a.type === 'sticker') {
+            const s = document.createElement('img');
+            s.src = a.url;
+            s.className = 'sticker';
+            s.style.marginTop = '8px';
+            s.style.maxWidth = '180px';
+            s.style.borderRadius = '8px';
+            bubble.appendChild(s);
+          } else if (a.type === 'image' || (a.url && a.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))) {
+            const img = document.createElement('img');
+            img.src = a.url;
+            img.className = 'image-attachment';
+            bubble.appendChild(img);
+          } else if (a.type === 'poll') {
+            const pollEl = document.createElement('div');
+            pollEl.className = 'poll';
+            pollEl.style.marginTop = '8px';
+    
+            if (m.text && m.text.trim()) {
+              const qEl = document.createElement('div');
+              qEl.style.fontWeight = '600';
+              qEl.style.marginBottom = '6px';
+              qEl.textContent = m.text;
+              pollEl.appendChild(qEl);
+            }
+    
+            const counts = a.counts || new Array(a.options.length).fill(0);
+            a.options.forEach((opt, i) => {
+              const btn = document.createElement('button');
+              btn.className = 'poll-option w-full px-3 py-2 rounded bg-gray-100 text-left';
+              const count = counts[i] || 0;
+              btn.innerHTML = `${opt} <span class="poll-count" style="float:right">— ${count} vote${count !== 1 ? 's' : ''}</span>`;
+              btn.dataset.messageId = m.id;
+              btn.dataset.index = i;
+              btn.addEventListener('click', async (ev) => {
+                ev.preventDefault();
+                try {
+                  await fetch('/vote_poll', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message_id: m.id, option: i, user: cs.myName })
+                  });
+                  cs.lastId = 0;
+                  if (typeof poll === 'function') await poll();
+                } catch (err) {
+                  console.warn('vote failed', err);
+                }
+              });
+              pollEl.appendChild(btn);
+            });
+            bubble.appendChild(pollEl);
           } else {
-            const d = document.createElement('div'); d.className = 'preview-item-doc'; d.textContent = a.name || (a.url||'file'); bubble.appendChild(d);
+            const d = document.createElement('div');
+            d.className = 'preview-item-doc';
+            d.textContent = a.name || (a.url || 'file');
+            bubble.appendChild(d);
           }
         });
+    
+        // Reactions
+        if (m.reactions && m.reactions.length) {
+          const agg = {};
+          m.reactions.forEach(r => {
+            agg[r.emoji] = agg[r.emoji] || new Set();
+            agg[r.emoji].add(r.user);
+          });
+    
+          const reactionBar = document.createElement('div');
+          reactionBar.className = 'reaction-bar';
+          for (const emoji in agg) {
+            const userset = agg[emoji];
+            const pill = document.createElement('div');
+            pill.className = 'reaction-pill';
+            const em = document.createElement('div');
+            em.className = 'reaction-emoji';
+            em.innerText = emoji;
+            const count = document.createElement('div');
+            count.style.fontSize = '0.85rem';
+            count.style.color = '#374151';
+            count.innerText = userset.size;
+            pill.appendChild(em);
+            pill.appendChild(count);
+            reactionBar.appendChild(pill);
+          }
+          bubble.appendChild(reactionBar);
+        }
+    
+        // 3-dot menu
+        const menuBtn = document.createElement('button');
+        menuBtn.className = 'three-dot';
+        menuBtn.innerText = '⋯';
+        menuBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          showMessageMenu(m, menuBtn);
+        });
+        bubble.appendChild(menuBtn);
     
         body.appendChild(bubble);
         wrapper.appendChild(body);
     
+        // Append to messages container
         const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
-        if(messagesEl) {
+        if (messagesEl) {
           messagesEl.appendChild(wrapper);
           messagesEl.scrollTop = messagesEl.scrollHeight;
         }
-      } catch(err){
+      } catch (err) {
         console.error('appendMessage error', err);
       }
-  };
-  try {
-    // Debug: list of found elements (helps confirm selectors)
-    console.log('init elements:', {
-      emojiBtn, composer, inputEl, micBtn, plusBtn, attachMenuVertical, sendBtn, emojiDrawer, messagesEl, panel
-    });
-
-    // Emoji-mart picker wiring (only if emojiBtn exists)
-    if (emojiBtn) {
-      emojiBtn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-
-        const emojiGrid = $id('emojiGrid');
-        if (typeof EmojiMart !== 'undefined') {
-          if (!window._emojiPicker) {
-            window._emojiPicker = new EmojiMart.Picker({
-              onEmojiSelect: (emoji) => {
-                if (inputEl) insertAtCursor(inputEl, emoji.native);
-                if (inputEl) inputEl.focus();
-              },
-              theme: 'light',
-              previewPosition: 'none',
-              skinTonePosition: 'none'
-            });
-            if (emojiGrid) emojiGrid.appendChild(window._emojiPicker);
-          } else {
-            if (emojiGrid && !emojiGrid.contains(window._emojiPicker)) {
-              emojiGrid.appendChild(window._emojiPicker);
-            }
-          }
-        } else {
-          // fallback if EmojiMart missing
-          if (emojiGrid && emojiGrid.children.length === 0) {
-            const emojis = "😀😃😄😁😆😅🤣😂🙂🙃😉😊😇🥰😍🤩😘😗😚😋😜🤪🤨🧐🤓😎".split('');
-            emojis.forEach(e => {
-              const span = document.createElement('span');
-              span.textContent = e;
-              span.style.fontSize = '1.8rem';
-              span.style.cursor = 'pointer';
-              span.addEventListener('click', () => {
-                if (inputEl) insertAtCursor(inputEl, e);
-                closeDrawer && closeDrawer();
-              });
-              emojiGrid.appendChild(span);
-            });
-          }
-        }
-
-        // toggle drawer — ensure emojiGrid is visible when open
-        const grid = $id('emojiGrid');
-        if (emojiDrawer && emojiDrawer.classList.contains('active')) {
-          emojiDrawer.classList.remove('active');
-          if (composer && composer.style) composer.style.bottom = '0px';
-          if (grid) grid.classList.add('hidden');
-          if (panel) {
-            panel.setAttribute('aria-hidden', 'true');
-            try { panel.inert = true; } catch (_) { /* inert may not be supported */ }
-          }
-        } else {
-          if (emojiDrawer) emojiDrawer.classList.add('active');
-          const h = (emojiDrawer && emojiDrawer.offsetHeight) ? emojiDrawer.offsetHeight : 280;
-          if (composer && composer.style) composer.style.bottom = h + 'px';
-          if (grid) {
-            grid.classList.remove('hidden');
-            // append the picker only once
-            if (typeof EmojiMart !== 'undefined' && !window._emojiPicker) {
-              window._emojiPicker = new EmojiMart.Picker({
-                onEmojiSelect: (emoji) => {
-                  if (inputEl) insertAtCursor(inputEl, emoji.native);
-                  if (inputEl) inputEl.focus();
-                },
-                theme: 'light',
-                previewPosition: 'none',
-                skinTonePosition: 'none'
-              });
-              grid.appendChild(window._emojiPicker);
-            } else if (window._emojiPicker && !grid.contains(window._emojiPicker)) {
-              grid.appendChild(window._emojiPicker);
-            }
-          }
-          if (panel) {
-            panel.setAttribute('aria-hidden', 'false');
-            try { panel.inert = false; } catch (_) { /* ignore */ }
-          }
-        }
-      });
-    }
+    };
 
     // click outside handlers to close drawers/panels
     document.addEventListener('click', (ev) => {
