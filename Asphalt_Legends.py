@@ -2894,7 +2894,6 @@ CHAT_HTML = r'''<!doctype html>
           };
     
           bubble.appendChild(menuBtn);
-          body.appendChild(bubble);
           wrapper.appendChild(body);
     
           const messagesEl =
