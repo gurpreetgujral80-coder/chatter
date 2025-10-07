@@ -187,7 +187,7 @@ def get_partner():
 
 def save_message(sender, text, attachments=None):
     """
-    Save a message to the SQLite messages table and return the inserted id.
+    Save a message to the SQLite messages table and return the inserted message dict.
     attachments should be a list (will be stored as JSON string).
     """
     conn = db_conn()
@@ -206,10 +206,19 @@ def save_message(sender, text, attachments=None):
     try:
         trim_messages_limit(MAX_MESSAGES)
     except Exception:
-        # ignore trimming errors, but do not break sending
+        # ignore trimming errors
         pass
 
-    return mid
+    # return the same structure fetch_messages() uses
+    return {
+        "id": mid,
+        "sender": sender,
+        "text": text,
+        "attachments": attachments or [],
+        "reactions": [],
+        "edited": False,
+        "created_at": ts
+    }
 
 def fetch_messages(since=0):
     """
