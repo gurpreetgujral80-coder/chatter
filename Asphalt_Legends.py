@@ -3542,514 +3542,522 @@ CHAT_HTML = r'''<!doctype html>
 
 })(); // end helper IIFE
 
-/* ---------------------------
+ /* ---------------------------
    Event wiring on DOMContentLoaded - single point of initialization
    --------------------------- */
-document.addEventListener('DOMContentLoaded', () => {
+(function(){ // start IIFE
   'use strict';
-  try {
-    window._renderedMessageIds = window._renderedMessageIds || new Set();
 
-    // assign DOM refs (use const/let to avoid globals)
-    const emojiBtn = $id('emojiBtn');
-    const composer = document.querySelector('.composer');
-    const textarea = $id('msg') || $id('textarea');
-    const inputEl = textarea;
-    window.inputEl = inputEl || null;
-    const micBtn = $id('mic');
-    const plusBtn = $id('plusBtn');
-    const attachMenuVertical = $id('attachMenuVertical') || (function () {
-      const el = document.createElement('div');
-      el.style.display = 'none';
-      // ensure querySelectorAll exists (fallback)
-      el.querySelectorAll = () => [];
-      return el;
-    })();
-    const sendBtn = $id('sendBtn');
-    const emojiDrawer = $id('stickerPanel') || $id('emojiDrawer');
-    const messagesEl = $id('messages');
-    const composerEl = $id('composer');
-    const composerMainEl = $id('composerMain') || document.querySelector('.composer-main');
-    const panel = $id('stickerPanel');
-    const panelGrid = $id('panelGrid');
-    const incomingCallBanner = $id('incomingCallBanner');
-    const incomingCallerNameEl = $id('incomingCallerName');
-    const acceptCallBtn = $id('acceptCallBtn');
-    const declineCallBtn = $id('declineCallBtn');
-    const inCallControls = $id('inCallControls');
-    const btnHangup = $id('btnHangup');
-    const btnMute = $id('btnMute');
-    const btnToggleVideo = $id('btnToggleVideo');
-    const btnSwitchCam = $id('btnSwitchCam');
+  document.addEventListener('DOMContentLoaded', () => {
 
-    window.appendMessage = function appendMessage(m) {
-      try {
-        if (!m || typeof m.id === 'undefined') return;
-        const mid = Number(m.id);
-        if (window._renderedMessageIds.has(mid)) return; // skip duplicate
-        window._renderedMessageIds.add(mid);
+    try {
+      window._renderedMessageIds = window._renderedMessageIds || new Set();
 
-        const me = (m.sender === cs.myName);
+      // assign DOM refs (use const/let to avoid globals)
+      const emojiBtn = $id('emojiBtn');
+      const composer = document.querySelector('.composer');
+      const textarea = $id('msg') || $id('textarea');
+      const inputEl = textarea;
+      window.inputEl = inputEl || null;
+      const micBtn = $id('mic');
+      const plusBtn = $id('plusBtn');
+      const attachMenuVertical = $id('attachMenuVertical') || (function () {
+        const el = document.createElement('div');
+        el.style.display = 'none';
+        // ensure querySelectorAll exists (fallback)
+        el.querySelectorAll = () => [];
+        return el;
+      })();
+      const sendBtn = $id('sendBtn');
+      const emojiDrawer = $id('stickerPanel') || $id('emojiDrawer');
+      const messagesEl = $id('messages');
+      const composerEl = $id('composer');
+      const composerMainEl = $id('composerMain') || document.querySelector('.composer-main');
+      const panel = $id('stickerPanel');
+      const panelGrid = $id('panelGrid');
+      const incomingCallBanner = $id('incomingCallBanner');
+      const incomingCallerNameEl = $id('incomingCallerName');
+      const acceptCallBtn = $id('acceptCallBtn');
+      const declineCallBtn = $id('declineCallBtn');
+      const inCallControls = $id('inCallControls');
+      const btnHangup = $id('btnHangup');
+      const btnMute = $id('btnMute');
+      const btnToggleVideo = $id('btnToggleVideo');
+      const btnSwitchCam = $id('btnSwitchCam');
 
-        // Wrapper row
-        const wrapper = document.createElement('div');
-        wrapper.className = 'msg-row';
+      window.appendMessage = function appendMessage(m) {
+        try {
+          if (!m || typeof m.id === 'undefined') return;
+          const mid = Number(m.id);
+          if (window._renderedMessageIds.has(mid)) return; // skip duplicate
+          window._renderedMessageIds.add(mid);
 
-        // Message body
-        const body = document.createElement('div');
-        body.className = 'msg-body';
+          const me = (m.sender === cs.myName);
 
-        // Meta (sender + tick)
-        const meta = document.createElement('div');
-        meta.className = 'msg-meta-top';
-        const leftMeta = document.createElement('div');
-        leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
-        const rightMeta = document.createElement('div');
-        rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
-        meta.appendChild(leftMeta);
-        meta.appendChild(rightMeta);
-        body.appendChild(meta);
+          // Wrapper row
+          const wrapper = document.createElement('div');
+          wrapper.className = 'msg-row';
 
-        // Bubble
-        const bubble = document.createElement('div');
-        bubble.className = 'bubble ' + (me ? 'me' : 'them');
+          // Message body
+          const body = document.createElement('div');
+          body.className = 'msg-body';
 
-        // Text
-        if (m.text && m.text.trim().length > 0) {
-          const textNode = document.createElement('div');
-          textNode.innerHTML =
-            escapeHtml(m.text) +
-            (m.edited ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>' : '');
-          bubble.appendChild(textNode);
-        }
+          // Meta (sender + tick)
+          const meta = document.createElement('div');
+          meta.className = 'msg-meta-top';
+          const leftMeta = document.createElement('div');
+          leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
+          const rightMeta = document.createElement('div');
+          rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+          meta.appendChild(leftMeta);
+          meta.appendChild(rightMeta);
+          body.appendChild(meta);
 
-        // Attachments
-        (m.attachments || []).forEach(a => {
-          if (a.type === 'sticker') {
-            const s = document.createElement('img');
-            s.src = a.url;
-            s.className = 'sticker';
-            s.style.marginTop = '8px';
-            s.style.maxWidth = '180px';
-            s.style.borderRadius = '8px';
-            bubble.appendChild(s);
-          } else if (a.type === 'image' || (a.url && a.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))) {
-            const img = document.createElement('img');
-            img.src = a.url;
-            img.className = 'image-attachment';
-            bubble.appendChild(img);
-          } else if (a.type === 'poll') {
-            const pollEl = document.createElement('div');
-            pollEl.className = 'poll';
-            pollEl.style.marginTop = '8px';
+          // Bubble
+          const bubble = document.createElement('div');
+          bubble.className = 'bubble ' + (me ? 'me' : 'them');
 
-            if (m.text && m.text.trim()) {
-              const qEl = document.createElement('div');
-              qEl.style.fontWeight = '600';
-              qEl.style.marginBottom = '6px';
-              qEl.textContent = m.text;
-              pollEl.appendChild(qEl);
+          // Text
+          if (m.text && m.text.trim().length > 0) {
+            const textNode = document.createElement('div');
+            textNode.innerHTML =
+              escapeHtml(m.text) +
+              (m.edited ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>' : '');
+            bubble.appendChild(textNode);
+          }
+
+          // Attachments
+          (m.attachments || []).forEach(a => {
+            if (a.type === 'sticker') {
+              const s = document.createElement('img');
+              s.src = a.url;
+              s.className = 'sticker';
+              s.style.marginTop = '8px';
+              s.style.maxWidth = '180px';
+              s.style.borderRadius = '8px';
+              bubble.appendChild(s);
+            } else if (a.type === 'image' || (a.url && a.url.match(/\.(jpg|jpeg|png|gif|webp)$/i))) {
+              const img = document.createElement('img');
+              img.src = a.url;
+              img.className = 'image-attachment';
+              bubble.appendChild(img);
+            } else if (a.type === 'poll') {
+              const pollEl = document.createElement('div');
+              pollEl.className = 'poll';
+              pollEl.style.marginTop = '8px';
+
+              if (m.text && m.text.trim()) {
+                const qEl = document.createElement('div');
+                qEl.style.fontWeight = '600';
+                qEl.style.marginBottom = '6px';
+                qEl.textContent = m.text;
+                pollEl.appendChild(qEl);
+              }
+
+              const counts = a.counts || new Array(a.options.length).fill(0);
+              a.options.forEach((opt, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'poll-option w-full px-3 py-2 rounded bg-gray-100 text-left';
+                const count = counts[i] || 0;
+                btn.innerHTML = `${opt} <span class="poll-count" style="float:right">— ${count} vote${count !== 1 ? 's' : ''}</span>`;
+                btn.dataset.messageId = m.id;
+                btn.dataset.index = i;
+                btn.addEventListener('click', async (ev) => {
+                  ev.preventDefault();
+                  try {
+                    await fetch('/vote_poll', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ message_id: m.id, option: i, user: cs.myName })
+                    });
+                    cs.lastId = 0;
+                    if (typeof poll === 'function') await poll();
+                  } catch (err) {
+                    console.warn('vote failed', err);
+                  }
+                });
+                pollEl.appendChild(btn);
+              });
+              bubble.appendChild(pollEl);
+            } else {
+              const d = document.createElement('div');
+              d.className = 'preview-item-doc';
+              d.textContent = a.name || (a.url || 'file');
+              bubble.appendChild(d);
             }
+          });
 
-            const counts = a.counts || new Array(a.options.length).fill(0);
-            a.options.forEach((opt, i) => {
-              const btn = document.createElement('button');
-              btn.className = 'poll-option w-full px-3 py-2 rounded bg-gray-100 text-left';
-              const count = counts[i] || 0;
-              btn.innerHTML = `${opt} <span class="poll-count" style="float:right">— ${count} vote${count !== 1 ? 's' : ''}</span>`;
-              btn.dataset.messageId = m.id;
-              btn.dataset.index = i;
-              btn.addEventListener('click', async (ev) => {
-                ev.preventDefault();
+          // Reactions
+          if (m.reactions && m.reactions.length) {
+            const agg = {};
+            m.reactions.forEach(r => {
+              agg[r.emoji] = agg[r.emoji] || new Set();
+              agg[r.emoji].add(r.user);
+            });
+
+            const reactionBar = document.createElement('div');
+            reactionBar.className = 'reaction-bar';
+            for (const emoji in agg) {
+              const userset = agg[emoji];
+              const pill = document.createElement('div');
+              pill.className = 'reaction-pill';
+              const em = document.createElement('div');
+              em.className = 'reaction-emoji';
+              em.innerText = emoji;
+              const count = document.createElement('div');
+              count.style.fontSize = '0.85rem';
+              count.style.color = '#374151';
+              count.innerText = userset.size;
+              pill.appendChild(em);
+              pill.appendChild(count);
+              reactionBar.appendChild(pill);
+            }
+            bubble.appendChild(reactionBar);
+          }
+
+          // 3-dot menu
+          const menuBtn = document.createElement('button');
+          menuBtn.className = 'three-dot';
+          menuBtn.innerText = '⋯';
+          menuBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            showMessageMenu(m, menuBtn);
+          });
+          bubble.appendChild(menuBtn);
+
+          body.appendChild(bubble);
+          wrapper.appendChild(body);
+
+          // Append to messages container
+          const messagesElLocal = document.getElementById('messages') || document.querySelector('.messages');
+          if (messagesElLocal) {
+            messagesElLocal.appendChild(wrapper);
+            messagesElLocal.scrollTop = messagesElLocal.scrollHeight;
+          }
+        } catch (err) {
+          console.error('appendMessage error', err);
+        }
+      };
+
+      // click outside handlers to close drawers/panels
+      document.addEventListener('click', (ev) => {
+        const insidePanel = ev.target && ev.target.closest && ev.target.closest('#stickerPanel');
+        const insideComposer = ev.target && ev.target.closest && ev.target.closest('.composer');
+        const clickedEmojiBtn = ev.target && ev.target.closest && ev.target.closest('#emojiBtn');
+
+        if (!insidePanel && !insideComposer && !clickedEmojiBtn) {
+          if (emojiDrawer) emojiDrawer.classList.remove('active');
+          if (composer && composer.style) composer.style.bottom = '0px';
+          if (attachMenuVertical) attachMenuVertical.style.display = 'none';
+        }
+      });
+
+      // sticker panel close button
+      const closeStickerPanelBtn = $id('closeStickerPanel');
+      if (closeStickerPanelBtn) closeStickerPanelBtn.addEventListener('click', hideStickerPanel);
+
+      // tabs: stickers / gifs / avatars / emoji
+      const tab_stickers = $id('tab_stickers');
+      const tab_gifs = $id('tab_gifs');
+      const tab_avatars = $id('tab_avatars');
+      const tab_emoji = $id('tab_emoji');
+
+      if (tab_stickers) {
+        tab_stickers.addEventListener('click', async () => {
+          if (typeof loadStickers === 'function') await loadStickers();
+        });
+      }
+      if (tab_gifs) {
+        tab_gifs.addEventListener('click', async () => {
+          if (typeof loadGIFs === 'function') await loadGIFs();
+        });
+      }
+      if (tab_avatars) {
+        tab_avatars.addEventListener('click', async () => {
+          if (typeof loadAvatars === 'function') await loadAvatars();
+        });
+      }
+      if (tab_emoji && emojiBtn) {
+        tab_emoji.addEventListener('click', () => { emojiBtn.click(); });
+      }
+
+      // sticker picker button (show panel)
+      const stickerPickerBtn = $id('stickerPickerBtn');
+      if (stickerPickerBtn) stickerPickerBtn.addEventListener('click', () => showStickerPanel && showStickerPanel());
+
+      // attach menu (plus button)
+      if (plusBtn && attachMenuVertical) {
+        // toggle menu
+        plusBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const showing = window.getComputedStyle(attachMenuVertical).display === 'flex';
+          attachMenuVertical.style.display = showing ? 'none' : 'flex';
+          attachMenuVertical.style.flexDirection = 'column';
+          if (!showing) {
+            // auto-hide on next scroll
+            window.addEventListener('scroll', () => { attachMenuVertical.style.display = 'none'; }, { once: true });
+          }
+        });
+
+        // click outside closes menu
+        document.addEventListener('click', (ev) => {
+          if (!ev.target.closest('#attachMenuVertical') && !ev.target.closest('#plusBtn')) {
+            attachMenuVertical.style.display = 'none';
+          }
+        });
+
+        // attach-card actions (delegation)
+        attachMenuVertical.addEventListener('click', async (ev) => {
+          const card = ev.target.closest('.attach-card');
+          if (!card) return;
+          const action = card.dataset.action;
+          attachMenuVertical.style.display = 'none';
+
+          try {
+            if (action === 'camera') openFileSelector && openFileSelector(true);
+            else if (action === 'gallery') openFileSelector && openFileSelector(false);
+            else if (action === 'document') openDocSelector && openDocSelector();
+            else if (action === 'audio') openAudioSelector && openAudioSelector();
+            else if (action === 'location') {
+              if (!navigator.geolocation) return alert('Geolocation not supported.');
+              navigator.geolocation.getCurrentPosition(async (pos) => {
+                const lat = pos.coords.latitude.toFixed(6);
+                const lng = pos.coords.longitude.toFixed(6);
+                const url = `https://www.google.com/maps?q=${lat},${lng}`;
+                const mapImg = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=600,300&z=15&l=map&pt=${lng},${lat},pm2rdm`;
                 try {
-                  await fetch('/vote_poll', {
+                  await fetch('/send_message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message_id: m.id, option: i, user: cs.myName })
+                    body: JSON.stringify({ text: '', attachments: [{ type: 'location', lat, lng, url, map: mapImg }] }),
+                    credentials: 'same-origin'
                   });
                   cs.lastId = 0;
                   if (typeof poll === 'function') await poll();
-                } catch (err) {
-                  console.warn('vote failed', err);
-                }
-              });
-              pollEl.appendChild(btn);
-            });
-            bubble.appendChild(pollEl);
+                } catch (err) { console.error('send location error', err); }
+              }, (err) => { alert('Could not get location: ' + err.message); });
+            }
+          } catch (err) {
+            console.error('attach action error', err);
+            alert('Attach action failed: ' + (err.message || err));
+          }
+        });
+      }
+
+      // poll modal wiring
+      const pollBtn = $id('pollBtn');
+      if (pollBtn) pollBtn.addEventListener('click', () => {
+        const modal = $id('pollModal');
+        if (modal) { modal.style.display = 'block'; modal.classList.remove('hidden'); }
+      });
+      const cancelPoll = $id('cancelPoll');
+      if (cancelPoll) cancelPoll.addEventListener('click', () => {
+        const modal = $id('pollModal');
+        if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
+      });
+      const addPollOption = $id('addPollOption');
+      if (addPollOption) addPollOption.addEventListener('click', () => {
+        const container = $id('pollOptions'); if (!container) return;
+        if (container.querySelectorAll('input[name="option"]').length >= 12) return alert('Max 12 options');
+        const inp = document.createElement('input');
+        inp.name = 'option';
+        inp.placeholder = 'Option ' + (container.querySelectorAll('input[name="option"]').length + 1);
+        inp.className = 'w-full p-2 border rounded mb-2';
+        container.appendChild(inp);
+      });
+      const pollForm = $id('pollForm');
+      if (pollForm) pollForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const q = ($id('poll_question') && $id('poll_question').value || '').trim();
+        const opts = Array.from(document.querySelectorAll('input[name="option"]')).map(i => i.value.trim()).filter(v => v);
+        if (!q || opts.length < 2) return alert('Question and at least 2 options required');
+        await fetch('/send_message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: q, attachments: [{ type: 'poll', options: opts }] }) });
+        const modal = $id('pollModal'); if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
+        const container = document.getElementById('messages') || document.querySelector('.messages');
+        if (container) container.innerHTML = '';
+        cs.lastId = 0;
+        await poll();
+      });
+
+      // message send wiring
+      if (sendBtn) {
+        try { sendBtn.removeAttribute && sendBtn.removeAttribute('onclick'); } catch (_) {}
+        sendBtn.addEventListener('click', async (e) => {
+          e && e.preventDefault && e.preventDefault();
+          e && e.stopPropagation && e.stopPropagation();
+          if (typeof window.sendMessage === 'function') {
+            try { await window.sendMessage(); } catch (err) { console.error('sendBtn -> sendMessage failed', err); }
           } else {
-            const d = document.createElement('div');
-            d.className = 'preview-item-doc';
-            d.textContent = a.name || (a.url || 'file');
-            bubble.appendChild(d);
+            console.warn('sendBtn clicked but sendMessage not ready');
+          }
+        });
+      }
+
+      if (inputEl) {
+        inputEl.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (sendBtn) sendBtn.click();
           }
         });
 
-        // Reactions
-        if (m.reactions && m.reactions.length) {
-          const agg = {};
-          m.reactions.forEach(r => {
-            agg[r.emoji] = agg[r.emoji] || new Set();
-            agg[r.emoji].add(r.user);
-          });
-
-          const reactionBar = document.createElement('div');
-          reactionBar.className = 'reaction-bar';
-          for (const emoji in agg) {
-            const userset = agg[emoji];
-            const pill = document.createElement('div');
-            pill.className = 'reaction-pill';
-            const em = document.createElement('div');
-            em.className = 'reaction-emoji';
-            em.innerText = emoji;
-            const count = document.createElement('div');
-            count.style.fontSize = '0.85rem';
-            count.style.color = '#374151';
-            count.innerText = userset.size;
-            pill.appendChild(em);
-            pill.appendChild(count);
-            reactionBar.appendChild(pill);
-          }
-          bubble.appendChild(reactionBar);
-        }
-
-        // 3-dot menu
-        const menuBtn = document.createElement('button');
-        menuBtn.className = 'three-dot';
-        menuBtn.innerText = '⋯';
-        menuBtn.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          showMessageMenu(m, menuBtn);
+        // typing indicator
+        inputEl.addEventListener('input', () => {
+          if (!cs.isTyping && cs.socket) { cs.socket.emit('typing', { from: cs.myName }); cs.isTyping = true; }
+          clearTimeout(cs.typingTimer);
+          cs.typingTimer = setTimeout(() => {
+            if (cs.isTyping && cs.socket) { cs.socket.emit('stop_typing', { from: cs.myName }); cs.isTyping = false; }
+          }, 1200);
         });
-        bubble.appendChild(menuBtn);
-
-        body.appendChild(bubble);
-        wrapper.appendChild(body);
-
-        // Append to messages container
-        const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
-        if (messagesEl) {
-          messagesEl.appendChild(wrapper);
-          messagesEl.scrollTop = messagesEl.scrollHeight;
-        }
-      } catch (err) {
-        console.error('appendMessage error', err);
       }
-    };
 
-    // click outside handlers to close drawers/panels
-    document.addEventListener('click', (ev) => {
-      const insidePanel = ev.target && ev.target.closest && ev.target.closest('#stickerPanel');
-      const insideComposer = ev.target && ev.target.closest && ev.target.closest('.composer');
-      const clickedEmojiBtn = ev.target && ev.target.closest && ev.target.closest('#emojiBtn');
-
-      if (!insidePanel && !insideComposer && !clickedEmojiBtn) {
-        if (emojiDrawer) emojiDrawer.classList.remove('active');
-        if (composer && composer.style) composer.style.bottom = '0px';
-        if (attachMenuVertical) attachMenuVertical.style.display = 'none';
+      // micButton behavior
+      if (micBtn) {
+        micBtn.addEventListener('click', () => toggleRecording && toggleRecording());
+        micBtn.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); micBtn.click(); } });
       }
-    });
 
-    // sticker panel close button
-    const closeStickerPanelBtn = $id('closeStickerPanel');
-    if (closeStickerPanelBtn) closeStickerPanelBtn.addEventListener('click', hideStickerPanel);
+      // legacy send binding (if page uses different references)
+      const legacySend = $id('sendBtn');
+      if (legacySend && legacySend !== sendBtn) {
+        legacySend.addEventListener('click', async () => {
+          const text = (inputEl ? (inputEl.value || '').trim() : '');
+          if (!text && cs.stagedFiles.length === 0) return;
+          await (sendMessage && sendMessage());
+        });
+      }
 
-    // tabs: stickers / gifs / avatars / emoji
-    const tab_stickers = $id('tab_stickers');
-    const tab_gifs = $id('tab_gifs');
-    const tab_avatars = $id('tab_avatars');
-    const tab_emoji = $id('tab_emoji');
-
-    if (tab_stickers) {
-      tab_stickers.addEventListener('click', async () => {
-        if (typeof loadStickers === 'function') await loadStickers();
-      });
-    }
-    if (tab_gifs) {
-      tab_gifs.addEventListener('click', async () => {
-        if (typeof loadGIFs === 'function') await loadGIFs();
-      });
-    }
-    if (tab_avatars) {
-      tab_avatars.addEventListener('click', async () => {
-        if (typeof loadAvatars === 'function') await loadAvatars();
-      });
-    }
-    if (tab_emoji && emojiBtn) {
-      tab_emoji.addEventListener('click', () => { emojiBtn.click(); });
-    }
-
-    // sticker picker button (show panel)
-    const stickerPickerBtn = $id('stickerPickerBtn');
-    if (stickerPickerBtn) stickerPickerBtn.addEventListener('click', () => showStickerPanel && showStickerPanel());
-
-    // attach menu (plus button)
-    if (plusBtn && attachMenuVertical) {
-      // toggle menu
-      plusBtn.addEventListener('click', (e) => {
+      // profile toggles
+      const profileBtn = $id('profileBtn');
+      if (profileBtn) profileBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const showing = window.getComputedStyle(attachMenuVertical).display === 'flex';
-        attachMenuVertical.style.display = showing ? 'none' : 'flex';
-        attachMenuVertical.style.flexDirection = 'column';
-        if (!showing) {
-          // auto-hide on next scroll
-          window.addEventListener('scroll', () => { attachMenuVertical.style.display = 'none'; }, { once: true });
-        }
+        const menu = $id('profileMenu');
+        if (menu) { menu.classList.toggle('hidden'); menu.style.display = menu.classList.contains('hidden') ? 'none' : 'block'; }
       });
-
-      // click outside closes menu
-      document.addEventListener('click', (ev) => {
-        if (!ev.target.closest('#attachMenuVertical') && !ev.target.closest('#plusBtn')) {
-          attachMenuVertical.style.display = 'none';
-        }
-      });
-
-      // attach-card actions (delegation)
-      attachMenuVertical.addEventListener('click', async (ev) => {
-        const card = ev.target.closest('.attach-card');
-        if (!card) return;
-        const action = card.dataset.action;
-        attachMenuVertical.style.display = 'none';
-
+      const viewProfileBtn = $id('viewProfileBtn');
+      if (viewProfileBtn) viewProfileBtn.addEventListener('click', async () => {
+        const menu = $id('profileMenu'); if (menu) { menu.classList.add('hidden'); menu.style.display = 'none'; }
+        const modal = $id('profileModal'); if (modal) { modal.classList.remove('hidden'); }
         try {
-          if (action === 'camera') openFileSelector && openFileSelector(true);
-          else if (action === 'gallery') openFileSelector && openFileSelector(false);
-          else if (action === 'document') openDocSelector && openDocSelector();
-          else if (action === 'audio') openAudioSelector && openAudioSelector();
-          else if (action === 'location') {
-            if (!navigator.geolocation) return alert('Geolocation not supported.');
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-              const lat = pos.coords.latitude.toFixed(6);
-              const lng = pos.coords.longitude.toFixed(6);
-              const url = `https://www.google.com/maps?q=${lat},${lng}`;
-              const mapImg = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=600,300&z=15&l=map&pt=${lng},${lat},pm2rdm`;
-              try {
-                await fetch('/send_message', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ text: '', attachments: [{ type: 'location', lat, lng, url, map: mapImg }] }),
-                  credentials: 'same-origin'
-                });
-                cs.lastId = 0;
-                if (typeof poll === 'function') await poll();
-              } catch (err) { console.error('send location error', err); }
-            }, (err) => { alert('Could not get location: ' + err.message); });
+          const r = await fetch('/profile_get');
+          if (r.ok) {
+            const j = await r.json();
+            $id('profile_display_name') && ($id('profile_display_name').value = j.name || '');
+            $id('profile_status') && ($id('profile_status').value = j.status || '');
           }
-        } catch (err) {
-          console.error('attach action error', err);
-          alert('Attach action failed: ' + (err.message || err));
+        } catch (err) { console.error('profile fetch error', err); }
+      });
+      const closeProfile = $id('closeProfile'); if (closeProfile) closeProfile.addEventListener('click', () => { const modal = $id('profileModal'); if (modal) modal.classList.add('hidden'); });
+      const profileCancel = $id('profileCancel'); if (profileCancel) profileCancel.addEventListener('click', () => { const modal = $id('profileModal'); if (modal) modal.classList.add('hidden'); });
+
+      // incoming call controls
+      if (acceptCallBtn) {
+        acceptCallBtn.addEventListener('click', () => {
+          if (!cs.activeCallId) return;
+          cs.socket && cs.socket.emit('call:accept', { call_id: cs.activeCallId, from: cs.myName });
+          incomingCallBanner && incomingCallBanner.classList.add('hidden');
+          inCallControls && inCallControls.classList.remove('hidden');
+        });
+      }
+      if (declineCallBtn) {
+        declineCallBtn.addEventListener('click', () => {
+          if (!cs.activeCallId) return;
+          cs.socket && cs.socket.emit('call:hangup', { call_id: cs.activeCallId, from: cs.myName });
+          incomingCallBanner && incomingCallBanner.classList.add('hidden');
+          cs.activeCallId = null;
+        });
+      }
+
+      if (btnHangup) btnHangup.addEventListener('click', () => { if (cs.activeCallId) endCall && endCall(cs.activeCallId); inCallControls && inCallControls.classList.add('hidden'); });
+      if (btnMute) btnMute.addEventListener('click', () => { if (cs.activeCallId) toggleMute && toggleMute(cs.activeCallId); });
+      if (btnToggleVideo) btnToggleVideo.addEventListener('click', () => { if (cs.activeCallId) toggleVideo && toggleVideo(cs.activeCallId); });
+      if (btnSwitchCam) btnSwitchCam.addEventListener('click', () => { if (cs.activeCallId) switchCamera && switchCamera(cs.activeCallId); });
+
+      // header call buttons
+      const audioBtn = $id('audioCallBtn'), videoBtn = $id('videoCallBtn');
+      if (audioBtn) audioBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall && promptForPeerAndCall(false); });
+      if (videoBtn) videoBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall && promptForPeerAndCall(true); });
+
+      // close emoji/other drawers on background click
+      document.addEventListener('click', (ev) => {
+        if (ev.target && ev.target.closest && !ev.target.closest('.composer') && !ev.target.closest('#stickerPanel')) {
+          emojiDrawer && emojiDrawer.classList.remove('active');
+          composer && composer.classList.remove('up');
+          attachMenuVertical && (attachMenuVertical.style.display = 'none');
         }
       });
-    }
 
-    // poll modal wiring
-    const pollBtn = $id('pollBtn');
-    if (pollBtn) pollBtn.addEventListener('click', () => {
-      const modal = $id('pollModal');
-      if (modal) { modal.style.display = 'block'; modal.classList.remove('hidden'); }
-    });
-    const cancelPoll = $id('cancelPoll');
-    if (cancelPoll) cancelPoll.addEventListener('click', () => {
-      const modal = $id('pollModal');
-      if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
-    });
-    const addPollOption = $id('addPollOption');
-    if (addPollOption) addPollOption.addEventListener('click', () => {
-      const container = $id('pollOptions'); if (!container) return;
-      if (container.querySelectorAll('input[name="option"]').length >= 12) return alert('Max 12 options');
-      const inp = document.createElement('input');
-      inp.name = 'option';
-      inp.placeholder = 'Option ' + (container.querySelectorAll('input[name="option"]').length + 1);
-      inp.className = 'w-full p-2 border rounded mb-2';
-      container.appendChild(inp);
-    });
-    const pollForm = $id('pollForm');
-    if (pollForm) pollForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const q = ($id('poll_question') && $id('poll_question').value || '').trim();
-      const opts = Array.from(document.querySelectorAll('input[name="option"]')).map(i => i.value.trim()).filter(v => v);
-      if (!q || opts.length < 2) return alert('Question and at least 2 options required');
-      await fetch('/send_message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: q, attachments: [{ type: 'poll', options: opts }] }) });
-      const modal = $id('pollModal'); if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
-      const container = document.getElementById('messages') || document.querySelector('.messages');
-      if (container) container.innerHTML = '';
+      // start initial poll and periodic polling
       cs.lastId = 0;
-      await poll();
-    });
-
-    // message send wiring
-    if (sendBtn) {
-      try { sendBtn.removeAttribute && sendBtn.removeAttribute('onclick'); } catch (_) {}
-      sendBtn.addEventListener('click', async (e) => {
-        e && e.preventDefault && e.preventDefault();
-        e && e.stopPropagation && e.stopPropagation();
-        if (typeof window.sendMessage === 'function') {
-          try { await window.sendMessage(); } catch (err) { console.error('sendBtn -> sendMessage failed', err); }
-        } else {
-          console.warn('sendBtn clicked but sendMessage not ready');
-        }
-      });
-    }
-
-    if (inputEl) {
-      inputEl.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          if (sendBtn) sendBtn.click();
-        }
-      });
-
-      // typing indicator
-      inputEl.addEventListener('input', () => {
-        if (!cs.isTyping && cs.socket) { cs.socket.emit('typing', { from: cs.myName }); cs.isTyping = true; }
-        clearTimeout(cs.typingTimer);
-        cs.typingTimer = setTimeout(() => {
-          if (cs.isTyping && cs.socket) { cs.socket.emit('stop_typing', { from: cs.myName }); cs.isTyping = false; }
-        }, 1200);
-      });
-    }
-
-    // micButton behavior
-    if (micBtn) {
-      micBtn.addEventListener('click', () => toggleRecording && toggleRecording());
-      micBtn.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); micBtn.click(); } });
-    }
-
-    // legacy send binding (if page uses different references)
-    const legacySend = $id('sendBtn');
-    if (legacySend && legacySend !== sendBtn) {
-      legacySend.addEventListener('click', async () => {
-        const text = (inputEl ? (inputEl.value || '').trim() : '');
-        if (!text && cs.stagedFiles.length === 0) return;
-        await (sendMessage && sendMessage());
-      });
-    }
-
-    // profile toggles
-    const profileBtn = $id('profileBtn');
-    if (profileBtn) profileBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const menu = $id('profileMenu');
-      if (menu) { menu.classList.toggle('hidden'); menu.style.display = menu.classList.contains('hidden') ? 'none' : 'block'; }
-    });
-    const viewProfileBtn = $id('viewProfileBtn');
-    if (viewProfileBtn) viewProfileBtn.addEventListener('click', async () => {
-      const menu = $id('profileMenu'); if (menu) { menu.classList.add('hidden'); menu.style.display = 'none'; }
-      const modal = $id('profileModal'); if (modal) { modal.classList.remove('hidden'); }
-      try {
-        const r = await fetch('/profile_get');
-        if (r.ok) {
-          const j = await r.json();
-          $id('profile_display_name') && ($id('profile_display_name').value = j.name || '');
-          $id('profile_status') && ($id('profile_status').value = j.status || '');
-        }
-      } catch (err) { console.error('profile fetch error', err); }
-    });
-    const closeProfile = $id('closeProfile'); if (closeProfile) closeProfile.addEventListener('click', () => { const modal = $id('profileModal'); if (modal) modal.classList.add('hidden'); });
-    const profileCancel = $id('profileCancel'); if (profileCancel) profileCancel.addEventListener('click', () => { const modal = $id('profileModal'); if (modal) modal.classList.add('hidden'); });
-
-    // incoming call controls
-    if (acceptCallBtn) {
-      acceptCallBtn.addEventListener('click', () => {
-        if (!cs.activeCallId) return;
-        cs.socket && cs.socket.emit('call:accept', { call_id: cs.activeCallId, from: cs.myName });
-        incomingCallBanner && incomingCallBanner.classList.add('hidden');
-        inCallControls && inCallControls.classList.remove('hidden');
-      });
-    }
-    if (declineCallBtn) {
-      declineCallBtn.addEventListener('click', () => {
-        if (!cs.activeCallId) return;
-        cs.socket && cs.socket.emit('call:hangup', { call_id: cs.activeCallId, from: cs.myName });
-        incomingCallBanner && incomingCallBanner.classList.add('hidden');
-        cs.activeCallId = null;
-      });
-    }
-
-    if (btnHangup) btnHangup.addEventListener('click', () => { if (cs.activeCallId) endCall && endCall(cs.activeCallId); inCallControls && inCallControls.classList.add('hidden'); });
-    if (btnMute) btnMute.addEventListener('click', () => { if (cs.activeCallId) toggleMute && toggleMute(cs.activeCallId); });
-    if (btnToggleVideo) btnToggleVideo.addEventListener('click', () => { if (cs.activeCallId) toggleVideo && toggleVideo(cs.activeCallId); });
-    if (btnSwitchCam) btnSwitchCam.addEventListener('click', () => { if (cs.activeCallId) switchCamera && switchCamera(cs.activeCallId); });
-
-    // header call buttons
-    const audioBtn = $id('audioCallBtn'), videoBtn = $id('videoCallBtn');
-    if (audioBtn) audioBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall && promptForPeerAndCall(false); });
-    if (videoBtn) videoBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall && promptForPeerAndCall(true); });
-
-    // close emoji/other drawers on background click
-    document.addEventListener('click', (ev) => {
-      if (ev.target && ev.target.closest && !ev.target.closest('.composer') && !ev.target.closest('#stickerPanel')) {
-        emojiDrawer && emojiDrawer.classList.remove('active');
-        composer && composer.classList.remove('up');
-        attachMenuVertical && (attachMenuVertical.style.display = 'none');
+      if (typeof poll === 'function') {
+        poll();
+        setInterval(() => { try { poll(); } catch (err) { console.error('poll error', err); } }, 2000);
       }
-    });
 
-    // start initial poll and periodic polling
-    cs.lastId = 0;
-    if (typeof poll === 'function') {
-      poll();
-      setInterval(() => { try { poll(); } catch (err) { console.error('poll error', err); } }, 2000);
+      // register socket handlers now (if socket was created earlier)
+      if (cs.socket && typeof registerSocketHandlers === 'function') registerSocketHandlers();
+
+    } catch (err) {
+      console.error('Initialization error', err);
     }
 
-    // register socket handlers now (if socket was created earlier)
-    if (cs.socket && typeof registerSocketHandlers === 'function') registerSocketHandlers();
+  }); // end DOMContentLoaded
 
-  } catch (err) {
-    console.error('Initialization error', err);
+  /* ---------------------------
+     Other small helpers
+     --------------------------- */
+
+  function insertAtCursor(el, text){
+    try{
+      const start = el.selectionStart || 0;
+      const end = el.selectionEnd || 0;
+      const val = el.value || '';
+      el.value = val.slice(0,start) + text + val.slice(end);
+      const pos = start + text.length;
+      el.selectionStart = el.selectionEnd = pos;
+    }catch(e){ /* ignore */ }
   }
-}); // end DOMContentLoaded
+  window.insertAtCursor = insertAtCursor;
 
-/* ---------------------------
-   Other small helpers
-   --------------------------- */
-
-function insertAtCursor(el, text){
-  try{
-    const start = el.selectionStart || 0;
-    const end = el.selectionEnd || 0;
-    const val = el.value || '';
-    el.value = val.slice(0,start) + text + val.slice(end);
-    const pos = start + text.length;
-    el.selectionStart = el.selectionEnd = pos;
-  }catch(e){ /* ignore */ }
-}
-window.insertAtCursor = insertAtCursor;
-
-// prompt for peer and begin call (used by header buttons)
-async function promptForPeerAndCall(isVideo){
-  let peer = null;
-  // attempt to infer
-  const headerEl = $id('header') || document.querySelector('.chat-header') || document.querySelector('.header');
-  if(headerEl && headerEl.dataset && headerEl.dataset.peer) peer = headerEl.dataset.peer;
-  if(!peer){
-    const titleEl = $id('chatTitle') || document.querySelector('.chat-title') || document.querySelector('.title .username');
-    if(titleEl && titleEl.textContent && titleEl.textContent.trim()){
-      const txt = titleEl.textContent.trim();
-      if(txt && txt !== cs.myName) peer = txt;
-    }
-  }
-  if(!peer){
-    const rows = document.querySelectorAll('#messages .msg-row');
-    for(let i=rows.length-1;i>=0;i--){
-      const strong = rows[i].querySelector('.msg-meta-top strong') || rows[i].querySelector('strong');
-      if(strong && strong.textContent){
-        const name = strong.textContent.trim();
-        if(name && name !== cs.myName){ peer = name; break; }
+  // prompt for peer and begin call (used by header buttons)
+  async function promptForPeerAndCall(isVideo){
+    let peer = null;
+    // attempt to infer
+    const headerEl = $id('header') || document.querySelector('.chat-header') || document.querySelector('.header');
+    if(headerEl && headerEl.dataset && headerEl.dataset.peer) peer = headerEl.dataset.peer;
+    if(!peer){
+      const titleEl = $id('chatTitle') || document.querySelector('.chat-title') || document.querySelector('.title .username');
+      if(titleEl && titleEl.textContent && titleEl.textContent.trim()){
+        const txt = titleEl.textContent.trim();
+        if(txt && txt !== cs.myName) peer = txt;
       }
     }
+    if(!peer){
+      const rows = document.querySelectorAll('#messages .msg-row');
+      for(let i=rows.length-1;i>=0;i--){
+        const strong = rows[i].querySelector('.msg-meta-top strong') || rows[i].querySelector('strong');
+        if(strong && strong.textContent){
+          const name = strong.textContent.trim();
+          if(name && name !== cs.myName){ peer = name; break; }
+        }
+      }
+    }
+    if(!peer){
+      peer = prompt('Enter the username to call (e.g. alice):');
+      if(!peer) return;
+    }
+    try{ await startCall(peer, !!isVideo); }catch(err){ console.error('startCall failed', err); alert('Could not start call: ' + (err && err.message?err.message:err)); }
   }
-  if(!peer){
-    peer = prompt('Enter the username to call (e.g. alice):');
-    if(!peer) return;
-  }
-  try{ await startCall(peer, !!isVideo); }catch(err){ console.error('startCall failed', err); alert('Could not start call: ' + (err && err.message?err.message:err)); }
-}
-window.promptForPeerAndCall = promptForPeerAndCall;
+  window.promptForPeerAndCall = promptForPeerAndCall;
 
-// updateCallStateUI stub
-function updateCallStateUI(callId, state){ /* placeholder - extend as needed */ console.log('call state', callId, state); }
+  // updateCallStateUI stub
+  function updateCallStateUI(callId, state){ /* placeholder - extend as needed */ console.log('call state', callId, state); }
 
 })(); // end IIFE
+
+
+// NOTE: The following functions are intentionally outside the IIFE (as in your original).
+// They remain unchanged in behavior and placement.
 
 async function loadStickers(){
   try {
