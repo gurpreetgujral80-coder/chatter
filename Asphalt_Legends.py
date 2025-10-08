@@ -29,7 +29,7 @@ app.config.update(
 )
 PORT = int(os.environ.get("PORT", 5004))
 DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
-HEADING_IMG = "/static/heading.png"
+HEADING_IMG = "/static/heading.png"  # place your heading image here
 MAX_MESSAGES = 100
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp", "svg"}
 ALLOWED_VIDEO_EXT = {"mp4", "webm", "ogg"}
@@ -568,7 +568,7 @@ AVATAR_CREATE_HTML = r'''<!-- AVATAR_CREATE_HTML (updated) -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Create Avatar</title>
-<script src="https://cdn.tailwindcss.com"><\/script>
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
   body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background: #f8fafc; padding:18px;}
   .preview{ width:180px; height:180px; border-radius:50%; overflow:hidden; display:inline-block; background:#fff; box-shadow:0 6px 20px rgba(2,6,23,0.06); border:6px solid rgba(255,255,255,0.8); }
@@ -707,7 +707,7 @@ el('saveBtn').addEventListener('click', async ()=>{
 
 // initial preview
 updatePreview();
-<\/script>
+</script>
 </body>
 </html>
 '''
@@ -787,7 +787,7 @@ def proxy_dicebear():
 INDEX_HTML = r'''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Asphalt Legends — Login</title>
-<script src="https://cdn.tailwindcss.com"><\/script>
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
   body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
   .heading{display:flex;justify-content:center;gap:8px;align-items:center}
@@ -870,14 +870,14 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e)=>{
     setTimeout(()=> location.href='/chat', 300);
   }catch(err){ show('loginStatus','Login failed: '+(err.message||err), true); }
 });
-<\/script>
+</script>
 </body></html>
 '''
 # --- AVATAR page (full-featured generator using DiceBear HTTP API) ---
 AVATAR_HTML = r'''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Create Avatar — Asphalt Legends</title>
-<script src="https://cdn.tailwindcss.com"><\/script>
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
   body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial; padding:12px; background:#f8fafc; }
   .tile { display:inline-flex; gap:8px; padding:8px; border-radius:8px; background:#fff; box-shadow:0 6px 18px rgba(2,6,23,0.04); cursor:pointer; text-align:center; flex-direction:column; width:92px; align-items:center; margin:6px; }
@@ -1092,7 +1092,7 @@ document.getElementById('saveAvatar').addEventListener('click', async ()=>{
 
 // initial render
 renderPreview();
-<\/script>
+</script>
 </body></html>
 '''
 # ---- CHAT HTML (heavily modified) ----
@@ -1103,11 +1103,11 @@ CHAT_HTML = r'''<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>InfinityChatter ♾️ — Chat</title>
-  <script src="https://cdn.tailwindcss.com"><\/script>
+  <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- emoji-mart v5 browser build (exposes global EmojiMart for vanilla JS) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/emoji-mart@5.6.0/dist/browser.css">
-  <script src="https://cdn.jsdelivr.net/npm/emoji-mart@5.6.0/dist/browser.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/emoji-mart@5.6.0/dist/browser.js"></script>
 
   <style>
     :root{
@@ -1839,7 +1839,7 @@ CHAT_HTML = r'''<!doctype html>
           </div>
       </div>
 <!-- include socket.io and other scripts (socket server expected) -->
-<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"><\/script>
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
 <script>
 
@@ -4080,7 +4080,7 @@ function insertSticker(url){
     textarea.focus();
   }
 }
-<\/script>
+</script>
 </body>
 </html>
 ''' 
