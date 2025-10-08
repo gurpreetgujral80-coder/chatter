@@ -3545,11 +3545,8 @@ CHAT_HTML = r'''<!doctype html>
  /* ---------------------------
    Event wiring on DOMContentLoaded - single point of initialization
    --------------------------- */
-(function(){ // start IIFE
-  'use strict';
-
   document.addEventListener('DOMContentLoaded', () => {
-
+    'use strict';
     try {
       window._renderedMessageIds = window._renderedMessageIds || new Set();
 
