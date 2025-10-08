@@ -29,7 +29,7 @@ app.config.update(
 )
 PORT = int(os.environ.get("PORT", 5004))
 DB_PATH = os.path.join(os.path.dirname(__file__), "Asphalt_Legends.db")
-HEADING_IMG = "/static/heading.png"  # place your heading image here
+HEADING_IMG = "/static/heading.png"
 MAX_MESSAGES = 100
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp", "svg"}
 ALLOWED_VIDEO_EXT = {"mp4", "webm", "ogg"}
@@ -4537,4 +4537,3 @@ def poll_alias():
 if __name__ == "__main__":
     print("DB:", DB_PATH)
     socketio.run(app, host="0.0.0.0", port=PORT, debug=True)
-    
