@@ -2905,13 +2905,13 @@ CHAT_HTML = r'''<!doctype html>
         
     
         // === AUTO SCROLL ===
-        const container =
-          document.getElementById('messages') || document.querySelector('.messages');
-        if (container) container.scrollTop = container.scrollHeight;
-    
-      } catch (e) {
-        console.error('poll error', e);
-      }
+        try {
+          const container =
+            document.getElementById('messages') || document.querySelector('.messages');
+          if (container) container.scrollTop = container.scrollHeight;
+        } catch (e) {
+          console.error('poll error', e);
+        }
     }
     
 
