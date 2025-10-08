@@ -842,8 +842,6 @@ async function postJson(url, body){
     credentials: 'include'
   });
   const text = await r.text();
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
   try { return {ok:r.ok, json: JSON.parse(text), text}; } catch(e){ return {ok:r.ok, text}; }
 }
 
@@ -1086,8 +1084,6 @@ document.getElementById('saveAvatar').addEventListener('click', async ()=>{
   if(j.ok){
     alert('Avatar saved: ' + j.url);
     // open profile page in parent and set preview if possible
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     try{ window.opener && window.opener.postMessage({ avatarSaved: j.url }, '*'); }catch(e){}
   } else {
     alert('Save failed: ' + (j.error || 'unknown'));
@@ -1896,8 +1892,6 @@ CHAT_HTML = r'''<!doctype html>
           for (const f of atts) fd.append('file', f, f.name);
     
           res = await fetch('/send_composite_message', { method: 'POST', body: fd, credentials: 'same-origin' });
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           json = await res.json().catch(() => null);
     
           if (res.ok && json && json.message) {
@@ -1922,8 +1916,6 @@ try:  # inserted placeholder for JS-like structure
             credentials: 'same-origin'
           });
     
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           json = await res.json().catch(() => null);
     
           if (res.ok && json && json.message) {
@@ -1938,8 +1930,6 @@ try:  # inserted placeholder for JS-like structure
             return null;
           }
         }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       } catch (err) {
         console.error('sendMessage error', err);
         alert('Send error: ' + (err && err.message ? err.message : err));
@@ -2017,8 +2007,6 @@ try:  # inserted placeholder for JS-like structure
             } else {
               alert('Edit failed');
             }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           }).catch(()=>alert('Edit failed'));
         } else if (action.classList.contains('delete')) {
           if (!confirm('Delete this message?')) { hideMenu(); return; }
@@ -2028,8 +2016,6 @@ try:  # inserted placeholder for JS-like structure
           }).then(r => {
             if (r.ok && wrapper) wrapper.remove();
             else alert('Delete failed');
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           }).catch(()=>alert('Delete failed'));
         } else if (action.classList.contains('react')) {
           const emoji = prompt('React with emoji (e.g. ❤️):', '👍');
@@ -2041,8 +2027,6 @@ try:  # inserted placeholder for JS-like structure
               const rspan = document.createElement('span'); rspan.className='reaction'; rspan.textContent = emoji;
               wrapper.querySelector('.msg-meta-top')?.appendChild(rspan);
             } else alert('React failed');
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           }).catch(()=>alert('React failed'));
         }
     
@@ -2180,8 +2164,6 @@ try:  # inserted placeholder for JS-like structure
               document.body.appendChild(wrapper);
             }
         
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           } catch (err) {
             console.error('appendMessage error', err);
           }
@@ -2203,8 +2185,6 @@ try:  # inserted placeholder for JS-like structure
             const numeric = (mid !== null && !Number.isNaN(mid)) ? mid : (window.cs.lastId || 0);
             window.cs.lastId = Math.max(window.cs.lastId || 0, numeric);
           }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
         } catch(e){
           console.error('socket new_message handler error', e);
         }
@@ -2249,8 +2229,6 @@ try:  # inserted placeholder for JS-like structure
       createVideoThumbnailFromUrl(url, seekTo).then((data)=>{
         URL.revokeObjectURL(url);
         resolve(data);
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       }).catch(()=>{ URL.revokeObjectURL(url); resolve(null); });
     });
   }
@@ -2276,8 +2254,6 @@ try:  # inserted placeholder for JS-like structure
           if(video.readyState >= 2){ video.currentTime = t; }
           else { video.addEventListener('canplay', ()=> video.currentTime = t, { once:true }); }
           video.addEventListener('seeked', seekHandler, { once:true });
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           setTimeout(()=>{ try{ const canvas = document.createElement('canvas'); canvas.width=320; canvas.height=180; const ctx=canvas.getContext('2d'); ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); resolve(canvas.toDataURL()); }catch(e){ resolve(null);} }, 2500);
         }, { once:true });
         video.addEventListener('error', ()=> resolve(null));
@@ -2320,8 +2296,6 @@ try:  # inserted placeholder for JS-like structure
     
             // Optionally show Send/Discard buttons inside preview
             showVoicePreviewControls(file);
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           } catch (err) {
             console.error('Voice process error:', err);
             alert('Could not prepare voice message: ' + err.message);
@@ -2333,8 +2307,6 @@ try:  # inserted placeholder for JS-like structure
         mediaRecorder.start();
         recording = true;
         updateMicUI(true);
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       } catch (err) {
         console.error('Microphone error', err);
         alert('Could not start microphone: ' + (err.message || err));
@@ -2426,8 +2398,6 @@ try:  # inserted placeholder for JS-like structure
             const txt = await r.text();
             alert('Voice send failed: ' + txt);
           }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
         } catch (err) {
           alert('Voice send error: ' + (err && err.message ? err.message : err));
         }
@@ -2610,8 +2580,6 @@ try:  # inserted placeholder for JS-like structure
     if(videoInputs.length<=1) return alert('No other camera found');
     const currentId = call.currentCameraId;
     let next = videoInputs.find(d=>d.deviceId !== currentId); if(!next) next = videoInputs[0];
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     const newStream = await navigator.mediaDevices.getUserMedia({ video:{ deviceId:{ exact: next.deviceId } }, audio:false }).catch(()=>null);
     if(!newStream) return;
     const newTrack = newStream.getVideoTracks()[0];
@@ -2636,8 +2604,6 @@ try:  # inserted placeholder for JS-like structure
       if(videoSender){
         await videoSender.replaceTrack(screenTrack);
         screenTrack.onended = async ()=>{
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           const camStream = await navigator.mediaDevices.getUserMedia({ video:true }).catch(()=>null);
           if(camStream){
             const camTrack = camStream.getVideoTracks()[0];
@@ -2648,8 +2614,6 @@ try:  # inserted placeholder for JS-like structure
           }
         };
       }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     }catch(e){ console.warn('screen share failed', e); }
   }
 
@@ -2715,8 +2679,6 @@ try:  # inserted placeholder for JS-like structure
                 const container = document.getElementById('messages') || document.querySelector('.messages');
                 if (container) container.scrollTop = container.scrollHeight;
             
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
               } catch (err) {
                 console.error('poll error', err);
               }
@@ -2804,8 +2766,6 @@ try:  # inserted placeholder for JS-like structure
                         });
                         cs.lastId = 0;
                         if (typeof poll === 'function') await poll();
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
                       } catch (err) {
                         console.warn('vote failed', err);
                       }
@@ -2949,8 +2909,6 @@ try:  # inserted placeholder for JS-like structure
           document.getElementById('messages') || document.querySelector('.messages');
         if (container) container.scrollTop = container.scrollHeight;
     
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       } catch (e) {
         console.error('poll error', e);
       }
@@ -2964,8 +2922,6 @@ try:  # inserted placeholder for JS-like structure
     emojis.forEach(em=>{
       const el = document.createElement('div'); el.style.display='inline-flex'; el.style.padding='6px'; el.style.margin='4px'; el.style.cursor='pointer';
       el.innerText = em;
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       el.onclick = async (ev)=>{ ev.stopPropagation(); try{ await fetch('/react_message',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: msgId, emoji: em }) }); }catch(err){console.warn('react failed',err);} picker.remove(); if(messagesEl){ messagesEl.innerHTML=''; } cs.lastId=0; await poll(); };
       picker.appendChild(el);
     });
@@ -3042,8 +2998,6 @@ try:  # inserted placeholder for JS-like structure
         w.onclick = async ()=> { await fetch('/send_message',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text:'', attachments:[{ type:'sticker', url: gifUrl }] }) }); hideStickerPanel(); if(messagesEl){ messagesEl.innerHTML=''; } cs.lastId=0; await poll(); };
         panelGrid.appendChild(w);
       }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     }catch(e){
       try{
         const r2 = await fetch('/generated_gifs');
@@ -3056,8 +3010,6 @@ try:  # inserted placeholder for JS-like structure
           w.onclick = async ()=> { await fetch('/send_message',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text:'', attachments:[{ type:'sticker', url }] }) }); hideStickerPanel(); if(messagesEl){ messagesEl.innerHTML=''; } cs.lastId=0; await poll(); };
           panelGrid.appendChild(w);
         }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       }catch(e2){
         panelGrid.innerHTML = '<div>Error loading GIFs</div>';
       }
@@ -3103,8 +3055,6 @@ try:  # inserted placeholder for JS-like structure
         el.innerHTML = `<div class="msg-body"><div class="bubble them"><em>${escapeHtml((d && d.from) || 'Someone')} is typing…</em></div></div>`;
         messagesEl && messagesEl.appendChild(el);
         messagesEl && (messagesEl.scrollTop = messagesEl.scrollHeight);
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       }catch(e){ console.warn('typing handler err', e); }
     });
 
@@ -3123,8 +3073,6 @@ try:  # inserted placeholder for JS-like structure
         if(incomingCallerNameEl) incomingCallerNameEl.textContent = caller;
         if(incomingCallBanner) incomingCallBanner.classList.remove('hidden');
         cs.activeCallId = callId;
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       }catch(e){ console.warn(e); }
     });
 
@@ -3135,8 +3083,6 @@ try:  # inserted placeholder for JS-like structure
         const offer = await call.pc.createOffer();
         await call.pc.setLocalDescription(offer);
         cs.socket.emit('call:offer', { to: d.from, from: cs.myName, sdp: offer, call_id: callId });
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       }catch(e){ console.error('offer error', e); }
     });
 
@@ -3154,11 +3100,7 @@ try:  # inserted placeholder for JS-like structure
           await cs.calls[callId].pc.setLocalDescription(answer);
           cs.socket.emit('call:answer', { to: fromUser, from: cs.myName, sdp: answer, call_id: callId });
           showInCallUI(callId, fromUser, false);
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
         }catch(err){ console.error('handle offer error', err); }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       }catch(e){ console.warn('call:offer handler err', e); }
     });
 
@@ -3169,8 +3111,6 @@ try:  # inserted placeholder for JS-like structure
         await call.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
         updateCallStateUI(callId, 'connected');
         // optionally update server call start
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       }catch(e){ console.error('call answer error', e); }
     });
 
@@ -3183,8 +3123,6 @@ try:  # inserted placeholder for JS-like structure
     });
 
     cs.socket.on('call:ended', (d)=>{
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       try{ const callId = d.call_id; endCallLocal(callId, d.by); }catch(e){ console.warn(e); }
     });
 
@@ -3198,8 +3136,6 @@ try:  # inserted placeholder for JS-like structure
           const count = (counts[idx] !== undefined) ? counts[idx] : 0;
           btn.innerHTML = `${label} <span class="poll-count" style="float:right">— ${count} vote${count !== 1 ? 's' : ''}</span>`;
         });
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       }catch(e){ console.warn('poll_update err', e); }
     });
 
@@ -3256,8 +3192,6 @@ try:  # inserted placeholder for JS-like structure
       } else {
         _bgCtx.fillStyle = '#ffffff'; _bgCtx.fillRect(0,0,w,h);
       }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     }catch(e){ try{ _bgCtx.fillStyle = '#ffffff'; _bgCtx.fillRect(0,0,w,h); }catch(_){}
     }
     _bgDrawSize.w = w; _bgDrawSize.h = h;
@@ -3269,8 +3203,6 @@ try:  # inserted placeholder for JS-like structure
       const iy = Math.max(0, Math.min(_bgCanvas.height-1, Math.round(y)));
       const d = _bgCtx.getImageData(ix, iy, 1, 1).data;
       return { r: d[0], g: d[1], b: d[2] };
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     }catch(e){ return { r:255,g:255,b:255 }; }
   }
   function luminance(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
@@ -3360,8 +3292,6 @@ try:  # inserted placeholder for JS-like structure
       messagesEl.appendChild(wrapper);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       return wrapper;
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     } catch (err) {
       console.error('appendMessage error', err);
     }
@@ -3383,8 +3313,6 @@ try:  # inserted placeholder for JS-like structure
       // trigger input events
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.focus();
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     } catch (err) { console.error('insertAtCursor error', err); }
   };
 
@@ -3412,16 +3340,12 @@ try:  # inserted placeholder for JS-like structure
             const data = canvas.toDataURL('image/jpeg', 0.8);
             URL.revokeObjectURL(url);
             resolve(data);
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
           } catch (err) {
             URL.revokeObjectURL(url);
             resolve(null);
           }
         }, { once: true });
         // timeout fallback
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
         setTimeout(() => { try { URL.revokeObjectURL(url); } catch(_){}; resolve(null); }, 4000);
       } catch (err) { console.error('createVideoThumbnailFromFile', err); resolve(null); }
     });
@@ -3433,8 +3357,6 @@ try:  # inserted placeholder for JS-like structure
     if (!panel) return;
     panel.classList.add('active');
     panel.style.display = panel.style.display || 'block';
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     try { panel.inert = false; } catch(_) {}
   };
   window.hideStickerPanel = function hideStickerPanel() {
@@ -3442,8 +3364,6 @@ try:  # inserted placeholder for JS-like structure
     if (!panel) return;
     panel.classList.remove('active');
     panel.style.display = 'none';
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     try { panel.inert = true; } catch(_) {}
   };
   window.closeDrawer = window.hideStickerPanel;
@@ -3532,8 +3452,6 @@ try:  # inserted placeholder for JS-like structure
             } catch (err) { console.error('render incoming msg error', err); }
           }
           return;
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
         } catch (err) {
           // try next url
         }
@@ -3556,8 +3474,6 @@ try:  # inserted placeholder for JS-like structure
         s.on('connect', () => console.log('socket connected'));
         s.on('typing', (d) => console.log('peer typing', d));
       }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     } catch (err) { console.error('registerSocketHandlers', err); }
   };
 
@@ -3615,8 +3531,6 @@ try:  # inserted placeholder for JS-like structure
           }
         }
     
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       } catch (err) {
         console.error('toggleRecording error', err);
         alert('Recording failed: ' + err.message);
@@ -3752,8 +3666,6 @@ try:  # inserted placeholder for JS-like structure
                   });
                   cs.lastId = 0;
                   if (typeof poll === 'function') await poll();
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
                 } catch (err) {
                   console.warn('vote failed', err);
                 }
@@ -3816,8 +3728,6 @@ try:  # inserted placeholder for JS-like structure
           messagesEl.appendChild(wrapper);
           messagesEl.scrollTop = messagesEl.scrollHeight;
         }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       } catch (err) {
         console.error('appendMessage error', err);
       }
@@ -3918,13 +3828,9 @@ try:  # inserted placeholder for JS-like structure
                 });
                 cs.lastId = 0;
                 if (typeof poll === 'function') await poll();
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
               } catch (err) { console.error('send location error', err); }
             }, (err) => { alert('Could not get location: ' + err.message); });
           }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
         } catch (err) {
           console.error('attach action error', err);
           alert('Attach action failed: ' + (err.message || err));
@@ -3969,8 +3875,6 @@ try:  # inserted placeholder for JS-like structure
 
     // message send wiring
     if (sendBtn) {
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       try { sendBtn.removeAttribute && sendBtn.removeAttribute('onclick'); } catch (_) {}
       sendBtn.addEventListener('click', async (e) => {
         e && e.preventDefault && e.preventDefault();
@@ -4036,8 +3940,6 @@ try:  # inserted placeholder for JS-like structure
           $id('profile_display_name') && ($id('profile_display_name').value = j.name || '');
           $id('profile_status') && ($id('profile_status').value = j.status || '');
         }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       } catch (err) { console.error('profile fetch error', err); }
     });
     const closeProfile = $id('closeProfile'); if (closeProfile) closeProfile.addEventListener('click', () => { const modal = $id('profileModal'); if (modal) modal.classList.add('hidden'); });
@@ -4084,16 +3986,12 @@ try:  # inserted placeholder for JS-like structure
     cs.lastId = 0;
     if (typeof poll === 'function') {
       poll();
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
       setInterval(() => { try { poll(); } catch (err) { console.error('poll error', err); } }, 2000);
     }
 
     // register socket handlers now (if socket was created earlier)
     if (cs.socket && typeof registerSocketHandlers === 'function') registerSocketHandlers();
 
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
   } catch (err) {
     console.error('Initialization error', err);
   }
@@ -4112,8 +4010,6 @@ try:  # inserted placeholder for JS-like structure
       el.value = val.slice(0,start) + text + val.slice(end);
       const pos = start + text.length;
       el.selectionStart = el.selectionEnd = pos;
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     }catch(e){ /* ignore */ }
   }
   window.insertAtCursor = insertAtCursor;
@@ -4145,8 +4041,6 @@ try:  # inserted placeholder for JS-like structure
       peer = prompt('Enter the username to call (e.g. alice):');
       if(!peer) return;
     }
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
     try{ await startCall(peer, !!isVideo); }catch(err){ console.error('startCall failed', err); alert('Could not start call: ' + (err && err.message?err.message:err)); }
   }
   window.promptForPeerAndCall = promptForPeerAndCall;
@@ -4174,8 +4068,6 @@ async function loadStickers(){
       img.onclick = ()=> insertSticker(url);
       container.appendChild(img);
     });
-# FIX NOTE: Added dummy try wrapper to prevent syntax error
-try:  # inserted placeholder for JS-like structure
   } catch(err){
     console.error("Sticker load error:", err);
   }
@@ -4645,3 +4537,4 @@ def poll_alias():
 if __name__ == "__main__":
     print("DB:", DB_PATH)
     socketio.run(app, host="0.0.0.0", port=PORT, debug=True)
+    
