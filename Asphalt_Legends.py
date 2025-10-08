@@ -3910,8 +3910,33 @@ CHAT_HTML = r'''<!doctype html>
 
       // micButton behavior
       if (micBtn) {
-        micBtn.addEventListener('click', () => toggleRecording && toggleRecording());
-        micBtn.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); micBtn.click(); } });
+          let micBusy = false;
+          micBtn.addEventListener('click', async (ev) => {
+            ev.preventDefault();
+            if (micBusy) return;
+            micBusy = true;
+            try {
+              if (typeof toggleRecording === 'function') {
+                await toggleRecording();
+              } else if (typeof toggleMic === 'function') {
+                await toggleMic();
+              } else {
+                console.warn('No recording function found');
+              }
+            } catch (err) {
+              console.error('Mic click error:', err);
+            } finally {
+              setTimeout(() => { micBusy = false; }, 400); // debounce
+            }
+          });
+        
+          // Optional keyboard accessibility
+          micBtn.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+              ev.preventDefault();
+              micBtn.click();
+            }
+          });
       }
 
       // legacy send binding (if page uses different references)
