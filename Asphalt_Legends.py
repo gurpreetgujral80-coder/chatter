@@ -4462,15 +4462,15 @@ def on_call_control(data):
 def handle_identify(data):
     name = data.get('name')
     if name:
-        user_sid_map[name] = request.sid
+        USER_SID[name] = request.sid
         emit('identified', {'ok': True})
 
 @socketio.on('disconnect')
 def handle_disconnect():
     sid = request.sid
-    to_remove = [u for u, s in user_sid_map.items() if s == sid]
+    to_remove = [u for u, s in USER_SID.items() if s == sid]
     for u in to_remove:
-        user_sid_map.pop(u, None)
+        USER_SID.pop(u, None)
 
 @socketio.on('vote_poll')
 def handle_vote_poll(data):
@@ -4517,7 +4517,7 @@ def handle_vote_poll(data):
     socketio.emit('poll_update', {'message_id': mid, 'counts': counts})
 
     # send private poll view to this user
-    sid = user_sid_map.get(user)
+    sid = USER_SID.get(user)
     private = {
         'message_id': mid,
         'user': user,
