@@ -3542,63 +3542,63 @@ CHAT_HTML = r'''<!doctype html>
 
 })(); // end helper IIFE
 
-  /* ---------------------------
-     Event wiring on DOMContentLoaded - single point of initialization
-     --------------------------- */
+/* ---------------------------
+   Event wiring on DOMContentLoaded - single point of initialization
+   --------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
   'use strict';
-  
-  window._renderedMessageIds = window._renderedMessageIds || new Set();
-  
-  // assign DOM refs (use const/let to avoid globals)
-  const emojiBtn = $id('emojiBtn');
-  const composer = document.querySelector('.composer');
-  const textarea = $id('msg') || $id('textarea');
-  const inputEl = textarea;
-  window.inputEl = inputEl || null;
-  const micBtn = $id('mic');
-  const plusBtn = $id('plusBtn');
-  const attachMenuVertical = $id('attachMenuVertical') || (function () {
-    const el = document.createElement('div');
-    el.style.display = 'none';
-    // ensure querySelectorAll exists (fallback)
-    el.querySelectorAll = () => [];
-    return el;
-  })();
-  const sendBtn = $id('sendBtn');
-  const emojiDrawer = $id('stickerPanel') || $id('emojiDrawer');
-  const messagesEl = $id('messages');
-  const composerEl = $id('composer');
-  const composerMainEl = $id('composerMain') || document.querySelector('.composer-main');
-  const panel = $id('stickerPanel');
-  const panelGrid = $id('panelGrid');
-  const incomingCallBanner = $id('incomingCallBanner');
-  const incomingCallerNameEl = $id('incomingCallerName');
-  const acceptCallBtn = $id('acceptCallBtn');
-  const declineCallBtn = $id('declineCallBtn');
-  const inCallControls = $id('inCallControls');
-  const btnHangup = $id('btnHangup');
-  const btnMute = $id('btnMute');
-  const btnToggleVideo = $id('btnToggleVideo');
-  const btnSwitchCam = $id('btnSwitchCam');
- 
+  try {
+    window._renderedMessageIds = window._renderedMessageIds || new Set();
+
+    // assign DOM refs (use const/let to avoid globals)
+    const emojiBtn = $id('emojiBtn');
+    const composer = document.querySelector('.composer');
+    const textarea = $id('msg') || $id('textarea');
+    const inputEl = textarea;
+    window.inputEl = inputEl || null;
+    const micBtn = $id('mic');
+    const plusBtn = $id('plusBtn');
+    const attachMenuVertical = $id('attachMenuVertical') || (function () {
+      const el = document.createElement('div');
+      el.style.display = 'none';
+      // ensure querySelectorAll exists (fallback)
+      el.querySelectorAll = () => [];
+      return el;
+    })();
+    const sendBtn = $id('sendBtn');
+    const emojiDrawer = $id('stickerPanel') || $id('emojiDrawer');
+    const messagesEl = $id('messages');
+    const composerEl = $id('composer');
+    const composerMainEl = $id('composerMain') || document.querySelector('.composer-main');
+    const panel = $id('stickerPanel');
+    const panelGrid = $id('panelGrid');
+    const incomingCallBanner = $id('incomingCallBanner');
+    const incomingCallerNameEl = $id('incomingCallerName');
+    const acceptCallBtn = $id('acceptCallBtn');
+    const declineCallBtn = $id('declineCallBtn');
+    const inCallControls = $id('inCallControls');
+    const btnHangup = $id('btnHangup');
+    const btnMute = $id('btnMute');
+    const btnToggleVideo = $id('btnToggleVideo');
+    const btnSwitchCam = $id('btnSwitchCam');
+
     window.appendMessage = function appendMessage(m) {
       try {
         if (!m || typeof m.id === 'undefined') return;
         const mid = Number(m.id);
         if (window._renderedMessageIds.has(mid)) return; // skip duplicate
         window._renderedMessageIds.add(mid);
-    
+
         const me = (m.sender === cs.myName);
-    
+
         // Wrapper row
         const wrapper = document.createElement('div');
         wrapper.className = 'msg-row';
-    
+
         // Message body
         const body = document.createElement('div');
         body.className = 'msg-body';
-    
+
         // Meta (sender + tick)
         const meta = document.createElement('div');
         meta.className = 'msg-meta-top';
@@ -3609,11 +3609,11 @@ document.addEventListener('DOMContentLoaded', () => {
         meta.appendChild(leftMeta);
         meta.appendChild(rightMeta);
         body.appendChild(meta);
-    
+
         // Bubble
         const bubble = document.createElement('div');
         bubble.className = 'bubble ' + (me ? 'me' : 'them');
-    
+
         // Text
         if (m.text && m.text.trim().length > 0) {
           const textNode = document.createElement('div');
@@ -3622,7 +3622,7 @@ document.addEventListener('DOMContentLoaded', () => {
             (m.edited ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>' : '');
           bubble.appendChild(textNode);
         }
-    
+
         // Attachments
         (m.attachments || []).forEach(a => {
           if (a.type === 'sticker') {
@@ -3642,7 +3642,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const pollEl = document.createElement('div');
             pollEl.className = 'poll';
             pollEl.style.marginTop = '8px';
-    
+
             if (m.text && m.text.trim()) {
               const qEl = document.createElement('div');
               qEl.style.fontWeight = '600';
@@ -3650,7 +3650,7 @@ document.addEventListener('DOMContentLoaded', () => {
               qEl.textContent = m.text;
               pollEl.appendChild(qEl);
             }
-    
+
             const counts = a.counts || new Array(a.options.length).fill(0);
             a.options.forEach((opt, i) => {
               const btn = document.createElement('button');
@@ -3683,7 +3683,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bubble.appendChild(d);
           }
         });
-    
+
         // Reactions
         if (m.reactions && m.reactions.length) {
           const agg = {};
@@ -3691,7 +3691,7 @@ document.addEventListener('DOMContentLoaded', () => {
             agg[r.emoji] = agg[r.emoji] || new Set();
             agg[r.emoji].add(r.user);
           });
-    
+
           const reactionBar = document.createElement('div');
           reactionBar.className = 'reaction-bar';
           for (const emoji in agg) {
@@ -3711,7 +3711,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           bubble.appendChild(reactionBar);
         }
-    
+
         // 3-dot menu
         const menuBtn = document.createElement('button');
         menuBtn.className = 'three-dot';
@@ -3721,10 +3721,10 @@ document.addEventListener('DOMContentLoaded', () => {
           showMessageMenu(m, menuBtn);
         });
         bubble.appendChild(menuBtn);
-    
+
         body.appendChild(bubble);
         wrapper.appendChild(body);
-    
+
         // Append to messages container
         const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
         if (messagesEl) {
@@ -3795,21 +3795,21 @@ document.addEventListener('DOMContentLoaded', () => {
           window.addEventListener('scroll', () => { attachMenuVertical.style.display = 'none'; }, { once: true });
         }
       });
-    
+
       // click outside closes menu
       document.addEventListener('click', (ev) => {
         if (!ev.target.closest('#attachMenuVertical') && !ev.target.closest('#plusBtn')) {
           attachMenuVertical.style.display = 'none';
         }
       });
-    
+
       // attach-card actions (delegation)
       attachMenuVertical.addEventListener('click', async (ev) => {
         const card = ev.target.closest('.attach-card');
         if (!card) return;
         const action = card.dataset.action;
         attachMenuVertical.style.display = 'none';
-    
+
         try {
           if (action === 'camera') openFileSelector && openFileSelector(true);
           else if (action === 'gallery') openFileSelector && openFileSelector(false);
@@ -3889,7 +3889,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
-
 
     if (inputEl) {
       inputEl.addEventListener('keydown', function (e) {
@@ -3998,58 +3997,57 @@ document.addEventListener('DOMContentLoaded', () => {
   } catch (err) {
     console.error('Initialization error', err);
   }
-
 }); // end DOMContentLoaded
 
-  /* ---------------------------
-     Other small helpers
-     --------------------------- */
+/* ---------------------------
+   Other small helpers
+   --------------------------- */
 
-  function insertAtCursor(el, text){
-    try{
-      const start = el.selectionStart || 0;
-      const end = el.selectionEnd || 0;
-      const val = el.value || '';
-      el.value = val.slice(0,start) + text + val.slice(end);
-      const pos = start + text.length;
-      el.selectionStart = el.selectionEnd = pos;
-    }catch(e){ /* ignore */ }
+function insertAtCursor(el, text){
+  try{
+    const start = el.selectionStart || 0;
+    const end = el.selectionEnd || 0;
+    const val = el.value || '';
+    el.value = val.slice(0,start) + text + val.slice(end);
+    const pos = start + text.length;
+    el.selectionStart = el.selectionEnd = pos;
+  }catch(e){ /* ignore */ }
+}
+window.insertAtCursor = insertAtCursor;
+
+// prompt for peer and begin call (used by header buttons)
+async function promptForPeerAndCall(isVideo){
+  let peer = null;
+  // attempt to infer
+  const headerEl = $id('header') || document.querySelector('.chat-header') || document.querySelector('.header');
+  if(headerEl && headerEl.dataset && headerEl.dataset.peer) peer = headerEl.dataset.peer;
+  if(!peer){
+    const titleEl = $id('chatTitle') || document.querySelector('.chat-title') || document.querySelector('.title .username');
+    if(titleEl && titleEl.textContent && titleEl.textContent.trim()){
+      const txt = titleEl.textContent.trim();
+      if(txt && txt !== cs.myName) peer = txt;
+    }
   }
-  window.insertAtCursor = insertAtCursor;
-
-  // prompt for peer and begin call (used by header buttons)
-  async function promptForPeerAndCall(isVideo){
-    let peer = null;
-    // attempt to infer
-    const headerEl = $id('header') || document.querySelector('.chat-header') || document.querySelector('.header');
-    if(headerEl && headerEl.dataset && headerEl.dataset.peer) peer = headerEl.dataset.peer;
-    if(!peer){
-      const titleEl = $id('chatTitle') || document.querySelector('.chat-title') || document.querySelector('.title .username');
-      if(titleEl && titleEl.textContent && titleEl.textContent.trim()){
-        const txt = titleEl.textContent.trim();
-        if(txt && txt !== cs.myName) peer = txt;
+  if(!peer){
+    const rows = document.querySelectorAll('#messages .msg-row');
+    for(let i=rows.length-1;i>=0;i--){
+      const strong = rows[i].querySelector('.msg-meta-top strong') || rows[i].querySelector('strong');
+      if(strong && strong.textContent){
+        const name = strong.textContent.trim();
+        if(name && name !== cs.myName){ peer = name; break; }
       }
     }
-    if(!peer){
-      const rows = document.querySelectorAll('#messages .msg-row');
-      for(let i=rows.length-1;i>=0;i--){
-        const strong = rows[i].querySelector('.msg-meta-top strong') || rows[i].querySelector('strong');
-        if(strong && strong.textContent){
-          const name = strong.textContent.trim();
-          if(name && name !== cs.myName){ peer = name; break; }
-        }
-      }
-    }
-    if(!peer){
-      peer = prompt('Enter the username to call (e.g. alice):');
-      if(!peer) return;
-    }
-    try{ await startCall(peer, !!isVideo); }catch(err){ console.error('startCall failed', err); alert('Could not start call: ' + (err && err.message?err.message:err)); }
   }
-  window.promptForPeerAndCall = promptForPeerAndCall;
+  if(!peer){
+    peer = prompt('Enter the username to call (e.g. alice):');
+    if(!peer) return;
+  }
+  try{ await startCall(peer, !!isVideo); }catch(err){ console.error('startCall failed', err); alert('Could not start call: ' + (err && err.message?err.message:err)); }
+}
+window.promptForPeerAndCall = promptForPeerAndCall;
 
-  // updateCallStateUI stub
-  function updateCallStateUI(callId, state){ /* placeholder - extend as needed */ console.log('call state', callId, state); }
+// updateCallStateUI stub
+function updateCallStateUI(callId, state){ /* placeholder - extend as needed */ console.log('call state', callId, state); }
 
 })(); // end IIFE
 
