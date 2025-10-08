@@ -2634,284 +2634,287 @@ CHAT_HTML = r'''<!doctype html>
     alert('Call ended by ' + (by || 'local'));
   }
 
-  // expose end/toggle functions for external UI
-  window.toggleMute = toggleMute;
-  window.toggleVideo = toggleVideo;
-  window.switchCamera = switchCamera;
-  window.endCall = endCall;
-  window.shareScreen = shareScreen;
+    // expose end/toggle functions for external UI
+    window.toggleMute = toggleMute;
+    window.toggleVideo = toggleVideo;
+    window.switchCamera = switchCamera;
+    window.endCall = endCall;
+    window.shareScreen = shareScreen;
 
-      /* ---------------------------
-         Polling, rendering messages & reactions
-         --------------------------- */
-
-          async function poll() {
-              try {
-                const lastId = cs.lastId || 0;
-                const base = (typeof window.SERVER_URL === 'string' && window.SERVER_URL)
-                  ? window.SERVER_URL.replace(/\/$/, '')
-                  : '';
-                const url = base + `/poll_messages?since=${lastId}`;
-            
-                const resp = await fetch(url, { credentials: 'same-origin' });
-                if (!resp.ok) {
-                  console.debug(`poll() -> ${resp.status}`);
-                  return;
-                }
-            
-                const data = await resp.json();
-                if (!data || !data.length) return;
-            
-                for (const m of data) {
-                  const mid = Number(m.id || 0);
-                  if (mid && window._renderedMessageIds.has(mid)) continue;
-            
-                  // Delegate full rendering to appendMessage
-                  appendMessage(m);
-            
-                  if (mid) {
-                    window._renderedMessageIds.add(mid);
-                    cs.lastId = Math.max(cs.lastId || 0, mid);
-                  }
-                }
-            
-                // Auto-scroll handled inside appendMessage, or fallback:
-                const container = document.getElementById('messages') || document.querySelector('.messages');
-                if (container) container.scrollTop = container.scrollHeight;
-            
-              } catch (err) {
-                console.error('poll error', err);
-              }
-          }
-        
-          window.poll = poll;
-
-          // === META ===
-          const meta = document.createElement('div');
-          meta.className = 'msg-meta-top';
-          const leftMeta = document.createElement('div');
-          leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
-          const rightMeta = document.createElement('div');
-          rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
-          meta.appendChild(leftMeta);
-          meta.appendChild(rightMeta);
+    /* ---------------------------
+       Polling, rendering messages & reactions
+       --------------------------- */
     
-          // === BUBBLE ===
-          const hasText = m.text && m.text.trim().length > 0;
-          const attachments = m.attachments || [];
-          const bubble = document.createElement('div');
-          bubble.className = 'bubble ' + (me ? 'me' : 'them');
+    async function poll() {
+      try {
+        const lastId = cs.lastId || 0;
+        const base = (typeof window.SERVER_URL === 'string' && window.SERVER_URL)
+          ? window.SERVER_URL.replace(/\/$/, '')
+          : '';
+        const url = base + `/poll_messages?since=${lastId}`;
     
-          if (hasText) {
-            const textNode = document.createElement('div');
-            textNode.innerHTML =
-              escapeHtml(m.text) +
-              (m.edited
-                ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>'
-                : '');
-            bubble.appendChild(textNode);
-          }
-    
-          // === ATTACHMENTS ===
-          if (attachments && attachments.length) {
-            for (const a of attachments) {
-              if (a.type === 'sticker') {
-                const s = document.createElement('img');
-                s.src = a.url;
-                s.className = 'sticker';
-                s.style.marginTop = '8px';
-                s.style.maxWidth = '180px';
-                s.style.borderRadius = '8px';
-                bubble.appendChild(s);
-              } else if (a.type === 'poll') {
-                const p = document.createElement('div');
-                p.className = 'poll';
-                p.style.marginTop = '8px';
-    
-                if (m.text && m.text.trim()) {
-                  const qEl = document.createElement('div');
-                  qEl.style.fontWeight = '600';
-                  qEl.style.marginBottom = '6px';
-                  qEl.textContent = m.text;
-                  p.appendChild(qEl);
-                }
-    
-                if (a.options && a.options.length) {
-                  const list = document.createElement('div');
-                  list.style.display = 'flex';
-                  list.style.flexDirection = 'column';
-                  list.style.gap = '6px';
-                  const counts = a.counts || new Array(a.options.length).fill(0);
-                  const multi = !!a.multi;
-                  a.options.forEach((op, i) => {
-                    const optBtn = document.createElement('button');
-                    optBtn.className =
-                      'poll-option w-full px-3 py-2 rounded bg-gray-100 text-left';
-                    const count = counts[i] || 0;
-                    optBtn.innerHTML = `${op} <span class="poll-count" style="float:right">— ${count} vote${count !== 1 ? 's' : ''}</span>`;
-                    optBtn.dataset.messageId = m.id;
-                    optBtn.dataset.index = i;
-                    optBtn.dataset.multi = multi ? '1' : '0';
-                    optBtn.addEventListener('click', async (ev) => {
-                      ev.preventDefault();
-                      try {
-                        await fetch('/vote_poll', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            message_id: m.id,
-                            option: i,
-                            user: cs.myName
-                          })
-                        });
-                        cs.lastId = 0;
-                        if (typeof poll === 'function') await poll();
-                      } catch (err) {
-                        console.warn('vote failed', err);
-                      }
-                    });
-                    list.appendChild(optBtn);
-                  });
-                  p.appendChild(list);
-                }
-                bubble.appendChild(p);
-              } else {
-                const { element } = createAttachmentElement(a);
-                if (element) bubble.appendChild(element);
-              }
-            }
-          }
-    
-          // === REACTIONS ===
-          if (m.reactions && m.reactions.length) {
-            const agg = {};
-            for (const r of m.reactions) {
-              agg[r.emoji] = agg[r.emoji] || new Set();
-              agg[r.emoji].add(r.user);
-            }
-            const reactionBar = document.createElement('div');
-            reactionBar.className = 'reaction-bar';
-            for (const emoji in agg) {
-              const userset = agg[emoji];
-              const pill = document.createElement('div');
-              pill.className = 'reaction-pill';
-              const em = document.createElement('div');
-              em.className = 'reaction-emoji';
-              em.innerText = emoji;
-              const count = document.createElement('div');
-              count.style.fontSize = '0.85rem';
-              count.style.color = '#374151';
-              count.innerText = userset.size;
-              pill.appendChild(em);
-              pill.appendChild(count);
-              reactionBar.appendChild(pill);
-            }
-            bubble.appendChild(reactionBar);
-          }
-    
-          // === MESSAGE MENU ===
-          const menuBtn = document.createElement('button');
-          menuBtn.className = 'three-dot';
-          menuBtn.innerText = '⋯';
-          menuBtn.onclick = (ev) => {
-            ev.stopPropagation();
-            document.querySelectorAll('.menu:not(#profileMenu)').forEach(n => n.remove());
-            const menu = document.createElement('div');
-            menu.className = 'menu';
-            menu.style.position = 'absolute';
-            menu.style.zIndex = 200;
-            menu.style.background = 'white';
-            menu.style.border = '1px solid #e5e7eb';
-            menu.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)';
-            menu.style.borderRadius = '8px';
-            menu.style.padding = '8px';
-            menu.style.top = (menuBtn.getBoundingClientRect().bottom + 8) + 'px';
-            menu.style.left = (menuBtn.getBoundingClientRect().left - 160) + 'px';
-    
-            const del = document.createElement('div');
-            del.innerText = 'Delete';
-            del.style.cursor = 'pointer';
-            del.style.padding = '6px 8px';
-            del.onclick = async (e) => {
-              e.stopPropagation();
-              if (confirm('Delete this message?')) {
-                await fetch('/delete_message', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: m.id })
-                });
-                const container = document.getElementById('messages') || document.querySelector('.messages');
-                if (container) container.innerHTML = '';
-                cs.lastId = 0;
-                await poll();
-              }
-            };
-    
-            const forward = document.createElement('div');
-            forward.innerText = 'Forward';
-            forward.style.cursor = 'pointer';
-            forward.style.padding = '6px 8px';
-            forward.onclick = () => {
-              navigator.clipboard.writeText(m.text || '');
-              alert('Message copied for forwarding');
-            };
-    
-            const copy = document.createElement('div');
-            copy.innerText = 'Copy';
-            copy.style.cursor = 'pointer';
-            copy.style.padding = '6px 8px';
-            copy.onclick = () => {
-              navigator.clipboard.writeText(m.text || '');
-              alert('Copied to clipboard');
-            };
-    
-            const reshare = document.createElement('div');
-            reshare.innerText = 'Reshare';
-            reshare.style.cursor = 'pointer';
-            reshare.style.padding = '6px 8px';
-            reshare.onclick = () => {
-              alert('Reshare placeholder');
-            };
-    
-            const react = document.createElement('div');
-            react.innerText = 'React';
-            react.style.cursor = 'pointer';
-            react.style.padding = '6px 8px';
-            react.onclick = (ev2) => {
-              ev2.stopPropagation();
-              showEmojiPickerForMessage(m.id, menuBtn);
-            };
-    
-            menu.appendChild(copy);
-            menu.appendChild(forward);
-            menu.appendChild(reshare);
-            if (m.sender === cs.myName) menu.appendChild(del);
-            menu.appendChild(react);
-            document.body.appendChild(menu);
-    
-            const hide = () => {
-              menu.remove();
-              document.removeEventListener('click', hide);
-            };
-            setTimeout(() => document.addEventListener('click', hide), 50);
-          };
-    
-          bubble.appendChild(menuBtn);
-          wrapper.appendChild(body);
-    
-          if (messagesEl) messagesEl.appendChild(wrapper);
-    
-          if (m.id && Number(m.id) > (cs.lastId || 0)) cs.lastId = Number(m.id);
-        
-    
-        // === AUTO SCROLL ===
-        try {
-          const container =
-            document.getElementById('messages') || document.querySelector('.messages');
-          if (container) container.scrollTop = container.scrollHeight;
-        } catch (e) {
-          console.error('poll error', e);
+        const resp = await fetch(url, { credentials: 'same-origin' });
+        if (!resp.ok) {
+          console.debug(`poll() -> ${resp.status}`);
+          return;
         }
+    
+        const data = await resp.json();
+        if (!data || !data.length) return;
+    
+        for (const m of data) {
+          const mid = Number(m.id || 0);
+          if (mid && window._renderedMessageIds.has(mid)) continue;
+    
+          // Delegate full rendering to appendMessage
+          appendMessage(m);
+    
+          if (mid) {
+            window._renderedMessageIds.add(mid);
+            cs.lastId = Math.max(cs.lastId || 0, mid);
+          }
+        }
+    
+        // Auto-scroll handled inside appendMessage, or fallback:
+        const container = document.getElementById('messages') || document.querySelector('.messages');
+        if (container) container.scrollTop = container.scrollHeight;
+    
+      } catch (err) {
+        console.error('poll error', err);
+      }
+    }
+    
+    window.poll = poll;
+    
+    /* ---------------------------
+       Message rendering helpers
+       --------------------------- */
+    
+    function appendMessage(m) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'msg-row';
+      const body = document.createElement('div');
+      body.className = 'msg-body';
+    
+      const me = m.sender === cs.myName;
+    
+      // === META ===
+      const meta = document.createElement('div');
+      meta.className = 'msg-meta-top';
+      const leftMeta = document.createElement('div');
+      leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
+      const rightMeta = document.createElement('div');
+      rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+      meta.appendChild(leftMeta);
+      meta.appendChild(rightMeta);
+    
+      // === BUBBLE ===
+      const hasText = m.text && m.text.trim().length > 0;
+      const attachments = m.attachments || [];
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble ' + (me ? 'me' : 'them');
+    
+      if (hasText) {
+        const textNode = document.createElement('div');
+        textNode.innerHTML =
+          escapeHtml(m.text) +
+          (m.edited
+            ? '<span style="font-size:.7rem;color:#9ca3af">(edited)</span>'
+            : '');
+        bubble.appendChild(textNode);
+      }
+    
+      // === ATTACHMENTS ===
+      if (attachments && attachments.length) {
+        for (const a of attachments) {
+          if (a.type === 'sticker') {
+            const s = document.createElement('img');
+            s.src = a.url;
+            s.className = 'sticker';
+            s.style.marginTop = '8px';
+            s.style.maxWidth = '180px';
+            s.style.borderRadius = '8px';
+            bubble.appendChild(s);
+          } else if (a.type === 'poll') {
+            const p = document.createElement('div');
+            p.className = 'poll';
+            p.style.marginTop = '8px';
+    
+            if (m.text && m.text.trim()) {
+              const qEl = document.createElement('div');
+              qEl.style.fontWeight = '600';
+              qEl.style.marginBottom = '6px';
+              qEl.textContent = m.text;
+              p.appendChild(qEl);
+            }
+    
+            if (a.options && a.options.length) {
+              const list = document.createElement('div');
+              list.style.display = 'flex';
+              list.style.flexDirection = 'column';
+              list.style.gap = '6px';
+              const counts = a.counts || new Array(a.options.length).fill(0);
+              const multi = !!a.multi;
+              a.options.forEach((op, i) => {
+                const optBtn = document.createElement('button');
+                optBtn.className =
+                  'poll-option w-full px-3 py-2 rounded bg-gray-100 text-left';
+                const count = counts[i] || 0;
+                optBtn.innerHTML = `${op} <span class="poll-count" style="float:right">— ${count} vote${count !== 1 ? 's' : ''}</span>`;
+                optBtn.dataset.messageId = m.id;
+                optBtn.dataset.index = i;
+                optBtn.dataset.multi = multi ? '1' : '0';
+                optBtn.addEventListener('click', async (ev) => {
+                  ev.preventDefault();
+                  try {
+                    await fetch('/vote_poll', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        message_id: m.id,
+                        option: i,
+                        user: cs.myName
+                      })
+                    });
+                    cs.lastId = 0;
+                    if (typeof poll === 'function') await poll();
+                  } catch (err) {
+                    console.warn('vote failed', err);
+                  }
+                });
+                list.appendChild(optBtn);
+              });
+              p.appendChild(list);
+            }
+            bubble.appendChild(p);
+          } else {
+            const { element } = createAttachmentElement(a);
+            if (element) bubble.appendChild(element);
+          }
+        }
+      }
+    
+      // === REACTIONS ===
+      if (m.reactions && m.reactions.length) {
+        const agg = {};
+        for (const r of m.reactions) {
+          agg[r.emoji] = agg[r.emoji] || new Set();
+          agg[r.emoji].add(r.user);
+        }
+        const reactionBar = document.createElement('div');
+        reactionBar.className = 'reaction-bar';
+        for (const emoji in agg) {
+          const userset = agg[emoji];
+          const pill = document.createElement('div');
+          pill.className = 'reaction-pill';
+          const em = document.createElement('div');
+          em.className = 'reaction-emoji';
+          em.innerText = emoji;
+          const count = document.createElement('div');
+          count.style.fontSize = '0.85rem';
+          count.style.color = '#374151';
+          count.innerText = userset.size;
+          pill.appendChild(em);
+          pill.appendChild(count);
+          reactionBar.appendChild(pill);
+        }
+        bubble.appendChild(reactionBar);
+      }
+    
+      // === MESSAGE MENU ===
+      const menuBtn = document.createElement('button');
+      menuBtn.className = 'three-dot';
+      menuBtn.innerText = '⋯';
+      menuBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        document.querySelectorAll('.menu:not(#profileMenu)').forEach(n => n.remove());
+        const menu = document.createElement('div');
+        menu.className = 'menu';
+        menu.style.position = 'absolute';
+        menu.style.zIndex = 200;
+        menu.style.background = 'white';
+        menu.style.border = '1px solid #e5e7eb';
+        menu.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)';
+        menu.style.borderRadius = '8px';
+        menu.style.padding = '8px';
+        menu.style.top = (menuBtn.getBoundingClientRect().bottom + 8) + 'px';
+        menu.style.left = (menuBtn.getBoundingClientRect().left - 160) + 'px';
+    
+        const del = document.createElement('div');
+        del.innerText = 'Delete';
+        del.style.cursor = 'pointer';
+        del.style.padding = '6px 8px';
+        del.onclick = async (e) => {
+          e.stopPropagation();
+          if (confirm('Delete this message?')) {
+            await fetch('/delete_message', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: m.id })
+            });
+            const container = document.getElementById('messages') || document.querySelector('.messages');
+            if (container) container.innerHTML = '';
+            cs.lastId = 0;
+            await poll();
+          }
+        };
+    
+        const forward = document.createElement('div');
+        forward.innerText = 'Forward';
+        forward.style.cursor = 'pointer';
+        forward.style.padding = '6px 8px';
+        forward.onclick = () => {
+          navigator.clipboard.writeText(m.text || '');
+          alert('Message copied for forwarding');
+        };
+    
+        const copy = document.createElement('div');
+        copy.innerText = 'Copy';
+        copy.style.cursor = 'pointer';
+        copy.style.padding = '6px 8px';
+        copy.onclick = () => {
+          navigator.clipboard.writeText(m.text || '');
+          alert('Copied to clipboard');
+        };
+    
+        const react = document.createElement('div');
+        react.innerText = 'React';
+        react.style.cursor = 'pointer';
+        react.style.padding = '6px 8px';
+        react.onclick = (ev2) => {
+          ev2.stopPropagation();
+          showEmojiPickerForMessage(m.id, menuBtn);
+        };
+    
+        menu.appendChild(copy);
+        menu.appendChild(forward);
+        if (m.sender === cs.myName) menu.appendChild(del);
+        menu.appendChild(react);
+        document.body.appendChild(menu);
+    
+        const hide = () => {
+          menu.remove();
+          document.removeEventListener('click', hide);
+        };
+        setTimeout(() => document.addEventListener('click', hide), 50);
+      };
+    
+      bubble.appendChild(meta);
+      bubble.appendChild(menuBtn);
+      body.appendChild(bubble);
+      wrapper.appendChild(body);
+    
+      const messagesEl = document.getElementById('messages');
+      if (messagesEl) messagesEl.appendChild(wrapper);
+    
+      // === AUTO SCROLL ===
+      try {
+        const container =
+          document.getElementById('messages') || document.querySelector('.messages');
+        if (container) container.scrollTop = container.scrollHeight;
+      } catch (e) {
+        console.error('auto-scroll error', e);
+      }
     }
     
 
