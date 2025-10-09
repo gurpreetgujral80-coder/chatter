@@ -1116,14 +1116,16 @@ CHAT_HTML = r'''<!doctype html>
     }
 
     /* page background image */
-    body{
+    body {
       font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      background: url('/static/IMG_5939.jpeg') no-repeat center center fixed;
+      background-image: url('/static/IMG_5939.jpeg');
+      background-repeat: no-repeat;
+      background-position: center center;
+      background-attachment: fixed; /* key: fixes background to viewport */
       background-size: cover;
-      overflow: hidden;
-      margin:0;
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
+      margin: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     header {
@@ -3552,12 +3554,12 @@ CHAT_HTML = r'''<!doctype html>
       window._renderedMessageIds = window._renderedMessageIds || new Set();
 
       // assign DOM refs (use const/let to avoid globals)
-      const emojiBtn = $id('emojiBtn');
+      const emojiBtn = $id('emojiBtn') || $id('emoji') || document.querySelector('.emoji-button') || document.querySelector('#emojiBtn');
       const composer = document.querySelector('.composer');
       const textarea = $id('msg') || $id('textarea');
       const inputEl = textarea;
       window.inputEl = inputEl || null;
-      const micBtn = $id('mic');
+      const micBtn = $id('micBtn') || $id('mic') || document.querySelector('.mic-button');
       const plusBtn = $id('plusBtn');
       const attachMenuVertical = $id('attachMenuVertical') || (function () {
         const el = document.createElement('div');
