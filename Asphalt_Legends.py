@@ -1120,6 +1120,7 @@ CHAT_HTML = r'''<!doctype html>
       font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
       background: url('/static/IMG_5939.jpeg') no-repeat center center fixed;
       background-size: cover;
+      overflow: hidden;
       margin:0;
       -webkit-font-smoothing:antialiased;
       -moz-osx-font-smoothing:grayscale;
