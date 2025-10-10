@@ -12,6 +12,7 @@ import base64
 import requests
 import tempfile
 from datetime import datetime
+from selenium.webdriver.chrome.options import Options
 from flask import (
     Flask, render_template_string, request, jsonify, session,
     redirect, url_for, send_from_directory, abort
