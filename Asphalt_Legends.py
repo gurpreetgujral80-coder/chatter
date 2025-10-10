@@ -5249,8 +5249,8 @@ driver.execute_script("""
       // ---------- Sticker sources: user avatars (m1..m20, a1..a20) + moving-sticker generators ----------
       const avatarStickers = [];
       for (let i = 1; i <= 78; i++) {
-        avatarStickers.push(`/static/avatar/m${i}.png`);
-        //avatarStickers.push(`/static/avatar/a${i}.png`);
+        avatarStickers.push(`/static/m${i}.png`);
+        //avatarStickers.push(`/static/a${i}.png`);
       }
     
       // curated GIF/sticker id pools (much larger than before — cycles & mixes to create many unique URLs)
