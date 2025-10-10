@@ -11,6 +11,10 @@ import pathlib
 import base64
 import requests  
 from datetime import datetime
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+# Open your web app (the one you want to inject JS into)
+driver.get("https://infinity-chatter.onrender.com")
 from flask import (
     Flask, render_template_string, request, jsonify, session,
     redirect, url_for, send_from_directory, abort
@@ -5175,6 +5179,14 @@ def poll_alias():
     since = request.args.get('lastId', request.args.get('since', 0, type=int), type=int)
     msgs = fetch_messages(since)
     return jsonify(msgs)
+
+chrome_options = Options()
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-notifications")
+# chrome_options.add_argument("--headless")  # uncomment if you want no window
+
+driver = webdriver.Chrome(options=chrome_options)
 
 driver.execute_script("""
     (async function drawerMic_v4_infinite_patched() {
