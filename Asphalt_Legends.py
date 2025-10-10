@@ -2113,7 +2113,7 @@ CHAT_HTML = r'''<!doctype html>
         banner.remove();
       };
   };
-
+  
   async function sendMessage(textArg, attsArg) {
       const inputEl = document.querySelector('#msg') || document.querySelector('#textarea');
       const text = (typeof textArg === 'string') ? textArg.trim() : (inputEl ? (inputEl.value || '').trim() : '');
@@ -4285,7 +4285,10 @@ CHAT_HTML = r'''<!doctype html>
         
                 // emit existing server event for outgoing
                 cs.socket && cs.socket.emit && cs.socket.emit('call_outgoing', { to: u, isVideo: (pendingCallType === 'video'), from: cs.myName });
-        
+                
+                cs.socket.emit("call_outgoing", { to: peerName, from: cs.myName, isVideo });
+                showWhatsAppOutgoingBanner(peerName, isVideo);
+
                 // create a local pending call id (server will also make one)
                 pendingCallId = 'call-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
                 // store in cs so other handlers can access
