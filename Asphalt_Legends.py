@@ -575,87 +575,335 @@ def avatar_save():
     except Exception as e:
         return f"error: {e}", 500
 
-# --- Add: simple call pages (audio and video)
 AUDIO_CALL_HTML = r"""
-<!doctype html><html><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Audio Call</title>
-  <style>body{font-family:Inter,system-ui;margin:0;background:#111;color:#fff} .call-wrap{padding:12px}</style>
-</head><body>
-  <div class="call-wrap">
-    <h2>Audio Call</h2>
-    <p id="status">Connecting...</p>
-    <audio id="localAudio" autoplay muted></audio>
-    <audio id="remoteAudio" autoplay></audio>
-    <div style="margin-top:12px">
-      <button id="endBtn">End</button>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Audio Call — Asphalt Legends</title>
+  <style>
+    :root{--bg:#0b1320;--panel:#0f1b2b;--accent:#25D366;--muted:#b6c2cf}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial}
+    body{background:linear-gradient(180deg,#08121b 0%, #071018 100%);color:#e6eef6;display:flex;align-items:center;justify-content:center}
+    .call-card{width:100%;max-width:420px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:14px;padding:20px;box-shadow:0 8px 24px rgba(2,6,23,0.6)}
+    .avatar{width:120px;height:120px;border-radius:50%;background:#203444;display:flex;align-items:center;justify-content:center;font-size:42px;margin:0 auto 16px}
+    .name{font-size:20px;text-align:center;margin-bottom:6px}
+    .status{font-size:13px;text-align:center;color:var(--muted);margin-bottom:18px}
+    .controls{display:flex;gap:12px;justify-content:center}
+    .btn{background:rgba(255,255,255,0.04);border:0;padding:12px;border-radius:50%;width:56px;height:56px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+    .btn.end{background:#e53935;color:#fff;width:68px;height:68px}
+    .small{font-size:12px;color:var(--muted);text-align:center;margin-top:12px}
+    .hidden{display:none}
+    .top-actions{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+    .muted-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-left:6px}
+  </style>
+</head>
+<body>
+  <div class="call-card" role="main">
+    <div class="top-actions">
+      <div style="display:flex;gap:10px;align-items:center">
+        <div style="width:10px;height:10px;border-radius:50%;background:#33cc33" aria-hidden></div>
+        <div style="font-weight:600">Audio Call</div>
+      </div>
+      <div style="font-size:12px;color:var(--muted)">Asphalt Legends</div>
     </div>
+
+    <div id="avatar" class="avatar" aria-hidden>📞</div>
+    <div id="peerName" class="name">Connecting…</div>
+    <div id="callState" class="status">Preparing call</div>
+
+    <div class="controls">
+      <button id="muteBtn" class="btn" title="Mute/unmute microphone">🔇</button>
+      <button id="endBtn" class="btn end" title="End call">⛔</button>
+      <button id="speakerBtn" class="btn" title="Toggle speaker output">🔊</button>
+    </div>
+
+    <div class="small" id="timeCounter">00:00</div>
   </div>
 
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
   <script>
-    (async function(){
-      const params = new URLSearchParams(location.search);
-      const callId = params.get('call_id');
-      const to = params.get('to');
-      const socket = io();
-      const me = "{{ session.get('username', 'me') }}";
-      document.getElementById('status').textContent = 'Waiting for peer...';
+    // Template-provided username (available via Flask session) - Jinja will replace it.
+    const MYNAME = String({{ (session.get('username')|tojson) or '""' }}).replace(/^"|"$/g, '');
 
-      // Basic wiring: notify server we joined the call page
-      socket.emit('identify', { name: me });
+    // Read parameters from URL: call_id, role (caller|callee), peer (the other username)
+    const params = new URLSearchParams(location.search);
+    const CALL_ID = params.get('call_id');
+    const PEER = params.get('peer') || params.get('to') || params.get('from') || '';
+    const IS_VIDEO = (params.get('is_video') === '1' || params.get('is_video') === 'true');
 
-      document.getElementById('endBtn').addEventListener('click', ()=> {
-        if(callId) socket.emit('call_end', { call_id: callId, from: me });
-        location.href = '/chat';
-      });
+    const socket = io();
+    if (MYNAME) socket.emit('register_socket', {username: MYNAME});
 
-      socket.on('connect', ()=> console.log('socket connected for audio page'));
+    let pc = null;
+    let localStream = null;
+    let startTime = null;
+    let timerInterval = null;
 
-      // You can expand this page to reuse your WebRTC code (createPeer, offer/answer)
-      // For now we just show minimal structure; advanced WebRTC will reuse your
-      // existing in-page setup functions (setupPeerConnection etc.).
+    const peerNameEl = document.getElementById('peerName');
+    const callStateEl = document.getElementById('callState');
+    const avatarEl = document.getElementById('avatar');
+    const timeEl = document.getElementById('timeCounter');
+
+    peerNameEl.textContent = PEER || 'Unknown';
+
+    function formatTime(s){const m=Math.floor(s/60);const ss=s%60;return String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0')}
+    function startTimer(){startTime = Date.now(); timerInterval = setInterval(()=>{timeEl.textContent = formatTime(Math.floor((Date.now()-startTime)/1000))},1000)}
+    function stopTimer(){if(timerInterval){clearInterval(timerInterval);timerInterval=null}}
+
+    function setState(text){callStateEl.textContent = text}
+
+    async function ensureLocalStream(){
+      if (localStream) return localStream;
+      try{
+        localStream = await navigator.mediaDevices.getUserMedia({audio:true});
+        return localStream;
+      }catch(e){console.error('getUserMedia failed', e); setState('Microphone access denied'); throw e}
+    }
+
+    function createPeerConnection(){
+      pc = new RTCPeerConnection();
+      pc.onicecandidate = (ev)=>{ if(ev.candidate){ socket.emit('call:candidate', {to: PEER, from: MYNAME, candidate: ev.candidate, call_id: CALL_ID}) } };
+      pc.ontrack = (ev)=>{ // single remote audio track
+        const [remoteStream] = ev.streams;
+        // play remote audio element
+        let audio = document.getElementById('remoteAudio');
+        if(!audio){ audio = document.createElement('audio'); audio.id='remoteAudio'; audio.autoplay=true; audio.style.display='none'; document.body.appendChild(audio) }
+        audio.srcObject = remoteStream;
+      };
+      return pc;
+    }
+
+    // Caller flow: create offer and send to peer
+    async function callerStart(){
+      setState('Calling');
+      await ensureLocalStream();
+      pc = createPeerConnection();
+      localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('call:offer', {to: PEER, from: MYNAME, sdp: offer, call_id: CALL_ID});
+    }
+
+    // Callee flow: when offer received, create answer
+    socket.on('call:offer', async (data)=>{
+      if(!CALL_ID || data.call_id !== CALL_ID) return; // ignore other calls
+      setState('Incoming call');
+      // Auto-accept (WhatsApp-like behavior when visiting call page) — user can hang up
+      try{
+        await ensureLocalStream();
+        pc = createPeerConnection();
+        localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+        const desc = new RTCSessionDescription(data.sdp);
+        await pc.setRemoteDescription(desc);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('call:answer', {to: data.from, from: MYNAME, sdp: answer, call_id: CALL_ID});
+        setState('Connected'); startTimer();
+      }catch(e){console.error(e); setState('Failed to join')}
+    });
+
+    socket.on('call:answer', async (data)=>{
+      if(!CALL_ID || data.call_id !== CALL_ID) return; if(!pc) return;
+      try{ const desc = new RTCSessionDescription(data.sdp); await pc.setRemoteDescription(desc); setState('Connected'); startTimer(); }catch(e){console.error(e)}
+    });
+
+    socket.on('call:candidate', async (data)=>{ if(!CALL_ID || data.call_id !== CALL_ID) return; try{ if(pc && data.candidate) await pc.addIceCandidate(data.candidate); }catch(e){console.warn('addIce failed',e)} });
+
+    socket.on('call:ended', (data)=>{ if(!CALL_ID || data.call_id !== CALL_ID) return; endCall(false); });
+
+    function endCall(emit=true){ stopTimer(); setState('Call ended'); if(pc){ try{pc.getSenders().forEach(s=>{try{s.track&&s.track.stop()}catch(e){} }); pc.close(); }catch(e){} pc=null } if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null } if(emit && CALL_ID){ socket.emit('call:hangup', {call_id: CALL_ID, from: MYNAME}) } // small UI feedback
+      setTimeout(()=>{ window.close && window.close() }, 1200);
+    }
+
+    document.getElementById('endBtn').addEventListener('click', ()=>endCall(true));
+
+    // mute toggle
+    let muted=false; document.getElementById('muteBtn').addEventListener('click', ()=>{ if(!localStream) return; muted = !muted; localStream.getAudioTracks().forEach(t=>t.enabled = !muted); document.getElementById('muteBtn').textContent = muted? '🎙️' : '🔇'; callStateEl.textContent = muted? 'Muted' : 'Connected' });
+
+    document.getElementById('speakerBtn').addEventListener('click', ()=>{ // attempt to toggle audio output sink to speaker (if supported)
+      const audio = document.getElementById('remoteAudio'); if(!audio) return; const current = audio.dataset.spk||'default'; // not robust across browsers
+      setState('Toggling speaker'); try{ if(typeof audio.setSinkId === 'function'){ const next = current==='default' ? 'speaker' : 'default'; audio.setSinkId(next).then(()=>{ audio.dataset.spk = next; setState('Connected') }).catch(()=>{ setState('Speaker not supported') }) }else setState('Not supported') }catch(e){setState('Error')}
+    });
+
+    // If the page was opened by the caller, auto-start
+    (async ()=>{
+      if(!MYNAME){ setState('Please sign in first'); return }
+      if(!CALL_ID){ setState('Missing call id'); return }
+      // If URL contains role=caller, start caller flow. If not specified, try to start as caller when "from" equals MYNAME
+      const role = params.get('role');
+      const fromParam = params.get('from') || '';
+      if(role === 'caller' || (fromParam && fromParam === MYNAME)){
+        try{ await callerStart(); }catch(e){console.error(e);}
+      } else {
+        setState('Waiting for incoming call');
+      }
     })();
+
+    // small UX: when user navigates away, hang up
+    window.addEventListener('beforeunload', ()=>{ endCall(true) });
   </script>
-</body></html>
+</body>
+</html>
 """
 
 VIDEO_CALL_HTML = r"""
-<!doctype html><html><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Video Call</title>
-  <style>body{font-family:Inter,system-ui;margin:0;background:#000;color:#fff} .call-wrap{padding:8px}</style>
-</head><body>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Video Call — Asphalt Legends</title>
+  <style>
+    :root{--bg:#071021;--panel:#0f1720;--muted:#9fb0bf}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+    body{background:linear-gradient(180deg,#02101a,#04121a);display:flex;align-items:center;justify-content:center;color:#eaf4ff}
+    .call-wrap{width:100%;max-width:980px;height:80vh;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+    .videos{flex:1;display:grid;grid-template-columns:1fr 320px;gap:12px}
+    .large-video, .small-video{background:#071621;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative}
+    video{width:100%;height:100%;object-fit:cover}
+    .controls{display:flex;gap:12px;justify-content:center;padding:8px}
+    .btn{background:rgba(255,255,255,0.04);border:0;padding:12px;border-radius:10px;cursor:pointer;color:inherit}
+    .btn.end{background:#ff3b30;color:#fff;padding:14px;border-radius:12px}
+    .mini-actions{position:absolute;right:12px;top:12px;display:flex;gap:8px}
+    .peer-info{position:absolute;left:12px;bottom:12px;background:linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.1));padding:8px;border-radius:8px}
+  </style>
+</head>
+<body>
   <div class="call-wrap">
-    <h2>Video Call</h2>
-    <video id="localVideo" autoplay muted playsinline style="width:45%;border-radius:8px"></video>
-    <video id="remoteVideo" autoplay playsinline style="width:45%;border-radius:8px"></video>
-    <div style="margin-top:12px">
-      <button id="endBtn">End</button>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-weight:700">Video Call</div>
+      <div style="color:var(--muted)">Asphalt Legends</div>
+    </div>
+
+    <div class="videos">
+      <div class="large-video" id="largeContainer">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <div class="peer-info" id="peerLabel">Connecting…</div>
+      </div>
+      <div class="small-video" id="smallContainer">
+        <video id="localVideo" autoplay muted playsinline style="width:100%;height:100%;object-fit:cover"></video>
+        <div class="mini-actions">
+          <button id="switchCamera" class="btn">↺</button>
+          <button id="toggleCam" class="btn">📷</button>
+          <button id="toggleMic" class="btn">🎙️</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="hangup" class="btn end">End Call</button>
+      <div style="flex:1"></div>
+      <div id="statusText" style="align-self:center;color:var(--muted)">Preparing…</div>
     </div>
   </div>
 
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
   <script>
-    (async function(){
-      const params = new URLSearchParams(location.search);
-      const callId = params.get('call_id');
-      const to = params.get('to');
-      const socket = io();
-      const me = "{{ session.get('username', 'me') }}";
+    const MYNAME = String({{ (session.get('username')|tojson) or '""' }}).replace(/^"|"$/g, '');
+    const params = new URLSearchParams(location.search);
+    const CALL_ID = params.get('call_id');
+    const PEER = params.get('peer') || params.get('to') || params.get('from') || '';
 
-      socket.emit('identify', { name: me });
+    const socket = io();
+    if (MYNAME) socket.emit('register_socket', {username: MYNAME});
 
-      document.getElementById('endBtn').addEventListener('click', ()=> {
-        if(callId) socket.emit('call_end', { call_id: callId, from: me });
-        location.href = '/chat';
-      });
+    const remoteVideo = document.getElementById('remoteVideo');
+    const localVideo = document.getElementById('localVideo');
+    const peerLabel = document.getElementById('peerLabel');
+    const statusText = document.getElementById('statusText');
 
-      // Expand: reuse your in-page WebRTC helpers (getUserMedia, RTCPeerConnection)
-      // to fully implement audio/video streaming. This template provides the page target.
+    peerLabel.textContent = PEER || 'Unknown';
+
+    let pc = null;
+    let localStream = null;
+    let usingFrontCamera = true;
+
+    function setStatus(t){statusText.textContent = t}
+
+    async function getLocalStream(){
+      if(localStream) return localStream;
+      try{
+        localStream = await navigator.mediaDevices.getUserMedia({video:{facingMode: usingFrontCamera? 'user':'environment'}, audio:true});
+        localVideo.srcObject = localStream;
+        return localStream;
+      }catch(e){console.error('getUserMedia failed',e); setStatus('Camera/mic denied'); throw e}
+    }
+
+    function createPC(){
+      pc = new RTCPeerConnection();
+      pc.onicecandidate = (ev)=>{ if(ev.candidate){ socket.emit('call:candidate', {to: PEER, from: MYNAME, candidate: ev.candidate, call_id: CALL_ID}) } };
+      pc.ontrack = (ev)=>{ remoteVideo.srcObject = ev.streams[0]; }
+      return pc;
+    }
+
+    async function doCall(){
+      setStatus('Calling');
+      await getLocalStream();
+      pc = createPC();
+      localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('call:offer', {to: PEER, from: MYNAME, sdp: offer, call_id: CALL_ID});
+    }
+
+    socket.on('call:offer', async (data)=>{
+      if(!CALL_ID || data.call_id !== CALL_ID) return;
+      setStatus('Incoming call');
+      try{
+        await getLocalStream();
+        pc = createPC();
+        localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('call:answer', {to: data.from, from: MYNAME, sdp: answer, call_id: CALL_ID});
+        setStatus('Connected');
+      }catch(e){console.error(e); setStatus('Failed to join')}
+    });
+
+    socket.on('call:answer', async (data)=>{ if(!CALL_ID||data.call_id!==CALL_ID) return; if(!pc) return; try{ await pc.setRemoteDescription(new RTCSessionDescription(data.sdp)); setStatus('Connected'); }catch(e){console.error(e)} });
+
+    socket.on('call:candidate', async (data)=>{ if(!CALL_ID||data.call_id!==CALL_ID) return; try{ if(pc && data.candidate) await pc.addIceCandidate(data.candidate); }catch(e){console.warn(e)} });
+
+    socket.on('call:ended', (data)=>{ if(!CALL_ID||data.call_id!==CALL_ID) return; hangup(false); });
+
+    async function hangup(emit=true){ setStatus('Ending...'); try{ if(pc){ pc.getSenders().forEach(s=>s.track&&s.track.stop()); pc.close(); pc=null } if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null } }catch(e){} if(emit && CALL_ID) socket.emit('call:hangup', {call_id: CALL_ID, from: MYNAME}); setStatus('Call ended'); setTimeout(()=>{ window.close && window.close() },900); }
+
+    document.getElementById('hangup').addEventListener('click', ()=>hangup(true));
+
+    document.getElementById('toggleMic').addEventListener('click', ()=>{
+      if(!localStream) return; const t = localStream.getAudioTracks()[0]; if(!t) return; t.enabled = !t.enabled; document.getElementById('toggleMic').textContent = t.enabled? '🎙️' : '🔇';
+    });
+
+    document.getElementById('toggleCam').addEventListener('click', ()=>{
+      if(!localStream) return; const t = localStream.getVideoTracks()[0]; if(!t) return; t.enabled = !t.enabled; document.getElementById('toggleCam').textContent = t.enabled? '📷' : '🚫';
+    });
+
+    document.getElementById('switchCamera').addEventListener('click', async ()=>{
+      usingFrontCamera = !usingFrontCamera; try{ if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null } await getLocalStream(); if(pc){ // replace track
+        const vtrack = localStream.getVideoTracks()[0]; const sender = pc.getSenders().find(s=>s.track && s.track.kind === 'video'); if(sender) sender.replaceTrack(vtrack);
+      }
+      }catch(e){console.error(e)}
+    });
+
+    (async ()=>{
+      if(!MYNAME){ setStatus('Sign in first'); return }
+      if(!CALL_ID){ setStatus('Missing call id'); return }
+      const role = params.get('role');
+      const fromParam = params.get('from')||'';
+      if(role === 'caller' || (fromParam && fromParam === MYNAME)){
+        try{ await doCall(); }catch(e){console.error(e)}
+      } else {
+        setStatus('Waiting for incoming call');
+      }
     })();
+
+    window.addEventListener('beforeunload', ()=>{ hangup(true) });
   </script>
-</body></html>
+</body>
+</html>
 """
 
 @app.route('/audio_call')
