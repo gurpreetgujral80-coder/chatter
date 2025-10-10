@@ -622,7 +622,7 @@ AUDIO_CALL_HTML = r"""
     <div class="small" id="timeCounter">00:00</div>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
   <script>
     // Template-provided username (available via Flask session) - Jinja will replace it.
     const MYNAME = String({{ (session.get('username')|tojson) or '""' }}).replace(/^"|"$/g, '');
@@ -799,7 +799,7 @@ VIDEO_CALL_HTML = r"""
     </div>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
   <script>
     const MYNAME = String({{ (session.get('username')|tojson) or '""' }}).replace(/^"|"$/g, '');
     const params = new URLSearchParams(location.search);
