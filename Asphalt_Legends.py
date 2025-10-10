@@ -13,8 +13,6 @@ import requests
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-# Open your web app (the one you want to inject JS into)
-driver.get("https://infinity-chatter.onrender.com")
 from flask import (
     Flask, render_template_string, request, jsonify, session,
     redirect, url_for, send_from_directory, abort
@@ -5186,7 +5184,11 @@ chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-notifications")
 # chrome_options.add_argument("--headless")  # uncomment if you want no window
 
+# Make sure chromedriver is in PATH or provide path explicitly
 driver = webdriver.Chrome(options=chrome_options)
+
+# Now you can use driver safely
+driver.get("https://infinity-chatter.onrender.com")
 
 driver.execute_script("""
     (async function drawerMic_v4_infinite_patched() {
