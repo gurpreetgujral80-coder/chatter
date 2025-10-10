@@ -12,7 +12,9 @@ import base64
 import requests
 import tempfile
 from datetime import datetime
+from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from flask import (
     Flask, render_template_string, request, jsonify, session,
     redirect, url_for, send_from_directory, abort
@@ -5177,11 +5179,6 @@ def poll_alias():
     since = request.args.get('lastId', request.args.get('since', 0, type=int), type=int)
     msgs = fetch_messages(since)
     return jsonify(msgs)
-
-# --- Selenium helper: start in a background thread, wait for server ---
-import threading
-import requests
-from selenium.webdriver.chrome.service import Service
 
 SELENIUM_STARTUP_TIMEOUT = 20  # seconds
 SELENIUM_RETRY_INTERVAL = 0.5  # seconds
