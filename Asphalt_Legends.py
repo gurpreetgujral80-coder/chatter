@@ -4135,8 +4135,8 @@ CHAT_HTML = r'''<!doctype html>
 
       // header call buttons
       const audioBtn = $id('audioCallBtn'), videoBtn = $id('videoCallBtn');
-      if (audioBtn) audioBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall && promptForPeerAndCall(false); });
-      if (videoBtn) videoBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall && promptForPeerAndCall(true); });
+      if (audioBtn) audioBtn.addEventListener('click', (e) => { e.preventDefault(); openOnlineUsers && openOnlineUsers('audio'); });
+      if (videoBtn) videoBtn.addEventListener('click', (e) => { e.preventDefault(); openOnlineUsers && openOnlineUsers('video'); });
 
         function showEl(id){ const e = document.getElementById(id); if(e) e.classList.remove('hidden'); }
         function hideEl(id){ const e = document.getElementById(id); if(e) e.classList.add('hidden'); }
@@ -4299,11 +4299,22 @@ CHAT_HTML = r'''<!doctype html>
         }
       }
     }
-    if(!peer){
-      peer = prompt('Enter the username to call (e.g. alice):');
-      if(!peer) return;
+    if (!peer) {
+      // don't prompt — open the online users modal so user can pick from currently online contacts
+      if (typeof openOnlineUsers === 'function') {
+        openOnlineUsers(isVideo ? 'video' : 'audio');
+      } else {
+        // fallback: if modal function isn't present, bail out quietly
+        console.warn('openOnlineUsers not available; cannot start call without peer');
+      }
+      return;
     }
-    try{ await startCall(peer, !!isVideo); }catch(err){ console.error('startCall failed', err); alert('Could not start call: ' + (err && err.message?err.message:err)); }
+    try {
+      await startCall(peer, !!isVideo);
+    } catch (err) {
+      console.error('startCall failed', err);
+      alert('Could not start call: ' + (err && err.message ? err.message : err));
+    }
   }
   window.promptForPeerAndCall = promptForPeerAndCall;
 
