@@ -4770,9 +4770,6 @@ def on_call_outgoing(data):
     else:
         print(f"❌ No SID found for {to} — user not online")
 
-cs.socket.emit("call_outgoing", { to: peerName, from: cs.myName, isVideo });
-showWhatsAppOutgoingBanner(peerName, isVideo);
-
 @socketio.on('call_accept')
 def on_call_accept(data):
     call_id = data.get('call_id')
