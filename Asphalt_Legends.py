@@ -4286,7 +4286,6 @@ CHAT_HTML = r'''<!doctype html>
                 // emit existing server event for outgoing
                 cs.socket && cs.socket.emit && cs.socket.emit('call_outgoing', { to: u, isVideo: (pendingCallType === 'video'), from: cs.myName });
                 
-                cs.socket.emit("call_outgoing", { to: peerName, from: cs.myName, isVideo });
                 showWhatsAppOutgoingBanner(peerName, isVideo);
 
                 // create a local pending call id (server will also make one)
