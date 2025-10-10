@@ -2013,6 +2013,16 @@ CHAT_HTML = r'''<!doctype html>
       }
   });
 
+  // ✅ Incoming call event (WhatsApp-style banner)
+  cs.socket.on("incoming_call", (d) => {
+      console.log("📞 Incoming call:", d);
+      if (typeof showWhatsAppIncomingBanner === "function") {
+        showWhatsAppIncomingBanner(d.from, d.isVideo, d.call_id);
+      } else {
+        console.warn("⚠️ showWhatsAppIncomingBanner not defined yet.");
+      }
+  });
+
   // Helper: safe getElement
   function $id(id){ return document.getElementById(id) || null; }
 
@@ -4656,13 +4666,25 @@ def on_disconnect():
 
 @socketio.on('call_outgoing')
 def on_call_outgoing(data):
-    to = data.get('to'); isVideo = data.get('isVideo', False); caller = data.get('from') or 'unknown'
+    to = data.get('to')
+    isVideo = data.get('isVideo', False)
+    caller = data.get('from') or 'unknown'
     call_id = secrets.token_hex(12)
+
+    # Save call record
     save_call(call_id, caller, to, isVideo, status='ringing')
     CALL_INVITES[call_id] = {"caller": caller, "callee": to}
+
     sid = USER_SID.get(to)
     if sid:
-        emit('incoming_call', {'from': caller, 'isVideo': isVideo, 'call_id': call_id}, room=sid)
+        print(f"📞 Outgoing call from {caller} to {to} (SID {sid})")
+        emit(
+            'incoming_call',
+            {'from': caller, 'isVideo': isVideo, 'call_id': call_id},
+            room=sid,  # send only to that user
+        )
+    else:
+        print(f"❌ No SID found for {to} — user not online")
 
 @socketio.on('call_accept')
 def on_call_accept(data):
