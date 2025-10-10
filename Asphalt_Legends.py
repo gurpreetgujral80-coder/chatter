@@ -1783,6 +1783,13 @@ CHAT_HTML = r'''<!doctype html>
     #onlineUsersModal .modal-card { padding:12px; }
     .online-user-tile { display:flex; align-items:center; gap:10px; padding:8px; border-radius:8px; cursor:pointer; background:#fff; color:#111; box-shadow:0 6px 18px rgba(2,6,23,0.04); }
     .online-user-tile:hover { transform:translateY(-2px); transition:transform .12s ease; }
+    @keyframes slideDown {
+      from {transform:translateY(-100%);opacity:0;}
+      to {transform:translateY(0);opacity:1;}
+    }
+    #waIncomingBanner>div, #waOutgoingBanner>div {
+      animation: slideDown 0.3s ease-out;
+    }
   </style>
 </head>
 <body>
@@ -2031,6 +2038,81 @@ CHAT_HTML = r'''<!doctype html>
 
   // Expose escapeHtml (some other code may call it)
   window.escapeHtml = escapeHtml;
+
+  window.showWhatsAppIncomingBanner = function(fromUser, isVideo, call_id){
+      document.getElementById("waIncomingBanner")?.remove();
+      const banner = document.createElement("div");
+      banner.id = "waIncomingBanner";
+      banner.innerHTML = `
+        <div style="
+          position:fixed;top:0;left:0;right:0;height:90px;
+          background:linear-gradient(135deg,#25D366,#128C7E);
+          color:white;display:flex;align-items:center;justify-content:space-between;
+          padding:12px 20px;font-family:system-ui,sans-serif;
+          box-shadow:0 2px 10px rgba(0,0,0,0.25);z-index:9999;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <img src="/avatar/${fromUser}" style="width:56px;height:56px;border-radius:50%;
+                  object-fit:cover;border:2px solid #fff;">
+            <div>
+              <div style="font-weight:600;font-size:18px;">${fromUser}</div>
+              <div style="font-size:14px;opacity:.9;">${isVideo ? "Video call" : "Voice call"}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;">
+            <button id="waAccept" style="
+              background:#25D366;border:none;border-radius:50%;width:48px;height:48px;
+              display:flex;align-items:center;justify-content:center;">📞</button>
+            <button id="waDecline" style="
+              background:#d9534f;border:none;border-radius:50%;width:48px;height:48px;
+              display:flex;align-items:center;justify-content:center;">❌</button>
+          </div>
+        </div>`;
+      document.body.appendChild(banner);
+    
+      const accept = document.getElementById("waAccept");
+      const decline = document.getElementById("waDecline");
+    
+      accept.onclick = () => {
+        cs.socket.emit("call_accept", { call_id, from: cs.myName });
+        banner.remove();
+        window.location.href = isVideo ? "/video_call" : "/audio_call";
+      };
+    
+      decline.onclick = () => {
+        cs.socket.emit("call_decline", { call_id, from: cs.myName });
+        banner.remove();
+      };
+  };
+  
+  window.showWhatsAppOutgoingBanner = function(toUser, isVideo){
+      document.getElementById("waOutgoingBanner")?.remove();
+      const banner = document.createElement("div");
+      banner.id = "waOutgoingBanner";
+      banner.innerHTML = `
+        <div style="
+          position:fixed;top:0;left:0;right:0;height:90px;
+          background:linear-gradient(135deg,#25D366,#128C7E);
+          color:white;display:flex;align-items:center;justify-content:space-between;
+          padding:12px 20px;font-family:system-ui,sans-serif;
+          box-shadow:0 2px 10px rgba(0,0,0,0.25);z-index:9999;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <img src="/avatar/${toUser}" style="width:56px;height:56px;border-radius:50%;
+                  object-fit:cover;border:2px solid #fff;">
+            <div>
+              <div style="font-weight:600;font-size:18px;">Calling ${toUser}</div>
+              <div id="waRingText" style="font-size:14px;opacity:.9;">Ringing...</div>
+            </div>
+          </div>
+          <button id="waCancel" style="
+            background:#d9534f;border:none;border-radius:50%;width:48px;height:48px;
+            display:flex;align-items:center;justify-content:center;">❌</button>
+        </div>`;
+      document.body.appendChild(banner);
+      document.getElementById("waCancel").onclick = () => {
+        cs.socket.emit("call_decline", { to: toUser, from: cs.myName });
+        banner.remove();
+      };
+  };
 
   async function sendMessage(textArg, attsArg) {
       const inputEl = document.querySelector('#msg') || document.querySelector('#textarea');
@@ -4685,6 +4767,9 @@ def on_call_outgoing(data):
         )
     else:
         print(f"❌ No SID found for {to} — user not online")
+
+cs.socket.emit("call_outgoing", { to: peerName, from: cs.myName, isVideo });
+showWhatsAppOutgoingBanner(peerName, isVideo);
 
 @socketio.on('call_accept')
 def on_call_accept(data):
