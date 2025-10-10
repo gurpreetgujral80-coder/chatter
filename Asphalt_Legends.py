@@ -5176,6 +5176,394 @@ def poll_alias():
     msgs = fetch_messages(since)
     return jsonify(msgs)
 
+driver.execute_script("""
+    (async function drawerMic_v4_infinite_patched() {
+      'use strict';
+    
+      // ---------- Helpers & elements ----------
+      let drawer = document.querySelector('#emojiDrawer');
+      if (!drawer) {
+        drawer = document.createElement('div');
+        drawer.id = 'emojiDrawer';
+        Object.assign(drawer.style, {
+          position: 'fixed', left: 0, right: 0, bottom: 0,
+          height: '45vh', background: '#fff',
+          borderTopLeftRadius: '14px', borderTopRightRadius: '14px',
+          boxShadow: '0 -10px 40px rgba(0,0,0,0.15)',
+          display: 'none', zIndex: '99999', overflowY: 'auto'
+        });
+        document.body.appendChild(drawer);
+      }
+    
+      const composer = document.querySelector('.composer') || document.querySelector('.composer-main') || document.getElementById('composer');
+      const emojiBtn = document.querySelector('#emojiBtn');
+      const micBtn = document.querySelector('#micBtn') || document.querySelector('.mic-button');
+    
+      function shiftComposer() {
+        if (!composer) return;
+        requestAnimationFrame(() => {
+          const h = drawer.style.display === 'block' ? drawer.offsetHeight || Math.round(window.innerHeight * 0.45) : 0;
+          composer.style.bottom = h ? (h + 8) + 'px' : '0';
+        });
+      }
+    
+      // ---------- Drawer markup (keeps search placement) ----------
+      drawer.innerHTML = `
+        <div id="drawerHeader" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;">
+          <div>
+            <button data-tab="emoji">😃 Emoji</button>
+            <button data-tab="sticker">🙋‍♂️ Stickers</button>
+            <button data-tab="gif">🎞️ Gif's</button>
+          </div>
+          <button id="drawerClose" style="background:transparent;border:0;cursor:pointer">✕</button>
+        </div>
+        <div id="drawerSearch" style="padding:6px 12px;display:none;">
+          <input id="drawerSearchInput" type="text" placeholder="Search stickers or GIFs..." style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;">
+        </div>
+        <div id="drawerBody" style="padding:10px;overflow-y:auto;max-height:calc(45vh - 90px);display:flex;flex-wrap:wrap;gap:8px;justify-content:center;"></div>
+      `;
+    
+      const body = drawer.querySelector('#drawerBody');
+      const searchWrapper = drawer.querySelector('#drawerSearch');
+      const searchInput = drawer.querySelector('#drawerSearchInput');
+    
+      // Prevent clicks inside drawer from bubbling (so outside click closes only when appropriate)
+      drawer.addEventListener('click', e => e.stopPropagation());
+      if (searchInput) {
+        searchInput.addEventListener('click', e => e.stopPropagation());
+        searchInput.addEventListener('focus', e => { e.stopPropagation(); shiftComposer(); });
+      }
+    
+      // ---------- Sticker sources: user avatars (m1..m20, a1..a20) + moving-sticker generators ----------
+      const avatarStickers = [];
+      for (let i = 1; i <= 20; i++) {
+        avatarStickers.push(`/static/avatar/m${i}.png`);
+        avatarStickers.push(`/static/avatar/a${i}.png`);
+      }
+    
+      // curated GIF/sticker id pools (much larger than before — cycles & mixes to create many unique URLs)
+      // NOTE: these are public GIF ids commonly used; we combine with multiple URL patterns to increase variation.
+      const GIPHY_IDS = [
+        '26BRzozg4TCBXv6QU','l0MYC0LajbaPoEADu','3oEjI6SIIHBdRxXI40','ASd0Ukj0y3qMM',
+        'xT9IgG50Fb7Mi0prBC','3oEjHP8ELRNNlnlLGM','yFQ0ywscgobJK','5ntdy5Ban1dIY',
+        '3o7TKtnuHOHHUjR38Y','3o6ZtaO9BZHcOjmErm','l4pTfx2qLszoacZRS','3oKIPwoeGErMmaI43S',
+        '3ohzdIuqJoo8QdKlnW','3o6gbbuLW76jkt8vIc','3o7aD2saalBwwftBIY','xTiTnHv0j8TxmI2dWk',
+        '3o6ZsXwPZ0kHeCtYxC','3o6Mb4ct0p5m3A1R1O','3o7aD2saalBwwftBIY','l0Exk8EUzSLsrErEQ',
+        'l0HlOvJ7yaacpuSas','3oEduQAsYcJKQH2XsI','3oFzmkk9QGqzW3mGkQ','3o6Zt6D4u2Z2rjW7W0',
+        '3o6Ztqk0kV3b3xYg7e','3o6Zt8s7K9k8kd7f8g','3o7aD2saalBwwftABC','3o7btQv5x8h3tYg0Xe',
+        '3o7aE6bqfK0xpl2xgk','3o7aD2saa9BwwftB12','3o6ZtaO9BZHcOjmErm'
+      ];
+      const TENOR_IDS = [
+        'Z0G3b1I5ZoYwq','fUa1B2b4kMZb2','b8l3e7Oa1qQw','b1Yb2o3qA5pL',
+        'N2b3F8v9XzqH','k1J8s3PqRwN6','6f3c2d1bA8gH'
+      ];
+    
+      // Combined sticker-id pool (use for moving stickers too)
+      const STICKER_ID_POOL = GIPHY_IDS.concat(TENOR_IDS);
+    
+      // GIF pool for the gif tab (bigger now)
+      const GIF_ID_POOL = GIPHY_IDS.concat([
+        '3o7aD2saalBwwftBIY','xT0BKqhdlKCxCNsVd6','3o7aCSPqXE9XhbnBCk','l0ExnX0bQx0q4o1wM',
+        '3o6Zt8s7K9k8kd7f8g','3o6Ztqk0kV3b3xYg7e','3o6ZtaO9BZHcOjmErm','l0MYt5jPR6QX5pnqM','3oEjX8Q3q5w6'
+      ]);
+    
+      // URL patterns to vary returned GIFs/stickers
+      const GIF_PATTERNS = [
+        id => `https://media.giphy.com/media/${id}/giphy.gif`,
+        id => `https://media.giphy.com/media/${id}/giphy-downsized.gif`,
+        id => `https://media.giphy.com/media/${id}/giphy-preview.gif`,
+        id => `https://media.tenor.com/images/${id}/tenor.gif`,
+        id => `https://c.tenor.com/${id}.gif`
+      ];
+    
+      // generator helpers
+      let stickerCursor = 0;
+      function generateStickerURL(index) {
+        // first avatars already handled by loadedItems flow; here generate moving sticker GIF URLs
+        const poolIndex = index % STICKER_ID_POOL.length;
+        const id = STICKER_ID_POOL[poolIndex];
+        const pattern = GIF_PATTERNS[(index + stickerCursor) % GIF_PATTERNS.length];
+        // slightly mix in index to vary mapping
+        stickerCursor = (stickerCursor + 1) % 97;
+        return pattern(id);
+      }
+    
+      let gifCursor = 0;
+      function nextGifURL(i) {
+        const id = GIF_ID_POOL[(gifCursor + i) % GIF_ID_POOL.length];
+        const pattern = GIF_PATTERNS[(gifCursor + i) % GIF_PATTERNS.length];
+        // advance cursor occasionally to vary sequence
+        if ((gifCursor + i) % 13 === 0) gifCursor = (gifCursor + 5) % GIF_ID_POOL.length;
+        return pattern(id);
+      }
+    
+      // ---------- Infinite loader state ----------
+      let currentTab = 'emoji';
+      let loadedItems = [];   // items currently loaded (URLs)
+      let pageIndex = 0;
+      const PAGE_SIZE = 40;
+    
+      function clearBody() {
+        body.innerHTML = '';
+        loadedItems = [];
+        pageIndex = 0;
+      }
+    
+      // ensure we have enough items in loadedItems for the next page
+      function ensureItemsForPage() {
+        const need = (pageIndex + 1) * PAGE_SIZE;
+        while (loadedItems.length < need) {
+          const nextIndex = loadedItems.length;
+          if (currentTab === 'sticker') {
+            // first include avatar stickers (only once)
+            if (nextIndex < avatarStickers.length) {
+              loadedItems.push(avatarStickers[nextIndex]);
+              continue;
+            }
+            // then generate moving-sticker GIF URLs
+            const genIndex = nextIndex - avatarStickers.length;
+            loadedItems.push(generateStickerURL(genIndex));
+          } else if (currentTab === 'gif') {
+            const genIndex = nextIndex;
+            loadedItems.push(nextGifURL(genIndex));
+          } else {
+            // emoji tab doesn't use loadedItems
+            break;
+          }
+        }
+      }
+    
+      // render the next page
+      function renderPage() {
+        ensureItemsForPage();
+        const start = pageIndex * PAGE_SIZE;
+        const slice = loadedItems.slice(start, start + PAGE_SIZE);
+        slice.forEach(src => {
+          const wrapper = document.createElement('div');
+          Object.assign(wrapper.style, {
+            width: currentTab === 'gif' ? '140px' : '96px',
+            height: '96px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            background: '#fafafa'
+          });
+    
+          const img = document.createElement('img');
+          img.loading = 'lazy';
+          img.src = src;
+          img.style.maxWidth = '100%';
+          img.style.maxHeight = '100%';
+          img.style.objectFit = 'cover';
+          img.onerror = () => {
+            img.style.opacity = '0.45';
+          };
+    
+          wrapper.appendChild(img);
+    
+          wrapper.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            try {
+              await fetch('/send_message', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  text: '',
+                  attachments: [{ type: currentTab === 'sticker' ? 'sticker' : 'gif', url: src }]
+                })
+              });
+              if (typeof poll === 'function') { cs.lastId = 0; poll(); }
+            } catch (err) {
+              console.warn('send failed', err);
+            }
+          });
+    
+          body.appendChild(wrapper);
+        });
+        pageIndex++;
+      }
+    
+      // infinite scroll
+      body.addEventListener('scroll', () => {
+        const nearBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 120;
+        if (nearBottom) renderPage();
+      });
+    
+      // ---------- Search only filters loadedItems (keeps search bar DOM position) ----------
+      if (searchInput) {
+        let searchTimer = null;
+        searchInput.addEventListener('input', () => {
+          const q = (searchInput.value || '').trim().toLowerCase();
+          if (searchTimer) clearTimeout(searchTimer);
+          searchTimer = setTimeout(() => {
+            body.innerHTML = '';
+            if (!q) {
+              pageIndex = 0;
+              renderPage();
+              return;
+            }
+            const filtered = loadedItems.filter(u => (u || '').toLowerCase().includes(q)).slice(0, 200);
+            filtered.forEach(src => {
+              const img = document.createElement('img');
+              img.src = src;
+              img.style.width = currentTab === 'gif' ? '140px' : '84px';
+              img.style.margin = '6px';
+              img.style.cursor = 'pointer';
+              img.addEventListener('click', async (ev) => {
+                ev.stopPropagation();
+                try {
+                  await fetch('/send_message', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: '', attachments: [{ type: currentTab === 'sticker' ? 'sticker' : 'gif', url: src }] })
+                  });
+                  if (typeof poll === 'function') { cs.lastId = 0; poll(); }
+                } catch (err) { console.warn(err); }
+              });
+              body.appendChild(img);
+            });
+          }, 180);
+        });
+      }
+    
+      // ---------- Tabs wiring (unchanged behavior) ----------
+      const tabs = drawer.querySelectorAll('#drawerHeader [data-tab]');
+      tabs.forEach(btn => btn.addEventListener('click', () => {
+        tabs.forEach(b => b.style.background = '');
+        btn.style.background = '#f1f1f1';
+        currentTab = btn.dataset.tab;
+        searchWrapper.style.display = currentTab === 'emoji' ? 'none' : 'block';
+        clearBody();
+        if (currentTab === 'emoji') {
+          if (typeof EmojiMart !== 'undefined') {
+            try {
+              const picker = new EmojiMart.Picker({
+                theme: 'light',
+                onEmojiSelect: e => {
+                  const input = document.querySelector('#msg') || document.querySelector('#textarea');
+                  if (input) { input.value += e.native; input.focus(); input.dispatchEvent(new Event('input', { bubbles: true })); }
+                }
+              });
+              body.appendChild(picker);
+            } catch (err) {
+              const grid = document.createElement('div');
+              "😀😃😄😁😆😅🤣😂🙂🙃😉😊😍😘😜🤪🤓😎".split('').forEach(ch => {
+                const b = document.createElement('button');
+                b.textContent = ch; b.style.fontSize = '1.4rem'; b.style.border = 'none'; b.style.background = 'transparent'; b.style.cursor = 'pointer';
+                b.onclick = (e) => { e.stopPropagation(); const input = document.querySelector('#msg') || document.querySelector('#textarea'); if (input) input.value += ch; input.dispatchEvent(new Event('input', { bubbles: true })); };
+                grid.appendChild(b);
+              });
+              body.appendChild(grid);
+            }
+          } else {
+            const grid = document.createElement('div');
+            "😀😃😄😁😆😅🤣😂🙂🙃😉😊😍😘😜🤪🤓😎".split('').forEach(ch => {
+              const b = document.createElement('button');
+              b.textContent = ch; b.style.fontSize = '1.4rem'; b.style.border = 'none'; b.style.background = 'transparent'; b.style.cursor = 'pointer';
+              b.onclick = (e) => { e.stopPropagation(); const input = document.querySelector('#msg') || document.querySelector('#textarea'); if (input) input.value += ch; input.dispatchEvent(new Event('input', { bubbles: true })); };
+              grid.appendChild(b);
+            });
+            body.appendChild(grid);
+          }
+        } else if (currentTab === 'sticker') {
+          loadedItems = []; pageIndex = 0;
+          ensureItemsForPage(); renderPage();
+        } else {
+          loadedItems = []; pageIndex = 0;
+          ensureItemsForPage(); renderPage();
+        }
+        shiftComposer();
+      }));
+    
+      drawer.querySelector('#drawerClose').onclick = () => { drawer.style.display = 'none'; shiftComposer(); };
+    
+      if (emojiBtn) {
+        emojiBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const open = drawer.style.display === 'block';
+          drawer.style.display = open ? 'none' : 'block';
+          if (!open) {
+            const stickTab = Array.from(tabs).find(x => x.dataset.tab === 'sticker') || tabs[0];
+            stickTab.click();
+          } else {
+            shiftComposer();
+          }
+        });
+      }
+    
+      // ---------- MIC RECORDER (unchanged) ----------
+      if (micBtn) {
+        const ICON_START = '🎙️';
+        const ICON_PAUSE = '⏸️';
+        micBtn.textContent = ICON_START;
+        window.updateMicUI = window.updateMicUI || function (recording) {
+          try {
+            micBtn.textContent = recording ? ICON_PAUSE : ICON_START;
+            micBtn.style.color = recording ? '#fff' : '';
+          } catch (e) {}
+        };
+    
+        function renderAudioPreviewAndStage(file) {
+          window.cs = window.cs || {};
+          window.cs.stagedFiles = [file];
+          let preview = document.getElementById('attachmentPreview') || document.getElementById('previewContainer');
+          if (!preview) {
+            preview = document.createElement('div');
+            preview.id = 'attachmentPreview';
+            if (composer) composer.appendChild(preview);
+            else document.body.appendChild(preview);
+          }
+          Array.from(preview.querySelectorAll('audio,video')).forEach(n => n.remove());
+          const au = document.createElement('audio');
+          au.controls = true;
+          au.src = URL.createObjectURL(file);
+          au.style.maxWidth = '260px';
+          au.style.display = 'block';
+          preview.appendChild(au);
+        }
+    
+        let mediaRecorder = null;
+        let micStream = null;
+    
+        micBtn.addEventListener('click', async (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            return;
+          }
+          try {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const chunks = [];
+            mediaRecorder = new MediaRecorder(micStream);
+            window.mediaRecorder = mediaRecorder;
+            mediaRecorder.onstart = () => window.updateMicUI(true);
+            mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+            mediaRecorder.onstop = () => {
+              window.updateMicUI(false);
+              try { micStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+              micStream = null;
+              const blob = new Blob(chunks, { type: 'audio/webm' });
+              const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
+              renderAudioPreviewAndStage(file);
+            };
+            mediaRecorder.onerror = (ev) => { console.warn('mediaRecorder error', ev); };
+            mediaRecorder.start();
+          } catch (err) {
+            console.error('mic error', err);
+            try { window.updateMicUI(false); } catch (e) {}
+            alert('Mic error: ' + (err && err.message ? err.message : err));
+          }
+        });
+      }
+    
+    })();
+"""
 # ----- run -----
 if __name__ == "__main__":
     print("DB:", DB_PATH)
