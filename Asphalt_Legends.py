@@ -384,6 +384,22 @@ def on_call_candidate(data):
 def on_call_signal(data):
     to = data.get('to'); payload = data.get('payload'); emit_to_user(to, 'call:signal', payload)
 
+# --- Add: return list of currently online users to the requesting socket
+@socketio.on('get_online_users')
+def on_get_online_users(data=None):
+    """
+    Client asks for the current online users.
+    Emits 'online_users' back only to the requesting client with the
+    list of usernames (strings).
+    """
+    try:
+        users = list(USER_SID.keys())
+        # send only to caller
+        emit('online_users', {'users': users}, to=request.sid)
+    except Exception as e:
+        app.logger.exception('get_online_users error')
+        emit('online_users', {'users': []}, to=request.sid)
+
 # call logs
 def save_call(call_id, caller, callee, is_video, status="ringing"):
     conn = db_conn(); c = conn.cursor()
@@ -558,6 +574,97 @@ def avatar_save():
         return jsonify({"status":"ok","avatar":avatar_url})
     except Exception as e:
         return f"error: {e}", 500
+
+# --- Add: simple call pages (audio and video)
+AUDIO_CALL_HTML = r"""
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Audio Call</title>
+  <style>body{font-family:Inter,system-ui;margin:0;background:#111;color:#fff} .call-wrap{padding:12px}</style>
+</head><body>
+  <div class="call-wrap">
+    <h2>Audio Call</h2>
+    <p id="status">Connecting...</p>
+    <audio id="localAudio" autoplay muted></audio>
+    <audio id="remoteAudio" autoplay></audio>
+    <div style="margin-top:12px">
+      <button id="endBtn">End</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    (async function(){
+      const params = new URLSearchParams(location.search);
+      const callId = params.get('call_id');
+      const to = params.get('to');
+      const socket = io();
+      const me = "{{ session.get('username', 'me') }}";
+      document.getElementById('status').textContent = 'Waiting for peer...';
+
+      // Basic wiring: notify server we joined the call page
+      socket.emit('identify', { name: me });
+
+      document.getElementById('endBtn').addEventListener('click', ()=> {
+        if(callId) socket.emit('call_end', { call_id: callId, from: me });
+        location.href = '/chat';
+      });
+
+      socket.on('connect', ()=> console.log('socket connected for audio page'));
+
+      // You can expand this page to reuse your WebRTC code (createPeer, offer/answer)
+      // For now we just show minimal structure; advanced WebRTC will reuse your
+      // existing in-page setup functions (setupPeerConnection etc.).
+    })();
+  </script>
+</body></html>
+"""
+
+VIDEO_CALL_HTML = r"""
+<!doctype html><html><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Video Call</title>
+  <style>body{font-family:Inter,system-ui;margin:0;background:#000;color:#fff} .call-wrap{padding:8px}</style>
+</head><body>
+  <div class="call-wrap">
+    <h2>Video Call</h2>
+    <video id="localVideo" autoplay muted playsinline style="width:45%;border-radius:8px"></video>
+    <video id="remoteVideo" autoplay playsinline style="width:45%;border-radius:8px"></video>
+    <div style="margin-top:12px">
+      <button id="endBtn">End</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    (async function(){
+      const params = new URLSearchParams(location.search);
+      const callId = params.get('call_id');
+      const to = params.get('to');
+      const socket = io();
+      const me = "{{ session.get('username', 'me') }}";
+
+      socket.emit('identify', { name: me });
+
+      document.getElementById('endBtn').addEventListener('click', ()=> {
+        if(callId) socket.emit('call_end', { call_id: callId, from: me });
+        location.href = '/chat';
+      });
+
+      // Expand: reuse your in-page WebRTC helpers (getUserMedia, RTCPeerConnection)
+      // to fully implement audio/video streaming. This template provides the page target.
+    })();
+  </script>
+</body></html>
+"""
+
+@app.route('/audio_call')
+def audio_call_page():
+    return render_template_string(AUDIO_CALL_HTML)
+
+@app.route('/video_call')
+def video_call_page():
+    return render_template_string(VIDEO_CALL_HTML)
 
 # ---------- Templates ----------
 # AVATAR CREATE page HTML (separate smaller page)
@@ -1672,6 +1779,10 @@ CHAT_HTML = r'''<!doctype html>
     .msg-opts-btn { background:transparent; border:0; cursor:pointer; font-size:18px; line-height:1; padding:4px; margin-left:8px; visibility:visible; z-index:20; }
     .msg-menu { position:absolute; right:8px; top:36px; background:#fff; border:1px solid #ddd; border-radius:6px; padding:6px; z-index:100000; box-shadow:0 8px 16px rgba(0,0,0,0.12); display:none; }
     .msg-menu.visible { display:block; }
+    /* Outgoing/online modal tweaks */
+    #onlineUsersModal .modal-card { padding:12px; }
+    .online-user-tile { display:flex; align-items:center; gap:10px; padding:8px; border-radius:8px; cursor:pointer; background:#fff; color:#111; box-shadow:0 6px 18px rgba(2,6,23,0.04); }
+    .online-user-tile:hover { transform:translateY(-2px); transition:transform .12s ease; }
   </style>
 </head>
 <body>
@@ -1698,7 +1809,31 @@ CHAT_HTML = r'''<!doctype html>
             </div>
           </div>
         </div>
+
+        <!-- Online Users Modal (appears when user clicks call button) -->
+        <div id="onlineUsersModal" class="modal hidden" style="z-index:220;">
+          <div class="modal-card" style="max-width:420px;">
+            <h3 style="margin:0 0 8px 0;">Select a person to call</h3>
+            <div id="onlineUsersList" style="display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow:auto;padding-right:6px;"></div>
+            <div style="text-align:right;margin-top:8px;">
+              <button id="closeOnlineUsers" style="padding:8px 12px;border-radius:6px;">Cancel</button>
+            </div>
+          </div>
+        </div>
         
+        <!-- Outgoing call banner that overlaps header (caller view) -->
+        <div id="outgoingCallBanner" class="incoming-call-banner hidden" style="background:#fff9; top:calc(var(--header-height,56px) + 8px); z-index:230;">
+          <div class="banner-content" style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="caller-info">
+              <span id="outgoingLabel">Calling</span>
+              <span id="outgoingCalleeName" style="font-weight:700"></span>
+            </div>
+            <div class="banner-buttons">
+              <button id="cancelOutgoingBtn" class="btn-decline">Cancel</button>
+            </div>
+          </div>
+        </div>
+
         <!-- In-Call Controls on Header (top-left) -->
         <div id="inCallControls" class="in-call-controls hidden">
           <button id="btnHangup" class="ic-btn hangup">📞</button>
@@ -4002,6 +4137,103 @@ CHAT_HTML = r'''<!doctype html>
       const audioBtn = $id('audioCallBtn'), videoBtn = $id('videoCallBtn');
       if (audioBtn) audioBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall && promptForPeerAndCall(false); });
       if (videoBtn) videoBtn.addEventListener('click', (e) => { e.preventDefault(); promptForPeerAndCall && promptForPeerAndCall(true); });
+
+        function showEl(id){ const e = document.getElementById(id); if(e) e.classList.remove('hidden'); }
+        function hideEl(id){ const e = document.getElementById(id); if(e) e.classList.add('hidden'); }
+        
+        // Inserted modal DOM is already added server-side above; wire UI:
+        const onlineUsersModal = $id('onlineUsersModal');
+        const onlineUsersList = $id('onlineUsersList');
+        const closeOnlineUsers = $id('closeOnlineUsers');
+        const outgoingCallBanner = $id('outgoingCallBanner');
+        const outgoingCalleeName = $id('outgoingCalleeName');
+        const cancelOutgoingBtn = $id('cancelOutgoingBtn');
+        
+        let pendingCallType = 'audio'; // 'audio' or 'video'
+        let pendingTargetUser = null;
+        let pendingCallId = null;
+        
+        // request online users and show modal
+        function openOnlineUsers(type){
+          pendingCallType = type || 'audio';
+          cs.socket && cs.socket.emit && cs.socket.emit('get_online_users');
+          showEl('onlineUsersModal');
+        }
+        
+        // render incoming users list (server will send 'online_users')
+        cs.socket && cs.socket.on && cs.socket.on('online_users', (d) => {
+          try {
+            const users = (d && d.users) ? d.users.slice() : [];
+            onlineUsersList.innerHTML = '';
+            users.sort();
+            for (const u of users){
+              if(!u || u === cs.myName) continue; // don't show self
+              const tile = document.createElement('div');
+              tile.className = 'online-user-tile';
+              tile.innerHTML = `<div style="width:40px;height:40px;border-radius:50%;background:#eef;display:flex;align-items:center;justify-content:center;font-weight:700">${escapeHtml(u[0]||'U')}</div>
+                                <div style="flex:1">${escapeHtml(u)}</div>
+                                <div style="font-size:.9rem;opacity:.85">${pendingCallType === 'video' ? 'Video' : 'Audio'}</div>`;
+              tile.addEventListener('click', async () => {
+                // start outgoing call to user u
+                pendingTargetUser = u;
+                // show outgoing banner
+                outgoingCalleeName.textContent = u;
+                showEl('outgoingCallBanner');
+                hideEl('onlineUsersModal');
+        
+                // emit existing server event for outgoing
+                cs.socket && cs.socket.emit && cs.socket.emit('call_outgoing', { to: u, isVideo: (pendingCallType === 'video'), from: cs.myName });
+        
+                // create a local pending call id (server will also make one)
+                pendingCallId = 'call-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+                // store in cs so other handlers can access
+                cs.pendingCall = { id: pendingCallId, to: u, isVideo: (pendingCallType === 'video') };
+        
+                // optional: show a small in-page UI (you already have in-call controls)
+                setTimeout(()=> {
+                  // if call is accepted server will notify; otherwise user can cancel
+                }, 400);
+              });
+              onlineUsersList.appendChild(tile);
+            }
+            if(!onlineUsersList.children.length){
+              onlineUsersList.innerHTML = '<div style="padding:12px;color:#666">No other users online</div>';
+            }
+          } catch(e){ console.warn('online_users render err', e); }
+        });
+        
+        // cancel button
+        closeOnlineUsers && closeOnlineUsers.addEventListener('click', ()=> hideEl('onlineUsersModal') );
+        cancelOutgoingBtn && cancelOutgoingBtn.addEventListener('click', ()=>{
+          // cancel the outgoing call flow
+          if(cs.pendingCall){
+            cs.socket && cs.socket.emit && cs.socket.emit('call_decline', { call_id: cs.pendingCall.id, from: cs.myName });
+            cs.pendingCall = null;
+          }
+          hideEl('outgoingCallBanner');
+        });
+        
+        // When server notifies caller that callee accepted the call, navigate to call page
+        cs.socket && cs.socket.on && cs.socket.on('call_accepted', (d)=>{
+          try{
+            // server side may send call_id and from
+            const callId = d && d.call_id ? d.call_id : (cs.pendingCall && cs.pendingCall.id) || '';
+            const isVideo = (cs.pendingCall && cs.pendingCall.isVideo) || false;
+            // navigate to dedicated page
+            const page = isVideo ? '/video_call' : '/audio_call';
+            const q = `?call_id=${encodeURIComponent(callId)}&to=${encodeURIComponent((cs.pendingCall && cs.pendingCall.to) || '')}`;
+            // hide UI and redirect
+            hideEl('outgoingCallBanner');
+            cs.pendingCall = null;
+            window.location.href = page + q;
+          }catch(e){ console.warn('call_accepted handler error', e); }
+        });
+        
+        // hook call buttons in header (audio / video buttons)
+        const audioCallBtnEl = $id('audioCallBtn');
+        const videoCallBtnEl = $id('videoCallBtn');
+        if(audioCallBtnEl) audioCallBtnEl.addEventListener('click', (ev)=> { ev.preventDefault(); openOnlineUsers('audio'); });
+        if(videoCallBtnEl) videoCallBtnEl.addEventListener('click', (ev)=> { ev.preventDefault(); openOnlineUsers('video'); });
 
       // close emoji/other drawers on background click
       document.addEventListener('click', (ev) => {
