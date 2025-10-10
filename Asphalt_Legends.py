@@ -2003,6 +2003,16 @@ CHAT_HTML = r'''<!doctype html>
   let inCallControls, btnHangup, btnMute, btnToggleVideo, btnSwitchCam;
   let panelGrid;
 
+  cs.socket.on("connect", () => {
+      if (cs.myName || window.username) {
+        const name = cs.myName || window.username;
+        cs.socket.emit("identify", { name });
+        console.log("🔄 re-identify sent on reconnect:", name);
+      } else {
+        console.warn("⚠️ No username set for identify");
+      }
+  });
+
   // Helper: safe getElement
   function $id(id){ return document.getElementById(id) || null; }
 
@@ -4630,7 +4640,8 @@ def on_identify(data):
     name = data.get('name')
     if not name: return
     USER_SID[name] = request.sid
-    print("📡 USER_SID snapshot:", USER_SID)
+    print("📡 identify() called ->", username, "SID:", request.sid)
+    print("📡 USER_SID now =", USER_SID)
     emit('identified', {'status':'ok'})
     emit('presence', {'user': name, 'online': True}, broadcast=True)
 
