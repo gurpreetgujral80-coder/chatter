@@ -5638,4 +5638,5 @@ def start_selenium_thread():
 # ----- run -----
 if __name__ == "__main__":
     print("DB:", DB_PATH)
+    start_selenium_thread()
     socketio.run(app, host="0.0.0.0", port=PORT, debug=False, allow_unsafe_werkzeug=True)
