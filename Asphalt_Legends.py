@@ -4867,7 +4867,6 @@ if (cs.stagedFiles && cs.stagedFiles.length) {
   drawer.innerHTML = `
     <div id="drawerHeader" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;">
       <div>
-        <button data-tab="emoji">😃 Emoji</button>
         <button data-tab="sticker">🙋‍♂️ Stickers</button>
         <button data-tab="gif">🎞️ Gif's</button>
         <button data-tab="avatar">🤾‍♂️ Avatars</button>
@@ -4954,7 +4953,7 @@ if (cs.stagedFiles && cs.stagedFiles.length) {
   }
 
   // ---------- Infinite loader state ----------
-  let currentTab = 'emoji';
+  let currentTab = 'sticker'
   let loadedItems = [];   // items currently loaded (URLs)
   let pageIndex = 0;
   const PAGE_SIZE = 40;
@@ -5093,38 +5092,7 @@ if (cs.stagedFiles && cs.stagedFiles.length) {
     currentTab = btn.dataset.tab;
     searchWrapper.style.display = currentTab === 'emoji' ? 'none' : 'block';
     clearBody();
-    if (currentTab === 'emoji') {
-      if (typeof EmojiMart !== 'undefined') {
-        try {
-          const picker = new EmojiMart.Picker({
-            theme: 'light',
-            onEmojiSelect: e => {
-              const input = document.querySelector('#msg') || document.querySelector('#textarea');
-              if (input) { input.value += e.native; input.focus(); input.dispatchEvent(new Event('input', { bubbles: true })); }
-            }
-          });
-          body.appendChild(picker);
-        } catch (err) {
-          const grid = document.createElement('div');
-          "😀😃😄😁😆😅🤣😂🙂🙃😉😊😍😘😜🤪🤓😎".split('').forEach(ch => {
-            const b = document.createElement('button');
-            b.textContent = ch; b.style.fontSize = '1.4rem'; b.style.border = 'none'; b.style.background = 'transparent'; b.style.cursor = 'pointer';
-            b.onclick = (e) => { e.stopPropagation(); const input = document.querySelector('#msg') || document.querySelector('#textarea'); if (input) input.value += ch; input.dispatchEvent(new Event('input', { bubbles: true })); };
-            grid.appendChild(b);
-          });
-          body.appendChild(grid);
-        }
-      } else {
-        const grid = document.createElement('div');
-        "😀😃😄😁😆😅🤣😂🙂🙃😉😊😍😘😜🤪🤓😎".split('').forEach(ch => {
-          const b = document.createElement('button');
-          b.textContent = ch; b.style.fontSize = '1.4rem'; b.style.border = 'none'; b.style.background = 'transparent'; b.style.cursor = 'pointer';
-          b.onclick = (e) => { e.stopPropagation(); const input = document.querySelector('#msg') || document.querySelector('#textarea'); if (input) input.value += ch; input.dispatchEvent(new Event('input', { bubbles: true })); };
-          grid.appendChild(b);
-        });
-        body.appendChild(grid);
-      }
-    } else if (currentTab === 'sticker') {
+    } if (currentTab === 'sticker') {
       loadedItems = []; pageIndex = 0;
       ensureItemsForPage(); renderPage();
     } else if (currentTab === 'avatar'){
