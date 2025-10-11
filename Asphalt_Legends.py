@@ -3464,6 +3464,15 @@ CHAT_HTML = r'''<!doctype html>
       }, { once:true });
       return { element: container, mediaElement: thumbImg };
     }
+    // 🔧 NEW PATCH — treat webm with audio mime as audio, not video
+    if(a.url && a.url.endsWith('.webm')){
+      const au = document.createElement('audio'); 
+      au.src = a.url; 
+      au.controls = true; 
+      au.className = 'mt-2';
+      container.appendChild(au); 
+      return { element: container };
+    }
     return { element: null };
   }
   window.createAttachmentElement = createAttachmentElement;
@@ -3476,7 +3485,7 @@ CHAT_HTML = r'''<!doctype html>
     if(!panelGrid) return;
     panelGrid.innerHTML = '<div>Loading GIFs…</div>';
     try{
-      const r = await fetch('https://g.tenor.com/v1/trending?limit=28');
+      const r = await fetch('https://g.tenor.com/v1/trending?limit=100');
       let data = await r.json();
       const results = data && data.results ? data.results : [];
       panelGrid.innerHTML = '';
@@ -4771,7 +4780,7 @@ function insertSticker(url){
   // ---------- Sticker sources: user avatars (m1..m20, a1..a20) + moving-sticker generators ----------
   const avatarStickers = [];
   for (let i = 1; i <= 78; i++) {
-    avatarStickers.push(`/static/m${i}.png`);
+    avatarStickers.push(`/static/m${i}.webp`);
     // avatarStickers.push(`/static/a${i}.png`);
   }
 
