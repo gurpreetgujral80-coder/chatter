@@ -4870,6 +4870,7 @@ if (cs.stagedFiles && cs.stagedFiles.length) {
         <button data-tab="emoji">😃 Emoji</button>
         <button data-tab="sticker">🙋‍♂️ Stickers</button>
         <button data-tab="gif">🎞️ Gif's</button>
+        <button data-tab="avatar">🤾‍♂️ Avatars</button>
       </div>
       <button id="drawerClose" style="background:transparent;border:0;cursor:pointer">✕</button>
     </div>
@@ -4970,20 +4971,18 @@ if (cs.stagedFiles && cs.stagedFiles.length) {
     while (loadedItems.length < need) {
       const nextIndex = loadedItems.length;
       if (currentTab === 'sticker') {
-        // first include avatar stickers (only once)
-        if (nextIndex < avatarStickers.length) {
-          loadedItems.push(avatarStickers[nextIndex]);
-          continue;
-        }
-        // then generate moving-sticker GIF URLs
-        const genIndex = nextIndex - avatarStickers.length;
+        const genIndex = nextIndex;
         loadedItems.push(generateStickerURL(genIndex));
       } else if (currentTab === 'gif') {
         const genIndex = nextIndex;
         loadedItems.push(nextGifURL(genIndex));
+      } else if (currentTab === 'avatar'){
+        if (nextIndex < avatarStickers.length) {
+          const genIndex = nextIndex;
+          loadedItems.push(avatarStickers[nextIndex]);
       } else {
-        // emoji tab doesn't use loadedItems
         break;
+        };
       }
     }
   }
@@ -5126,6 +5125,9 @@ if (cs.stagedFiles && cs.stagedFiles.length) {
         body.appendChild(grid);
       }
     } else if (currentTab === 'sticker') {
+      loadedItems = []; pageIndex = 0;
+      ensureItemsForPage(); renderPage();
+    } else if (currentTab === 'avatar'){
       loadedItems = []; pageIndex = 0;
       ensureItemsForPage(); renderPage();
     } else {
