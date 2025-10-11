@@ -5701,8 +5701,9 @@ def handle_vote_poll(data):
 def poll_alias():
     since = request.args.get('lastId', request.args.get('since', 0, type=int), type=int)
     for msg in messages:
-    if "seenBy" not in msg:
-        msg["seenBy"] = seen_by_list_for_this_message(msg)  # ← implement this helper or just []
+        if "seenBy" not in msg:
+            msg["seenBy"] = []
+    
     msgs = fetch_messages(since)
     return jsonify(msgs)
 
