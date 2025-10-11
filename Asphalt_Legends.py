@@ -4151,7 +4151,23 @@ CHAT_HTML = r'''<!doctype html>
           const leftMeta = document.createElement('div');
           leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
           const rightMeta = document.createElement('div');
-          rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+            if (me) {
+              const tick = document.createElement('span');
+              tick.className = 'tick';
+            
+              if (m.local || m.status === 'sending') {
+                tick.textContent = '✓'; // single tick (local send)
+                tick.style.color = '#888';
+              } else if (m.seenBy && m.seenBy.length >= (window.totalUsers - 1)) {
+                tick.textContent = '✓✓'; // blue double ticks
+                tick.style.color = '#1E90FF';
+              } else {
+                tick.textContent = '✓✓'; // gray double ticks
+                tick.style.color = '#666';
+              }
+            
+              rightMeta.appendChild(tick);
+            }
           meta.appendChild(leftMeta);
           meta.appendChild(rightMeta);
           body.appendChild(meta);
@@ -4183,7 +4199,21 @@ CHAT_HTML = r'''<!doctype html>
               const img = document.createElement('img');
               img.src = a.url;
               img.className = 'image-attachment';
+              img.style.opacity = m.status === 'sending' ? '0.6' : '1';
               bubble.appendChild(img);
+            
+            } else if (a.type === 'video') {
+              const v = document.createElement('video');
+              v.src = a.url;
+              v.controls = true;
+              v.autoplay = false;
+              v.playsInline = true;
+              v.className = 'video-attachment';
+              v.style.borderRadius = '8px';
+              v.style.maxWidth = '300px';
+              v.style.opacity = m.status === 'sending' ? '0.6' : '1';
+              bubble.appendChild(v);
+
             } else if (a.type === 'poll') {
               const pollEl = document.createElement('div');
               pollEl.className = 'poll';
@@ -4280,6 +4310,7 @@ CHAT_HTML = r'''<!doctype html>
         } catch (err) {
           console.error('appendMessage error', err);
         }
+        if (!me) observeMessageSeen(wrapper, m);
       };
 
       // click outside handlers to close drawers/panels
@@ -4767,6 +4798,23 @@ function insertSticker(url){
     textarea.focus();
   }
 }
+function observeMessageSeen(msgEl, msg) {
+  if (!msgEl || !msg.id) return;
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        fetch('/mark_seen', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: msg.id, user: cs.myName })
+        }).catch(console.warn);
+        observer.disconnect();
+      }
+    });
+  });
+  observer.observe(msgEl);
+}
+
 </script>
 <script>
 (async function drawerMic_v4_infinite_patched() {
