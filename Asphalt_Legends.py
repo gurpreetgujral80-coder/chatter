@@ -37,7 +37,7 @@ ALLOWED_AUDIO_EXT = {"mp3", "wav", "ogg", "m4a", "webm"}
 messages_store = []
 polls_store = {}
 USER_SID = {}
-msg["seenBy"] = []
+messages_store["seenBy"] = []
 
 # ensure static subfolders
 pathlib.Path(os.path.join(app.static_folder, "uploads")).mkdir(parents=True, exist_ok=True)
