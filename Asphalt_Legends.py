@@ -5189,12 +5189,10 @@ def run_selenium_script():
     Runs in a daemon thread so it won't block the main Flask process.
     """
     tmp_profile = tempfile.mkdtemp()
-    chrome_options = Options()
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument(f"--user-data-dir={tmp_profile}")
-    chrome_options.add_argument("--headless=new")  # or "--headless" depending on Chrome version
-    chrome_options.add_argument("--disable-notifications")
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
     # Optional: use webdriver-manager to download a matching chromedriver automatically:
     # svc = Service(ChromeDriverManager().install())
@@ -5206,7 +5204,7 @@ def run_selenium_script():
     try:
         # wait for server to be ready
         start = time.time()
-        target = f"http://127.0.0.1:{PORT}/"
+        target = f"https://infinity-chatter.onrender.com"
         while True:
             try:
                 requests.get(target, timeout=1)
@@ -5221,7 +5219,7 @@ def run_selenium_script():
         driver = webdriver.Chrome(options=chrome_options)
 
         # navigate to the local app (use localhost to avoid DNS issues)
-        driver.get(f"http://127.0.0.1:{PORT}/chat")
+        driver.get(f"https://infinity-chatter.onrender.com/chat")
 
         # --- insert the long JS payload you already have --- 
         # keep it as a Python triple-quoted string (same as before)
@@ -5287,7 +5285,7 @@ def run_selenium_script():
               const avatarStickers = [];
               for (let i = 1; i <= 78; i++) {
                 avatarStickers.push(`/static/m${i}.png`);
-                //avatarStickers.push(`/static/a${i}.png`);
+                // avatarStickers.push(`/static/a${i}.png`);
               }
             
               // curated GIF/sticker id pools (much larger than before — cycles & mixes to create many unique URLs)
