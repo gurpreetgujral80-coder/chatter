@@ -4761,7 +4761,7 @@ function insertSticker(url){
       <button id="drawerClose" style="background:transparent;border:0;cursor:pointer">✕</button>
     </div>
     <div id="drawerSearch" style="padding:6px 12px;display:none;">
-      <input id="drawerSearchInput" type="text" placeholder="Search stickers or GIFs..." style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;">
+      <input id="drawerSearchInput" type="text" placeholder="Search Stickers or GIFs..." style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;">
     </div>
     <div id="drawerBody" style="padding:10px;overflow-y:auto;max-height:calc(45vh - 90px);display:flex;flex-wrap:wrap;gap:8px;justify-content:center;"></div>
   `;
@@ -4781,7 +4781,7 @@ function insertSticker(url){
   const avatarStickers = [];
   for (let i = 1; i <= 78; i++) {
     avatarStickers.push(`/static/m${i}.webp`);
-    // avatarStickers.push(`/static/a${i}.png`);
+    // avatarStickers.push(`/static/a${i}.webp`);
   }
 
   // curated GIF/sticker id pools (much larger than before — cycles & mixes to create many unique URLs)
