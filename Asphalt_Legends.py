@@ -37,6 +37,7 @@ ALLOWED_AUDIO_EXT = {"mp3", "wav", "ogg", "m4a", "webm"}
 messages_store = []
 polls_store = {}
 USER_SID = {}
+msg["seenBy"] = []
 
 # ensure static subfolders
 pathlib.Path(os.path.join(app.static_folder, "uploads")).mkdir(parents=True, exist_ok=True)
@@ -5343,6 +5344,25 @@ def send_composite_message():
         current_app.logger.exception("send_composite_message error")
         return jsonify({"error": str(e)}), 500
 
+if (cs.stagedFiles && cs.stagedFiles.length) {
+  const file = cs.stagedFiles[0];
+  const url = URL.createObjectURL(file);
+  const type = file.type.startsWith('video')
+    ? 'video'
+    : file.type.startsWith('audio')
+      ? 'audio'
+      : 'image';
+  const localMsg = {
+    id: 'local-' + Date.now(),
+    sender: cs.myName,
+    text: document.querySelector('#msg')?.value || '',
+    attachments: [{ type, url }],
+    local: true,
+    status: 'sending',
+  };
+  appendMessage(localMsg); // use your message-render function
+}
+
 @app.route('/send_message', methods=['POST'])
 def send_message():
     """
@@ -5384,6 +5404,23 @@ def poll_messages():
     since = request.args.get('since', 0, type=int)
     msgs = fetch_messages(since)
     return jsonify(msgs)
+
+@app.route('/mark_seen', methods=['POST'])
+def mark_seen():
+    data = request.get_json(force=True)
+    msg_id = data.get('messageId')
+    user = session.get('username') or 'anonymous'
+    if not msg_id:
+        return jsonify({'ok': False})
+    # Example: add user to "seenBy"
+    # Implement your own persistence logic here (DB, in-memory, etc.)
+    for m in messages_db:
+        if str(m['id']) == str(msg_id):
+            if 'seenBy' not in m:
+                m['seenBy'] = []
+            if user not in m['seenBy']:
+                m['seenBy'].append(user)
+    return jsonify({'ok': True})
 
 @app.route("/edit_message", methods=["POST"])
 def route_edit_message():
@@ -5617,6 +5654,9 @@ def handle_vote_poll(data):
 @app.route('/get_messages')
 def poll_alias():
     since = request.args.get('lastId', request.args.get('since', 0, type=int), type=int)
+    for msg in messages:
+    if "seenBy" not in msg:
+        msg["seenBy"] = seen_by_list_for_this_message(msg)  # ← implement this helper or just []
     msgs = fetch_messages(since)
     return jsonify(msgs)
 
