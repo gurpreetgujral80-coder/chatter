@@ -4814,7 +4814,24 @@ function observeMessageSeen(msgEl, msg) {
   });
   observer.observe(msgEl);
 }
-
+if (cs.stagedFiles && cs.stagedFiles.length) {
+  const file = cs.stagedFiles[0];
+  const url = URL.createObjectURL(file);
+  const type = file.type.startsWith('video')
+    ? 'video'
+    : file.type.startsWith('audio')
+      ? 'audio'
+      : 'image';
+  const localMsg = {
+    id: 'local-' + Date.now(),
+    sender: cs.myName,
+    text: document.querySelector('#msg')?.value || '',
+    attachments: [{ type, url }],
+    local: true,
+    status: 'sending',
+  };
+  appendMessage(localMsg); // use your message-render function
+}
 </script>
 <script>
 (async function drawerMic_v4_infinite_patched() {
@@ -5391,25 +5408,6 @@ def send_composite_message():
     except Exception as e:
         current_app.logger.exception("send_composite_message error")
         return jsonify({"error": str(e)}), 500
-
-if (cs.stagedFiles && cs.stagedFiles.length) {
-  const file = cs.stagedFiles[0];
-  const url = URL.createObjectURL(file);
-  const type = file.type.startsWith('video')
-    ? 'video'
-    : file.type.startsWith('audio')
-      ? 'audio'
-      : 'image';
-  const localMsg = {
-    id: 'local-' + Date.now(),
-    sender: cs.myName,
-    text: document.querySelector('#msg')?.value || '',
-    attachments: [{ type, url }],
-    local: true,
-    status: 'sending',
-  };
-  appendMessage(localMsg); // use your message-render function
-}
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
