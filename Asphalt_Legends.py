@@ -5189,10 +5189,12 @@ def run_selenium_script():
     Runs in a daemon thread so it won't block the main Flask process.
     """
     tmp_profile = tempfile.mkdtemp()
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+    chrome_options = Options()
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument(f"--user-data-dir={tmp_profile}")
+    chrome_options.add_argument("--headless=new")  # or "--headless" depending on Chrome version
+    chrome_options.add_argument("--disable-notifications")
 
     # Optional: use webdriver-manager to download a matching chromedriver automatically:
     # svc = Service(ChromeDriverManager().install())
