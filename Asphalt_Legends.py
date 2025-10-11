@@ -3452,16 +3452,64 @@ CHAT_HTML = r'''<!doctype html>
       const img = document.createElement('img'); img.src = a.url; img.className = 'image-attachment'; img.style.maxWidth='420px'; img.style.borderRadius='10px';
       container.appendChild(img); return { element: container, mediaElement: img };
     }
-    if(a.type === 'video'){
-      const thumbImg = document.createElement('img'); thumbImg.className = 'thumb'; thumbImg.alt = a.name || 'video';
-      const playOverlay = document.createElement('div'); playOverlay.className='play-overlay'; playOverlay.innerHTML = '<div class="play-circle">▶</div>';
-      container.appendChild(thumbImg); container.appendChild(playOverlay);
-      createVideoThumbnailFromUrl(a.url, 0.7).then(dataUrl=>{ if(dataUrl) thumbImg.src = dataUrl; else { const v = document.createElement('video'); v.src = a.url; v.controls = true; v.className='video-attachment'; container.innerHTML = ''; container.appendChild(v); } });
-      container.addEventListener('click', ()=>{
-        if(container.querySelector('video')) return;
-        const v = document.createElement('video'); v.src = a.url; v.controls = true; v.autoplay = true; v.playsInline = true; v.className='video-attachment';
-        container.innerHTML = ''; container.appendChild(v);
-      }, { once:true });
+    if (a.type === 'video') {
+      // Treat audio containers (.webm, .mp3, .ogg, .wav) as audio, not video
+      if (/\.(webm|mp3|ogg|wav)(?:\?|$)/i.test(a.url)) {
+        const au = document.createElement('audio');
+        au.src = a.url;
+        au.controls = true;
+        au.className = 'mt-2';
+        container.appendChild(au);
+        return { element: container };
+      }
+    
+      // Otherwise, handle as video with thumbnail + click-to-play
+      const thumbImg = document.createElement('img');
+      thumbImg.className = 'thumb';
+      thumbImg.alt = a.name || 'video';
+    
+      const playOverlay = document.createElement('div');
+      playOverlay.className = 'play-overlay';
+      playOverlay.innerHTML = '<div class="play-circle">▶</div>';
+    
+      container.appendChild(thumbImg);
+      container.appendChild(playOverlay);
+    
+      // Try to generate a thumbnail; if fails, fallback to video
+      (createVideoThumbnailFromUrl(a.url, 0.7) || Promise.resolve(null))
+        .then(dataUrl => {
+          if (dataUrl) {
+            thumbImg.src = dataUrl;
+          } else {
+            const v = document.createElement('video');
+            v.src = a.url;
+            v.controls = true;
+            v.className = 'video-attachment';
+            container.innerHTML = '';
+            container.appendChild(v);
+          }
+        })
+        .catch(() => {
+          const v = document.createElement('video');
+          v.src = a.url;
+          v.controls = true;
+          v.className = 'video-attachment';
+          container.innerHTML = '';
+          container.appendChild(v);
+        });
+    
+      container.addEventListener('click', () => {
+        if (container.querySelector('video')) return;
+        const v = document.createElement('video');
+        v.src = a.url;
+        v.controls = true;
+        v.autoplay = true;
+        v.playsInline = true;
+        v.className = 'video-attachment';
+        container.innerHTML = '';
+        container.appendChild(v);
+      }, { once: true });
+    
       return { element: container, mediaElement: thumbImg };
     }
     // 🔧 NEW PATCH — treat webm with audio mime as audio, not video
@@ -4780,12 +4828,11 @@ function insertSticker(url){
   // ---------- Sticker sources: user avatars (m1..m20, a1..a20) + moving-sticker generators ----------
   const avatarStickers = [];
   for (let i = 1; i <= 78; i++) {
+    if (i === 47) continue;
     avatarStickers.push(`/static/m${i}.webp`);
     // avatarStickers.push(`/static/a${i}.webp`);
   }
 
-  // curated GIF/sticker id pools (much larger than before — cycles & mixes to create many unique URLs)
-  // NOTE: these are public GIF ids commonly used; we combine with multiple URL patterns to increase variation.
   const GIPHY_IDS = [
     '26BRzozg4TCBXv6QU','l0MYC0LajbaPoEADu','3oEjI6SIIHBdRxXI40','ASd0Ukj0y3qMM',
     'xT9IgG50Fb7Mi0prBC','3oEjHP8ELRNNlnlLGM','yFQ0ywscgobJK','5ntdy5Ban1dIY',
