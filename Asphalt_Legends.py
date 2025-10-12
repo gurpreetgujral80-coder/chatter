@@ -96,13 +96,26 @@ init_db()
 @socketio.on('send_message')
 def handle_send_message(data):
     # Save message
+        sender = data.get('sender')
+    avatar = None
+    try:
+        user = load_user_by_name(sender)
+        if user:
+            avatar = user.get('avatar')
+            if avatar and not avatar.startswith('/') and re.match(r'^m\d+\.(webp|png|jpg|jpeg)$', avatar, re.I):
+                avatar = f'/static/{avatar}'
+    except Exception:
+        avatar = None
+
     new_msg = {
-        "id": len(messages_store) + 1,
-        "sender": data.get('sender'),
-        "text": data.get('text'),
-        "attachments": data.get('attachments', []),
-        "reactions": []
+      "id": len(messages_store) + 1,
+      "sender": sender,
+      "text": data.get('text'),
+      "attachments": data.get('attachments', []),
+      "reactions": [],
+      "avatar": avatar
     }
+
     messages_store.append(new_msg)
     # Broadcast to all connected clients
     socketio.emit('new_message', new_msg)
@@ -185,6 +198,8 @@ def get_partner():
     if r: return {"id": r[0], "name": r[1]}
     return None
 
+import re  # at top of file if not already
+
 def save_message(sender, text, attachments=None):
     """
     Save a message to the SQLite messages table and return the inserted message dict.
@@ -206,10 +221,20 @@ def save_message(sender, text, attachments=None):
     try:
         trim_messages_limit(MAX_MESSAGES)
     except Exception:
-        # ignore trimming errors
         pass
 
-    # return the same structure fetch_messages() uses
+    # assign avatar for sender
+    avatar = None
+    try:
+        user = load_user_by_name(sender)
+        if user:
+            avatar = user.get('avatar')
+            if avatar and not avatar.startswith('/') and re.match(r'^m\d+\.(webp|png|jpg|jpeg)$', avatar, re.I):
+                avatar = f'/static/{avatar}'
+    except Exception:
+        avatar = None
+
+    # return full message dict with avatar
     return {
         "id": mid,
         "sender": sender,
@@ -217,8 +242,10 @@ def save_message(sender, text, attachments=None):
         "attachments": attachments or [],
         "reactions": [],
         "edited": False,
-        "created_at": ts
+        "created_at": ts,
+        "avatar": avatar
     }
+
 
 def fetch_messages(since=0):
     """
@@ -240,6 +267,18 @@ def fetch_messages(since=0):
         mid, sender, text, attachments_json, reactions_json, edited, created_at = r
         attachments = json.loads(attachments_json or "[]")
         reactions = json.loads(reactions_json or "[]")
+
+        # assign avatar for sender
+        avatar = None
+        try:
+            user = load_user_by_name(sender)
+            if user:
+                avatar = user.get('avatar')
+                if avatar and not avatar.startswith('/') and re.match(r'^m\d+\.(webp|png|jpg|jpeg)$', avatar, re.I):
+                    avatar = f'/static/{avatar}'
+        except Exception:
+            avatar = None
+
         messages.append({
             "id": mid,
             "sender": sender,
@@ -247,10 +286,11 @@ def fetch_messages(since=0):
             "attachments": attachments,
             "reactions": reactions,
             "edited": bool(edited),
-            "created_at": created_at
+            "created_at": created_at,
+            "avatar": avatar
         })
     return messages
-
+    
 def trim_messages_limit(max_messages=80):
     conn = db_conn(); c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM messages"); total = c.fetchone()[0]
@@ -5543,41 +5583,71 @@ def send_composite_message():
         current_app.logger.exception("send_composite_message error")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/send_message', methods=['POST'])
-def send_message():
-    """
-    Accepts JSON { text, sender?, attachments? } and stores the message to DB.
-    Returns the stored message object (with id).
-    """
-    try:
-        data = request.get_json() or {}
-        text = (data.get('text') or "").strip()
-        attachments = data.get('attachments') or []
+async function sendMessage(textArg, attsArg) {
+    const inputEl = document.querySelector('#msg') || document.querySelector('#textarea');
+    const text = (typeof textArg === 'string') ? textArg.trim() : (inputEl ? (inputEl.value || '').trim() : '');
+    const atts = Array.isArray(attsArg) ? attsArg : (cs.stagedFiles || []).slice();
 
-        # Prefer authenticated session username when available
-        sender = data.get('sender') or session.get('username') or data.get('from') or 'Unknown'
+    if (!text && (!atts || atts.length === 0)) return;
 
-        if not text and (not attachments or len(attachments) == 0):
-            return jsonify({'error': 'Empty message'}), 400
+    try {
+        let res, json;
 
-        # Directly save and use the returned message dict
-        message = save_message(sender, text, attachments)
+        if (atts.length > 0) {
+            // send files + text
+            const fd = new FormData();
+            fd.append('text', text);
+            fd.append('sender', cs.myName);
+            for (const f of atts) fd.append('file', f, f.name);
 
-        if not message:
-            return jsonify({'error': 'Failed to save message'}), 500
+            res = await fetch('/send_composite_message', { method: 'POST', body: fd, credentials: 'same-origin' });
+            json = await res.json().catch(() => null);
 
-        # Broadcast to socket clients (keeps real-time clients in sync)
-        try:
-            socketio.emit('new_message', message)
-        except Exception:
-            # Don't fail the HTTP response if sockets fail
-            app.logger.exception("socket emit failed for new_message")
+            if (res.ok && json && json.message) {
+                appendMessage(json.message);
+                cs.stagedFiles = [];
+                if (inputEl) inputEl.value = '';
+                const preview = document.getElementById('attachmentPreview') || document.getElementById('previewContainer');
+                if (preview) { preview.innerHTML = ''; preview.style.display = 'none'; }
+                cs.lastId = json.message.id || cs.lastId;
+                return json.message;
+            } else {
+                cs.lastId = 0;
+                if (typeof poll === 'function') await poll();
+                return null;
+            }
+        } else {
+            // send text only
+            res = await fetch('/send_message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, sender: cs.myName }),
+                credentials: 'same-origin'
+            });
 
-        return jsonify({'ok': True, 'message': message}), 200
+            json = await res.json().catch(() => null);
 
-    except Exception as e:
-        current_app.logger.exception('send_message error')
-        return jsonify({'error': str(e)}), 500
+            if (res.ok && json && json.message) {
+                appendMessage(json.message);
+                if (inputEl) inputEl.value = '';
+                cs.stagedFiles = [];
+                cs.lastId = json.message.id || cs.lastId;
+                return json.message;
+            } else {
+                cs.lastId = 0;
+                if (typeof poll === 'function') await poll();
+                return null;
+            }
+        }
+    } catch (err) {
+        console.error('sendMessage error', err);
+        alert('Send error: ' + (err && err.message ? err.message : err));
+        return null;
+    }
+}
+
+// expose globally
+window.sendMessage = sendMessage;
 
 @app.route('/poll_messages')
 def poll_messages():
