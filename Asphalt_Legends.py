@@ -2126,14 +2126,6 @@ CHAT_HTML = r'''<!doctype html>
             </div>
           </div>
         </div>
-
-        <!-- In-Call Controls on Header (top-left) -->
-        <div id="inCallControls" class="in-call-controls hidden">
-          <button id="btnHangup" class="ic-btn hangup">📞</button>
-          <button id="btnMute" class="ic-btn mute">🔇</button>
-          <button id="btnToggleVideo" class="ic-btn toggle-video">🎥</button>
-          <button id="btnSwitchCam" class="ic-btn switch-cam">🔄</button>
-        </div>
         
         <div class="header-actions" role="navigation" aria-label="Profile actions">
           <div id="profileBtn" class="profile-name">{{ username }}</div>
@@ -3262,63 +3254,153 @@ window.sendMessage = sendMessage;
     window.poll = poll;
     
     /* ---------------------------
-       Message rendering helpers
+       Helper: smart popover placement
        --------------------------- */
+    function positionPopover(popover, anchorRect) {
+      // anchorRect: getBoundingClientRect of the message wrapper (anchor)
+      const pad = 8;
+      const menuW = popover.offsetWidth || 180;
+      const menuH = popover.offsetHeight || 220;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
     
+      // try place to the right of anchor
+      let left = Math.min(vw - menuW - pad, Math.round(anchorRect.right + pad));
+      // if not enough room to right, place to left
+      if (left < pad) left = Math.max(pad, Math.round(anchorRect.left - menuW - pad));
+      // top: align with anchor top but ensure in viewport
+      let top = Math.max(pad, Math.round(anchorRect.top));
+      if (top + menuH + pad > vh) top = Math.max(pad, vh - menuH - pad);
+    
+      popover.style.left = left + 'px';
+      popover.style.top = top + 'px';
+    }
+    
+    /* ---------------------------
+       Emoji picker (react) popover
+       --------------------------- */
+    function showEmojiPickerForMessage(messageId, anchorEl) {
+      // remove existing
+      document.querySelectorAll('.emoji-popover').forEach(n => n.remove());
+    
+      const anchorRect = (anchorEl.closest && anchorEl.closest('.msg-row') || anchorEl).getBoundingClientRect();
+    
+      const pop = document.createElement('div');
+      pop.className = 'emoji-popover';
+      pop.style.position = 'absolute';
+      pop.style.zIndex = 150000;
+      pop.style.padding = '8px';
+      pop.style.background = '#fff';
+      pop.style.border = '1px solid rgba(0,0,0,0.08)';
+      pop.style.boxShadow = '0 8px 20px rgba(0,0,0,0.08)';
+      pop.style.borderRadius = '999px'; // semicircle corners
+      pop.style.display = 'flex';
+      pop.style.gap = '6px';
+      pop.style.flexWrap = 'wrap';
+      pop.style.maxWidth = '320px';
+    
+      // common emoji set — change to your preferred emojis
+      const emojis = ['👍','❤️','😂','🎉','😮','😢','👀','🔥'];
+    
+      emojis.forEach(emo => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'emoji-btn';
+        btn.textContent = emo;
+        btn.style.border = 'none';
+        btn.style.background = 'white';
+        btn.style.padding = '6px 10px';
+        btn.style.borderRadius = '999px';
+        btn.style.cursor = 'pointer';
+        btn.style.fontSize = '16px';
+        btn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
+        btn.onclick = async (ev) => {
+          ev.stopPropagation();
+          // optimistic UI: add reaction locally if you want
+          try {
+            await fetch('/react_message', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: messageId, emoji: emo, user: (window.cs && window.cs.myName) })
+            });
+          } catch (err) {
+            console.warn('react failed', err);
+          } finally {
+            pop.remove();
+          }
+        };
+        pop.appendChild(btn);
+      });
+    
+      document.body.appendChild(pop);
+      // need pop to be in DOM to measure
+      requestAnimationFrame(() => positionPopover(pop, anchorRect));
+    
+      // close on outside click
+      setTimeout(() => {
+        const hide = (ev) => {
+          if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', hide); }
+        };
+        document.addEventListener('click', hide);
+      }, 50);
+    }
+    
+    /* ---------------------------
+       Main: appendMessage (full)
+       --------------------------- */
     function appendMessage(m) {
       try {
         if (!m) return;
-        const me = m.sender === cs.myName;
     
-        // --- wrapper ---
+        const me = m.sender === (window.cs && window.cs.myName);
+    
+        // wrapper
         const wrapper = document.createElement('div');
         wrapper.className = 'msg-row';
         wrapper.dataset.messageId = m.id;
     
-        // --- flex row ---
-        const flexRow = document.createElement('div');
-        flexRow.style.display = 'flex';
-        flexRow.style.alignItems = 'center';
-        flexRow.style.gap = '8px';
-        if (me) flexRow.style.flexDirection = 'row-reverse';
+        // body container (we removed .message-avatar per request)
+        const bodyContainer = document.createElement('div');
+        bodyContainer.className = 'msg-body-container';
+        bodyContainer.style.display = 'flex';
+        bodyContainer.style.justifyContent = me ? 'flex-end' : 'flex-start';
     
-        // --- avatar ---
-        const avatarDiv = document.createElement('div');
-        avatarDiv.className = 'message-avatar';
-        avatarDiv.style.width = '40px';
-        avatarDiv.style.height = '40px';
-        avatarDiv.style.borderRadius = '50%';
-        avatarDiv.style.flexShrink = '0';
-        avatarDiv.style.backgroundSize = 'cover';
-        avatarDiv.style.backgroundPosition = 'center';
-        avatarDiv.style.backgroundImage = m.avatar
-          ? `url('${m.avatar}')`
-          : "url('/static/m1.webp')";
-    
-        // --- message body ---
+        // message body
         const body = document.createElement('div');
         body.className = 'msg-body';
+        body.style.maxWidth = '78%';
     
-        // --- bubble ---
+        // bubble
         const bubble = document.createElement('div');
         bubble.className = 'bubble ' + (me ? 'me' : 'them');
         bubble.style.display = 'flex';
         bubble.style.flexDirection = 'column';
         bubble.style.alignItems = 'flex-start';
+        bubble.style.gap = '6px';
+        bubble.style.position = 'relative';
     
-        // --- META ---
+        // meta (sender + tick area)
         const meta = document.createElement('div');
         meta.className = 'msg-meta-top';
+        meta.style.display = 'flex';
+        meta.style.justifyContent = 'space-between';
+        meta.style.width = '100%';
+        meta.style.color = '#000'; // keep meta text black
         const leftMeta = document.createElement('div');
-        leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
+        leftMeta.innerHTML = `<strong style="color:inherit">${escapeHtml(m.sender || '')}</strong>`;
         const rightMeta = document.createElement('div');
-        rightMeta.innerHTML = me ? `<span class="tick">✓</span>` : '';
+        // create tick-wrap container now (two ticks for smooth transition)
+        rightMeta.innerHTML = me ? `<span class="tick-wrap" style="display:inline-block; margin-left:6px">
+                                      <span class="tick1" style="color:#6b7280; margin-right:2px">✓</span>
+                                      <span class="tick2" style="color:#6b7280; opacity:0; transform:scale(.8); transition: opacity .28s ease, transform .28s ease">✓</span>
+                                    </span>` : '';
         meta.appendChild(leftMeta);
         meta.appendChild(rightMeta);
         bubble.appendChild(meta);
     
-        // --- text ---
-        if (m.text) {
+        // message text (we may skip for polls per your earlier request)
+        const hasPoll = (m.attachments || []).some(a => a && a.type === 'poll');
+        if (m.text && !hasPoll) {
           const textNode = document.createElement('div');
           textNode.className = 'msg-text';
           textNode.textContent = m.text;
@@ -3332,116 +3414,184 @@ window.sendMessage = sendMessage;
           bubble.appendChild(textNode);
         }
     
-        // --- attachments ---
+        // attachments
         (m.attachments || []).forEach(a => {
           if (!a) return;
     
-          // --- sticker ---
+          // sticker
           if (a.type === 'sticker' || a.url?.match(/\.(webp|png|jpg|jpeg|gif)$/i)) {
             const img = document.createElement('img');
             img.src = a.url;
             img.className = 'sticker';
-            img.style.maxWidth = '180px';
+            img.style.maxWidth = '220px';
             img.style.borderRadius = '8px';
             img.style.marginTop = '8px';
-            img.style.alignSelf = 'center';
+            img.style.alignSelf = 'center'; // sticker centered
             bubble.appendChild(img);
+            return;
+          }
     
-          // --- poll ---
-          } else if (a.type === 'poll') {
+          // poll (use the poll UI created earlier but with the tick fill green)
+          if (a.type === 'poll') {
             const pollContainer = document.createElement('div');
             pollContainer.className = 'poll';
             pollContainer.style.marginTop = '8px';
+            pollContainer.style.width = '100%';
     
-            // question
-            if (m.text) {
-              const qEl = document.createElement('div');
-              qEl.style.fontWeight = '600';
-              qEl.style.marginBottom = '6px';
-              qEl.textContent = m.text;
-              pollContainer.appendChild(qEl);
-            }
+            // question removed from top (per request). We show "View votes" link below options.
     
-            if (a.options?.length) {
-              const list = document.createElement('div');
-              list.style.display = 'flex';
-              list.style.flexDirection = 'column';
-              list.style.gap = '6px';
+            // options list
+            const list = document.createElement('div');
+            list.style.display = 'flex';
+            list.style.flexDirection = 'column';
+            list.style.gap = '8px';
     
-              const counts = a.counts || new Array(a.options.length).fill(0);
-              const userVote = a.userVotes?.[cs.myName]; // index of option clicked
+            const counts = a.counts || new Array(a.options.length).fill(0);
+            const userVoteIndex = (a.userVoteIndex !== undefined) ? a.userVoteIndex
+                                    : (a.userVotes && a.userVotes[ (window.cs && window.cs.myName) ] !== undefined
+                                        ? a.userVotes[window.cs.myName] : undefined);
     
-              a.options.forEach((op, i) => {
-                const optDiv = document.createElement('div');
-                optDiv.className = 'poll-option';
-                optDiv.style.display = 'flex';
-                optDiv.style.alignItems = 'center';
-                optDiv.style.justifyContent = 'space-between';
-                optDiv.style.padding = '6px 8px';
-                optDiv.style.borderRadius = '6px';
-                optDiv.style.background = '#f3f4f6';
-                optDiv.style.cursor = userVote === undefined ? 'pointer' : 'default';
-                optDiv.style.transition = 'background 0.2s';
+            a.options.forEach((op, idx) => {
+              const row = document.createElement('div');
+              row.className = 'poll-option-row';
+              row.style.display = 'flex';
+              row.style.alignItems = 'center';
+              row.style.gap = '10px';
+              row.style.padding = '8px';
+              row.style.borderRadius = '8px';
+              row.style.background = '#f3f4f6';
+              row.style.cursor = 'pointer';
+              row.style.transition = 'background .15s';
     
-                // circle for tick
-                const circle = document.createElement('div');
-                circle.style.width = '18px';
-                circle.style.height = '18px';
-                circle.style.border = '2px solid #9ca3af';
-                circle.style.borderRadius = '50%';
-                circle.style.marginRight = '8px';
-                circle.style.display = 'flex';
-                circle.style.alignItems = 'center';
-                circle.style.justifyContent = 'center';
-                circle.style.transition = 'all 0.2s ease';
-                if (userVote === i) circle.innerHTML = '✓';
+              // circle + animated fill
+              const circle = document.createElement('div');
+              circle.style.width = '20px';
+              circle.style.height = '20px';
+              circle.style.border = '2px solid #9ca3af';
+              circle.style.borderRadius = '50%';
+              circle.style.display = 'flex';
+              circle.style.alignItems = 'center';
+              circle.style.justifyContent = 'center';
+              circle.style.position = 'relative';
+              circle.style.flexShrink = '0';
     
-                const label = document.createElement('span');
-                label.textContent = op;
-                label.style.flexGrow = '1';
+              const fill = document.createElement('div');
+              fill.style.width = '12px';
+              fill.style.height = '12px';
+              fill.style.borderRadius = '50%';
+              fill.style.background = '#10b981'; // green fill
+              fill.style.transform = (userVoteIndex === idx) ? 'scale(1)' : 'scale(0)';
+              fill.style.transition = 'transform .22s cubic-bezier(.2,.9,.2,1)';
+              fill.style.transformOrigin = 'center';
     
-                const countEl = document.createElement('span');
-                countEl.textContent = counts[i] || 0;
+              const check = document.createElement('div');
+              check.style.position = 'absolute';
+              check.style.fontSize = '12px';
+              check.style.color = '#fff';
+              check.style.opacity = (userVoteIndex === idx) ? '1' : '0';
+              check.style.transition = 'opacity .22s';
+              check.innerText = '✓';
     
-                optDiv.appendChild(circle);
-                optDiv.appendChild(label);
-                optDiv.appendChild(countEl);
+              circle.appendChild(fill);
+              circle.appendChild(check);
     
-                // click handler
-                if (userVote === undefined) {
-                  optDiv.addEventListener('click', async ev => {
-                    ev.preventDefault();
-                    circle.innerHTML = '✓';
-                    optDiv.style.background = '#d1fae5';
-                    // disable all other options
-                    Array.from(list.children).forEach(c => c.style.cursor = 'default');
-                    try {
-                      await fetch('/vote_poll', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message_id: m.id, option: i, user: cs.myName })
-                      });
-                      cs.lastId = 0;
-                      if (typeof poll === 'function') await poll();
-                    } catch (err) {
-                      console.warn('vote failed', err);
-                    }
-                  });
+              const label = document.createElement('div');
+              label.textContent = op;
+              label.style.flex = '1';
+    
+              // inline count kept hidden
+              const countSpan = document.createElement('span');
+              countSpan.style.display = 'none';
+              countSpan.textContent = counts[idx] || 0;
+    
+              row.appendChild(circle);
+              row.appendChild(label);
+              row.appendChild(countSpan);
+    
+              // toggle vote handler (toggle on/off) with optimistic UI and animation
+              row.addEventListener('click', async (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+    
+                const currentlySelected = (userVoteIndex === idx) || (row.dataset.voted === '1');
+                if (currentlySelected) {
+                  // optimistic deselect
+                  fill.style.transform = 'scale(0)';
+                  check.style.opacity = '0';
+                  row.dataset.voted = '0';
+                  // call unvote endpoint
+                  try {
+                    await fetch('/unvote_poll', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ message_id: m.id, option: idx, user: (window.cs && window.cs.myName) })
+                    });
+                    cs.lastId = 0;
+                    if (typeof poll === 'function') await poll();
+                  } catch (err) {
+                    console.warn('unvote failed', err);
+                  }
+                  return;
                 }
     
-                list.appendChild(optDiv);
+                // else vote
+                // animate fill
+                fill.style.transform = 'scale(1)';
+                check.style.opacity = '1';
+                // temporarily disable all rows until server response
+                Array.from(list.children).forEach(c => c.style.pointerEvents = 'none');
+                try {
+                  await fetch('/vote_poll', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message_id: m.id, option: idx, user: (window.cs && window.cs.myName) })
+                  });
+                  cs.lastId = 0;
+                  if (typeof poll === 'function') await poll();
+                } catch (err) {
+                  console.warn('vote failed', err);
+                  // revert on error
+                  fill.style.transform = 'scale(0)';
+                  check.style.opacity = '0';
+                } finally {
+                  Array.from(list.children).forEach(c => c.style.pointerEvents = 'auto');
+                }
               });
-              pollContainer.appendChild(list);
-            }
+    
+              // mark dataset if userVoteIndex found
+              if (userVoteIndex === idx) row.dataset.voted = '1';
+              else row.dataset.voted = '0';
+    
+              list.appendChild(row);
+            });
+    
+            pollContainer.appendChild(list);
+    
+            // view votes link (blue)
+            const viewVotes = document.createElement('div');
+            viewVotes.textContent = 'View votes';
+            viewVotes.style.color = '#2563eb';
+            viewVotes.style.cursor = 'pointer';
+            viewVotes.style.marginTop = '8px';
+            viewVotes.style.fontWeight = '600';
+            viewVotes.style.alignSelf = 'flex-start';
+            viewVotes.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              openPollVotesDrawer(m, a);
+            });
+            pollContainer.appendChild(viewVotes);
     
             bubble.appendChild(pollContainer);
-          } else {
-            const { element } = createAttachmentElement(a);
-            if (element) bubble.appendChild(element);
-          }
+            return;
+          } // end poll
+    
+          // other attachment types - fallback
+          const { element } = createAttachmentElement(a) || {};
+          if (element) bubble.appendChild(element);
         });
     
-        // --- reactions ---
+        // reactions area appended under attachments (unchanged layout)
         if (m.reactions?.length) {
           const agg = {};
           for (const r of m.reactions) {
@@ -3450,10 +3600,20 @@ window.sendMessage = sendMessage;
           }
           const reactionBar = document.createElement('div');
           reactionBar.className = 'reaction-bar';
+          reactionBar.style.marginTop = '6px';
+          reactionBar.style.display = 'flex';
+          reactionBar.style.gap = '6px';
           for (const emoji in agg) {
             const userset = agg[emoji];
             const pill = document.createElement('div');
             pill.className = 'reaction-pill';
+            pill.style.background = '#fff';
+            pill.style.borderRadius = '999px';
+            pill.style.padding = '4px 8px';
+            pill.style.display = 'flex';
+            pill.style.alignItems = 'center';
+            pill.style.gap = '6px';
+            pill.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
             const em = document.createElement('div');
             em.className = 'reaction-emoji';
             em.innerText = emoji;
@@ -3468,155 +3628,94 @@ window.sendMessage = sendMessage;
           bubble.appendChild(reactionBar);
         }
     
-        // --- three-dot menu ---
+        // 3-dot menu button (positioned smartly to the right of the message)
         const menuBtn = document.createElement('button');
         menuBtn.className = 'three-dot';
+        menuBtn.type = 'button';
         menuBtn.innerText = '⋯';
-        menuBtn.onclick = ev => {
+        menuBtn.style.border = 'none';
+        menuBtn.style.background = 'transparent';
+        menuBtn.style.cursor = 'pointer';
+        menuBtn.style.fontSize = '18px';
+        menuBtn.style.alignSelf = 'flex-end';
+    
+        menuBtn.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          document.querySelectorAll('.menu:not(#profileMenu)').forEach(n => n.remove());
+          // remove other menus
+          document.querySelectorAll('.msg-menu-popover').forEach(n => n.remove());
+    
+          // create popover
           const menu = document.createElement('div');
-          menu.className = 'menu';
+          menu.className = 'msg-menu-popover';
           menu.style.position = 'absolute';
-          menu.style.zIndex = 200;
+          menu.style.zIndex = 150000;
           menu.style.background = 'white';
-          menu.style.border = '1px solid #e5e7eb';
-          menu.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)';
+          menu.style.border = '1px solid rgba(0,0,0,0.08)';
+          menu.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
           menu.style.borderRadius = '8px';
           menu.style.padding = '8px';
-          menu.style.top = (menuBtn.getBoundingClientRect().bottom + 8) + 'px';
-          menu.style.left = (menuBtn.getBoundingClientRect().left - 160) + 'px';
+          menu.style.minWidth = '150px';
     
-          const del = document.createElement('div');
-          del.innerText = 'Delete';
-          del.style.cursor = 'pointer';
-          del.style.padding = '6px 8px';
-          del.onclick = async e => {
-            e.stopPropagation();
-            if (confirm('Delete this message?')) {
-              await fetch('/delete_message', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: m.id })
-              });
-              const container = document.getElementById('messages') || document.querySelector('.messages');
-              if (container) container.innerHTML = '';
-              cs.lastId = 0;
-              await poll();
-            }
+          // menu items
+          const makeItem = (text, fn) => {
+            const it = document.createElement('div');
+            it.textContent = text;
+            it.style.padding = '6px 10px';
+            it.style.cursor = 'pointer';
+            it.style.borderRadius = '6px';
+            it.addEventListener('click', (e) => { e.stopPropagation(); fn(); menu.remove(); });
+            it.addEventListener('mouseenter', () => it.style.background = '#f3f4f6');
+            it.addEventListener('mouseleave', () => it.style.background = 'transparent');
+            return it;
           };
     
-          const forward = document.createElement('div');
-          forward.innerText = 'Forward';
-          forward.style.cursor = 'pointer';
-          forward.style.padding = '6px 8px';
-          forward.onclick = () => {
+          menu.appendChild(makeItem('Copy', async () => {
             navigator.clipboard.writeText(m.text || '');
-            alert('Message copied for forwarding');
-          };
+          }));
+          menu.appendChild(makeItem('Forward', () => { navigator.clipboard.writeText(m.text || ''); alert('Copied for forwarding'); }));
+          if (m.sender === (window.cs && window.cs.myName)) {
+            menu.appendChild(makeItem('Delete', async () => {
+              if (!confirm('Delete this message?')) return;
+              await fetch('/delete_message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id }) });
+              const cont = document.getElementById('messages') || document.querySelector('.messages');
+              if (cont) { cont.innerHTML = ''; (window.cs && (window.cs.lastId = 0)); if (typeof poll === 'function') poll(); }
+            }));
+          }
+          menu.appendChild(makeItem('React', () => showEmojiPickerForMessage(m.id, menuBtn)));
     
-          const copy = document.createElement('div');
-          copy.innerText = 'Copy';
-          copy.style.cursor = 'pointer';
-          copy.style.padding = '6px 8px';
-          copy.onclick = () => {
-            navigator.clipboard.writeText(m.text || '');
-            alert('Copied to clipboard');
-          };
-    
-          const react = document.createElement('div');
-          react.innerText = 'React';
-          react.style.cursor = 'pointer';
-          react.style.padding = '6px 8px';
-          react.onclick = ev2 => {
-            ev2.stopPropagation();
-            showEmojiPickerForMessage(m.id, menuBtn);
-          };
-    
-          menu.appendChild(copy);
-          menu.appendChild(forward);
-          if (m.sender === cs.myName) menu.appendChild(del);
-          menu.appendChild(react);
           document.body.appendChild(menu);
     
-          const hide = () => {
-            menu.remove();
-            document.removeEventListener('click', hide);
-          };
-          setTimeout(() => document.addEventListener('click', hide), 50);
-        };
+          // position popover to the right of the message wrapper if possible
+          const anchorRect = wrapper.getBoundingClientRect();
+          // ensure menu is measured
+          requestAnimationFrame(() => positionPopover(menu, anchorRect));
+          // close on outside click
+          setTimeout(() => {
+            const hide = (ev) => {
+              if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', hide); }
+            };
+            document.addEventListener('click', hide);
+          }, 50);
+        });
     
         bubble.appendChild(menuBtn);
+    
         body.appendChild(bubble);
+        bodyContainer.appendChild(body);
+        wrapper.appendChild(bodyContainer);
     
-        // --- assemble flex row ---
-        flexRow.appendChild(avatarDiv);
-        flexRow.appendChild(body);
-        wrapper.appendChild(flexRow);
-    
-        // --- append container ---
+        // append to messages container
         const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
         if (messagesEl) messagesEl.appendChild(wrapper);
         if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+    
+        // Ensure tick state smoothly reflects any known status on message object
+        if (m.status) updateMessageStatus(m.id, m.status);
     
       } catch (err) {
         console.error('appendMessage error', err);
       }
     }
-    
-  // Reaction picker
-  function showEmojiPickerForMessage(msgId, anchorEl) {
-      // remove any existing picker
-      document.querySelectorAll('.menu').forEach(m => m.remove());
-    
-      const picker = document.createElement('div');
-      picker.className = 'menu';
-      const emojis = ['😀','😁','😂','😍','😮','😢','😡','👍','👎','🎉','🔥','❤️','👏','🤝','🤯'];
-    
-      emojis.forEach(em => {
-        const el = document.createElement('div');
-        el.style.display = 'inline-flex';
-        el.style.padding = '6px';
-        el.style.margin = '4px';
-        el.style.cursor = 'pointer';
-        el.innerText = em;
-    
-        el.onclick = async (ev) => {
-          ev.stopPropagation();
-          try {
-            await fetch('/react_message', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: msgId, emoji: em })
-            });
-          } catch (err) {
-            console.warn('react failed', err);
-          }
-          picker.remove();
-          if (typeof messagesEl !== 'undefined' && messagesEl) messagesEl.innerHTML = '';
-          cs.lastId = 0;
-          if (typeof poll === 'function') await poll();
-        };
-    
-        picker.appendChild(el);
-      });
-    
-      document.body.appendChild(picker);
-    
-      const rect = anchorEl.getBoundingClientRect();
-      let top = rect.bottom + 8;
-      let left = rect.left;
-      if (left + 240 > window.innerWidth) left = Math.max(8, window.innerWidth - 248);
-    
-      picker.style.position = 'fixed';
-      picker.style.top = top + 'px';
-      picker.style.left = left + 'px';
-      picker.style.zIndex = 99999;
-    
-      const hide = () => { picker.remove(); document.removeEventListener('click', hide); };
-      setTimeout(() => document.addEventListener('click', hide), 50);
-  }
-  window.showEmojiPickerForMessage = showEmojiPickerForMessage;
 
   // createAttachmentElement: returns DOM element for an attachment
   function createAttachmentElement(a){
@@ -4100,16 +4199,34 @@ window.sendMessage = sendMessage;
   window.updateMessageStatus = function (id, status) {
       const el = document.querySelector(`.msg-tick[data-id="${id}"]`);
       if (!el) return;
+    
+      // Ensure consistent width and smooth visual transition
+      el.style.display = 'inline-block';
+      el.style.minWidth = '20px';
+      el.style.transition = 'color 0.3s ease, opacity 0.3s ease';
+    
+      const prev = window.messageStates[id];
+      if (prev === status) return; // no redundant update
+    
       if (status === 'sent') {
-        el.innerHTML = '✓';
+        el.textContent = '✓';
         el.style.color = '#6b7280';
+        el.style.opacity = '1';
       } else if (status === 'delivered') {
-        el.innerHTML = '✓✓';
-        el.style.color = '#6b7280';
+        // smooth fade to double tick
+        el.style.opacity = '0';
+        setTimeout(() => {
+          el.textContent = '✓✓';
+          el.style.color = '#6b7280';
+          el.style.opacity = '1';
+        }, 150);
       } else if (status === 'seen') {
-        el.innerHTML = '✓✓';
+        // only color transition for seen
+        el.textContent = '✓✓';
         el.style.color = '#0ea5e9'; // blue for seen
+        el.style.opacity = '1';
       }
+    
       window.messageStates[id] = status;
   };
 
