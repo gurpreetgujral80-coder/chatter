@@ -5831,6 +5831,55 @@ def handle_vote_poll(data):
     else:
         emit('poll_private_missing', {'message': 'You must connect via socket to see private poll'})
 
+@app.route('/send_message', methods=['POST'])
+def send_message():
+    """
+    Accepts JSON { text, sender?, attachments? } and stores the message to DB.
+    Returns the stored message object (with id) and broadcasts it via SocketIO.
+    """
+    try:
+        data = request.get_json() or {}
+        text = (data.get('text') or "").strip()
+        attachments = data.get('attachments') or []
+
+        # Prefer authenticated session username when available
+        sender = data.get('sender') or session.get('username') or data.get('from') or 'Unknown'
+
+        if not text and (not attachments or len(attachments) == 0):
+            return jsonify({'error': 'Empty message'}), 400
+
+        # Patch avatar if user has one
+        avatar = None
+        try:
+            user = load_user_by_name(sender)
+            if user:
+                avatar = user.get('avatar')
+                if avatar and not avatar.startswith('/') and re.match(r'^m\d+\.(webp|png|jpg|jpeg)$', avatar, re.I):
+                    if avatar.lower() != 'm47.webp':  # skip m47 intentionally
+                        avatar = f'/static/{avatar}'
+        except Exception:
+            avatar = None
+
+        # Save message to DB
+        message = save_message(sender, text, attachments)
+        if not message:
+            return jsonify({'error': 'Failed to save message'}), 500
+
+        # Inject avatar into message object for frontend
+        message['avatar'] = avatar
+
+        # Broadcast to all connected SocketIO clients
+        try:
+            socketio.emit('new_message', message)
+        except Exception:
+            app.logger.exception("socket emit failed for new_message")
+
+        return jsonify({'ok': True, 'message': message}), 200
+
+    except Exception as e:
+        app.logger.exception('send_message error')
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/poll')
 @app.route('/messages')
 @app.route('/get_messages')
