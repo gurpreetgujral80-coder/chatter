@@ -3266,258 +3266,303 @@ window.sendMessage = sendMessage;
        --------------------------- */
     
     function appendMessage(m) {
-  try {
-    if (!m) return;
-
-    const me = m.sender === cs.myName;
-
-    // --- wrapper for entire message row ---
-    const wrapper = document.createElement('div');
-    wrapper.className = 'msg-row';
-    wrapper.dataset.messageId = m.id;
-
-    // --- flex container for avatar + bubble ---
-    const flexRow = document.createElement('div');
-    flexRow.style.display = 'flex';
-    flexRow.style.alignItems = 'center'; // center avatar vertically
-    flexRow.style.gap = '8px';
-    if (me) flexRow.style.flexDirection = 'row-reverse';
-
-    // --- avatar ---
-    const avatarDiv = document.createElement('div');
-    avatarDiv.className = 'message-avatar';
-    avatarDiv.style.width = '40px';
-    avatarDiv.style.height = '40px';
-    avatarDiv.style.borderRadius = '50%';
-    avatarDiv.style.flexShrink = '0';
-    avatarDiv.style.backgroundSize = 'cover';
-    avatarDiv.style.backgroundPosition = 'center';
-    avatarDiv.style.backgroundImage = m.avatar
-      ? `url('${m.avatar}')`
-      : "url('/static/m1.webp')"; // fallback
-
-    // --- message body ---
-    const body = document.createElement('div');
-    body.className = 'msg-body';
-
-    // --- bubble ---
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble ' + (me ? 'me' : 'them');
-
-    // --- META (with tick system) ---
-    const meta = document.createElement('div');
-    meta.className = 'msg-meta-top';
-    const leftMeta = document.createElement('div');
-    leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
-    const rightMeta = document.createElement('div');
-    rightMeta.innerHTML = me ? `<span class="tick">✓</span>` : ''; // tick remains
-    meta.appendChild(leftMeta);
-    meta.appendChild(rightMeta);
-
-    // --- message text ---
-    if (m.text) {
-      const textNode = document.createElement('div');
-      textNode.className = 'msg-text';
-      textNode.textContent = m.text;
-      if (m.edited) {
-        const editedSpan = document.createElement('span');
-        editedSpan.textContent = ' (edited)';
-        editedSpan.style.fontSize = '.7rem';
-        editedSpan.style.color = '#9ca3af';
-        textNode.appendChild(editedSpan);
-      }
-      bubble.appendChild(textNode);
-    }
-
-    // --- attachments ---
-    (m.attachments || []).forEach(a => {
-      if (!a) return;
-
-      if (a.type === 'sticker' || a.url?.match(/\.(webp|png|jpg|jpeg|gif)$/i)) {
-        const img = document.createElement('img');
-        img.src = a.url;
-        img.className = 'sticker';
-        img.style.maxWidth = '180px';
-        img.style.borderRadius = '8px';
-        img.style.marginTop = '8px';
-        bubble.appendChild(img);
-      } else if (a.type === 'poll') {
-        const p = document.createElement('div');
-        p.className = 'poll';
-        p.style.marginTop = '8px';
+      try {
+        if (!m) return;
+        const me = m.sender === cs.myName;
+    
+        // --- wrapper ---
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg-row';
+        wrapper.dataset.messageId = m.id;
+    
+        // --- flex row ---
+        const flexRow = document.createElement('div');
+        flexRow.style.display = 'flex';
+        flexRow.style.alignItems = 'center';
+        flexRow.style.gap = '8px';
+        if (me) flexRow.style.flexDirection = 'row-reverse';
+    
+        // --- avatar ---
+        const avatarDiv = document.createElement('div');
+        avatarDiv.className = 'message-avatar';
+        avatarDiv.style.width = '40px';
+        avatarDiv.style.height = '40px';
+        avatarDiv.style.borderRadius = '50%';
+        avatarDiv.style.flexShrink = '0';
+        avatarDiv.style.backgroundSize = 'cover';
+        avatarDiv.style.backgroundPosition = 'center';
+        avatarDiv.style.backgroundImage = m.avatar
+          ? `url('${m.avatar}')`
+          : "url('/static/m1.webp')";
+    
+        // --- message body ---
+        const body = document.createElement('div');
+        body.className = 'msg-body';
+    
+        // --- bubble ---
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble ' + (me ? 'me' : 'them');
+        bubble.style.display = 'flex';
+        bubble.style.flexDirection = 'column';
+        bubble.style.alignItems = 'flex-start';
+    
+        // --- META ---
+        const meta = document.createElement('div');
+        meta.className = 'msg-meta-top';
+        const leftMeta = document.createElement('div');
+        leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
+        const rightMeta = document.createElement('div');
+        rightMeta.innerHTML = me ? `<span class="tick">✓</span>` : '';
+        meta.appendChild(leftMeta);
+        meta.appendChild(rightMeta);
+        bubble.appendChild(meta);
+    
+        // --- text ---
         if (m.text) {
-          const qEl = document.createElement('div');
-          qEl.style.fontWeight = '600';
-          qEl.style.marginBottom = '6px';
-          qEl.textContent = m.text;
-          p.appendChild(qEl);
+          const textNode = document.createElement('div');
+          textNode.className = 'msg-text';
+          textNode.textContent = m.text;
+          if (m.edited) {
+            const editedSpan = document.createElement('span');
+            editedSpan.textContent = ' (edited)';
+            editedSpan.style.fontSize = '.7rem';
+            editedSpan.style.color = '#9ca3af';
+            textNode.appendChild(editedSpan);
+          }
+          bubble.appendChild(textNode);
         }
-        if (a.options?.length) {
-          const list = document.createElement('div');
-          list.style.display = 'flex';
-          list.style.flexDirection = 'column';
-          list.style.gap = '6px';
-          const counts = a.counts || new Array(a.options.length).fill(0);
-          const multi = !!a.multi;
-          a.options.forEach((op, i) => {
-            const optBtn = document.createElement('button');
-            optBtn.className = 'poll-option w-full px-3 py-2 rounded bg-gray-100 text-left';
-            const count = counts[i] || 0;
-            optBtn.innerHTML = `${op} <span class="poll-count" style="float:right">— ${count} vote${count !== 1 ? 's' : ''}</span>`;
-            optBtn.dataset.messageId = m.id;
-            optBtn.dataset.index = i;
-            optBtn.dataset.multi = multi ? '1' : '0';
-            optBtn.addEventListener('click', async ev => {
-              ev.preventDefault();
-              try {
-                await fetch('/vote_poll', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ message_id: m.id, option: i, user: cs.myName })
-                });
-                cs.lastId = 0;
-                if (typeof poll === 'function') await poll();
-              } catch (err) {
-                console.warn('vote failed', err);
-              }
-            });
-            list.appendChild(optBtn);
-          });
-          p.appendChild(list);
+    
+        // --- attachments ---
+        (m.attachments || []).forEach(a => {
+          if (!a) return;
+    
+          // --- sticker ---
+          if (a.type === 'sticker' || a.url?.match(/\.(webp|png|jpg|jpeg|gif)$/i)) {
+            const img = document.createElement('img');
+            img.src = a.url;
+            img.className = 'sticker';
+            img.style.maxWidth = '180px';
+            img.style.borderRadius = '8px';
+            img.style.marginTop = '8px';
+            img.style.alignSelf = 'center';
+            bubble.appendChild(img);
+    
+          // --- poll ---
+          } else if (a.type === 'poll') {
+            const pollContainer = document.createElement('div');
+            pollContainer.className = 'poll';
+            pollContainer.style.marginTop = '8px';
+    
+            // question
+            if (m.text) {
+              const qEl = document.createElement('div');
+              qEl.style.fontWeight = '600';
+              qEl.style.marginBottom = '6px';
+              qEl.textContent = m.text;
+              pollContainer.appendChild(qEl);
+            }
+    
+            if (a.options?.length) {
+              const list = document.createElement('div');
+              list.style.display = 'flex';
+              list.style.flexDirection = 'column';
+              list.style.gap = '6px';
+    
+              const counts = a.counts || new Array(a.options.length).fill(0);
+              const userVote = a.userVotes?.[cs.myName]; // index of option clicked
+    
+              a.options.forEach((op, i) => {
+                const optDiv = document.createElement('div');
+                optDiv.className = 'poll-option';
+                optDiv.style.display = 'flex';
+                optDiv.style.alignItems = 'center';
+                optDiv.style.justifyContent = 'space-between';
+                optDiv.style.padding = '6px 8px';
+                optDiv.style.borderRadius = '6px';
+                optDiv.style.background = '#f3f4f6';
+                optDiv.style.cursor = userVote === undefined ? 'pointer' : 'default';
+                optDiv.style.transition = 'background 0.2s';
+    
+                // circle for tick
+                const circle = document.createElement('div');
+                circle.style.width = '18px';
+                circle.style.height = '18px';
+                circle.style.border = '2px solid #9ca3af';
+                circle.style.borderRadius = '50%';
+                circle.style.marginRight = '8px';
+                circle.style.display = 'flex';
+                circle.style.alignItems = 'center';
+                circle.style.justifyContent = 'center';
+                circle.style.transition = 'all 0.2s ease';
+                if (userVote === i) circle.innerHTML = '✓';
+    
+                const label = document.createElement('span');
+                label.textContent = op;
+                label.style.flexGrow = '1';
+    
+                const countEl = document.createElement('span');
+                countEl.textContent = counts[i] || 0;
+    
+                optDiv.appendChild(circle);
+                optDiv.appendChild(label);
+                optDiv.appendChild(countEl);
+    
+                // click handler
+                if (userVote === undefined) {
+                  optDiv.addEventListener('click', async ev => {
+                    ev.preventDefault();
+                    circle.innerHTML = '✓';
+                    optDiv.style.background = '#d1fae5';
+                    // disable all other options
+                    Array.from(list.children).forEach(c => c.style.cursor = 'default');
+                    try {
+                      await fetch('/vote_poll', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message_id: m.id, option: i, user: cs.myName })
+                      });
+                      cs.lastId = 0;
+                      if (typeof poll === 'function') await poll();
+                    } catch (err) {
+                      console.warn('vote failed', err);
+                    }
+                  });
+                }
+    
+                list.appendChild(optDiv);
+              });
+              pollContainer.appendChild(list);
+            }
+    
+            bubble.appendChild(pollContainer);
+          } else {
+            const { element } = createAttachmentElement(a);
+            if (element) bubble.appendChild(element);
+          }
+        });
+    
+        // --- reactions ---
+        if (m.reactions?.length) {
+          const agg = {};
+          for (const r of m.reactions) {
+            agg[r.emoji] = agg[r.emoji] || new Set();
+            agg[r.emoji].add(r.user);
+          }
+          const reactionBar = document.createElement('div');
+          reactionBar.className = 'reaction-bar';
+          for (const emoji in agg) {
+            const userset = agg[emoji];
+            const pill = document.createElement('div');
+            pill.className = 'reaction-pill';
+            const em = document.createElement('div');
+            em.className = 'reaction-emoji';
+            em.innerText = emoji;
+            const count = document.createElement('div');
+            count.style.fontSize = '0.85rem';
+            count.style.color = '#374151';
+            count.innerText = userset.size;
+            pill.appendChild(em);
+            pill.appendChild(count);
+            reactionBar.appendChild(pill);
+          }
+          bubble.appendChild(reactionBar);
         }
-        bubble.appendChild(p);
-      } else {
-        const { element } = createAttachmentElement(a);
-        if (element) bubble.appendChild(element);
+    
+        // --- three-dot menu ---
+        const menuBtn = document.createElement('button');
+        menuBtn.className = 'three-dot';
+        menuBtn.innerText = '⋯';
+        menuBtn.onclick = ev => {
+          ev.stopPropagation();
+          document.querySelectorAll('.menu:not(#profileMenu)').forEach(n => n.remove());
+          const menu = document.createElement('div');
+          menu.className = 'menu';
+          menu.style.position = 'absolute';
+          menu.style.zIndex = 200;
+          menu.style.background = 'white';
+          menu.style.border = '1px solid #e5e7eb';
+          menu.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)';
+          menu.style.borderRadius = '8px';
+          menu.style.padding = '8px';
+          menu.style.top = (menuBtn.getBoundingClientRect().bottom + 8) + 'px';
+          menu.style.left = (menuBtn.getBoundingClientRect().left - 160) + 'px';
+    
+          const del = document.createElement('div');
+          del.innerText = 'Delete';
+          del.style.cursor = 'pointer';
+          del.style.padding = '6px 8px';
+          del.onclick = async e => {
+            e.stopPropagation();
+            if (confirm('Delete this message?')) {
+              await fetch('/delete_message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: m.id })
+              });
+              const container = document.getElementById('messages') || document.querySelector('.messages');
+              if (container) container.innerHTML = '';
+              cs.lastId = 0;
+              await poll();
+            }
+          };
+    
+          const forward = document.createElement('div');
+          forward.innerText = 'Forward';
+          forward.style.cursor = 'pointer';
+          forward.style.padding = '6px 8px';
+          forward.onclick = () => {
+            navigator.clipboard.writeText(m.text || '');
+            alert('Message copied for forwarding');
+          };
+    
+          const copy = document.createElement('div');
+          copy.innerText = 'Copy';
+          copy.style.cursor = 'pointer';
+          copy.style.padding = '6px 8px';
+          copy.onclick = () => {
+            navigator.clipboard.writeText(m.text || '');
+            alert('Copied to clipboard');
+          };
+    
+          const react = document.createElement('div');
+          react.innerText = 'React';
+          react.style.cursor = 'pointer';
+          react.style.padding = '6px 8px';
+          react.onclick = ev2 => {
+            ev2.stopPropagation();
+            showEmojiPickerForMessage(m.id, menuBtn);
+          };
+    
+          menu.appendChild(copy);
+          menu.appendChild(forward);
+          if (m.sender === cs.myName) menu.appendChild(del);
+          menu.appendChild(react);
+          document.body.appendChild(menu);
+    
+          const hide = () => {
+            menu.remove();
+            document.removeEventListener('click', hide);
+          };
+          setTimeout(() => document.addEventListener('click', hide), 50);
+        };
+    
+        bubble.appendChild(menuBtn);
+        body.appendChild(bubble);
+    
+        // --- assemble flex row ---
+        flexRow.appendChild(avatarDiv);
+        flexRow.appendChild(body);
+        wrapper.appendChild(flexRow);
+    
+        // --- append container ---
+        const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
+        if (messagesEl) messagesEl.appendChild(wrapper);
+        if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+    
+      } catch (err) {
+        console.error('appendMessage error', err);
       }
-    });
-
-    // --- reactions ---
-    if (m.reactions?.length) {
-      const agg = {};
-      for (const r of m.reactions) {
-        agg[r.emoji] = agg[r.emoji] || new Set();
-        agg[r.emoji].add(r.user);
-      }
-      const reactionBar = document.createElement('div');
-      reactionBar.className = 'reaction-bar';
-      for (const emoji in agg) {
-        const userset = agg[emoji];
-        const pill = document.createElement('div');
-        pill.className = 'reaction-pill';
-        const em = document.createElement('div');
-        em.className = 'reaction-emoji';
-        em.innerText = emoji;
-        const count = document.createElement('div');
-        count.style.fontSize = '0.85rem';
-        count.style.color = '#374151';
-        count.innerText = userset.size;
-        pill.appendChild(em);
-        pill.appendChild(count);
-        reactionBar.appendChild(pill);
-      }
-      bubble.appendChild(reactionBar);
     }
-
-    // --- three-dot menu ---
-    const menuBtn = document.createElement('button');
-    menuBtn.className = 'three-dot';
-    menuBtn.innerText = '⋯';
-    menuBtn.onclick = ev => {
-      ev.stopPropagation();
-      document.querySelectorAll('.menu:not(#profileMenu)').forEach(n => n.remove());
-      const menu = document.createElement('div');
-      menu.className = 'menu';
-      menu.style.position = 'absolute';
-      menu.style.zIndex = 200;
-      menu.style.background = 'white';
-      menu.style.border = '1px solid #e5e7eb';
-      menu.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)';
-      menu.style.borderRadius = '8px';
-      menu.style.padding = '8px';
-      menu.style.top = (menuBtn.getBoundingClientRect().bottom + 8) + 'px';
-      menu.style.left = (menuBtn.getBoundingClientRect().left - 160) + 'px';
-
-      const del = document.createElement('div');
-      del.innerText = 'Delete';
-      del.style.cursor = 'pointer';
-      del.style.padding = '6px 8px';
-      del.onclick = async e => {
-        e.stopPropagation();
-        if (confirm('Delete this message?')) {
-          await fetch('/delete_message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: m.id })
-          });
-          const container = document.getElementById('messages') || document.querySelector('.messages');
-          if (container) container.innerHTML = '';
-          cs.lastId = 0;
-          await poll();
-        }
-      };
-
-      const forward = document.createElement('div');
-      forward.innerText = 'Forward';
-      forward.style.cursor = 'pointer';
-      forward.style.padding = '6px 8px';
-      forward.onclick = () => {
-        navigator.clipboard.writeText(m.text || '');
-        alert('Message copied for forwarding');
-      };
-
-      const copy = document.createElement('div');
-      copy.innerText = 'Copy';
-      copy.style.cursor = 'pointer';
-      copy.style.padding = '6px 8px';
-      copy.onclick = () => {
-        navigator.clipboard.writeText(m.text || '');
-        alert('Copied to clipboard');
-      };
-
-      const react = document.createElement('div');
-      react.innerText = 'React';
-      react.style.cursor = 'pointer';
-      react.style.padding = '6px 8px';
-      react.onclick = ev2 => {
-        ev2.stopPropagation();
-        showEmojiPickerForMessage(m.id, menuBtn);
-      };
-
-      menu.appendChild(copy);
-      menu.appendChild(forward);
-      if (m.sender === cs.myName) menu.appendChild(del);
-      menu.appendChild(react);
-      document.body.appendChild(menu);
-
-      const hide = () => {
-        menu.remove();
-        document.removeEventListener('click', hide);
-      };
-      setTimeout(() => document.addEventListener('click', hide), 50);
-    };
-
-    // --- assemble bubble ---
-    bubble.insertBefore(meta, bubble.firstChild);
-    bubble.appendChild(menuBtn);
-    body.appendChild(bubble);
-
-    // --- assemble flex row ---
-    flexRow.appendChild(avatarDiv);
-    flexRow.appendChild(body);
-    wrapper.appendChild(flexRow);
-
-    // --- append to container ---
-    const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
-    if (messagesEl) messagesEl.appendChild(wrapper);
-
-    // --- auto scroll ---
-    if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
-
-  } catch (err) {
-    console.error('appendMessage error', err);
-  }
-}
     
   // Reaction picker
   function showEmojiPickerForMessage(msgId, anchorEl) {
