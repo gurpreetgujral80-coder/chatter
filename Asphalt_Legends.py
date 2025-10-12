@@ -3854,6 +3854,7 @@ CHAT_HTML = r'''<!doctype html>
   // Append message to messages container (used both for optimistic and incoming messages)
   window.appendMessage = function appendMessage(msg) {
       try {
+        const me = msg.sender === cs.myName;
         const messagesEl = document.getElementById('messages') ||
                            document.querySelector('.messages') ||
                            document.querySelector('#chatContainer');
@@ -3882,7 +3883,6 @@ CHAT_HTML = r'''<!doctype html>
           msg.attachments.forEach(a => {
             if (!a) return;
     
-            // 🧩 Universal WebP/sticker handling
             if (a.type === 'sticker' || (a.url && a.url.match(/\.(webp|gif|png|jpg|jpeg)$/i))) {
               const img = document.createElement('img');
               img.className = 'sticker-attachment';
