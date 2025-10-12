@@ -2403,70 +2403,70 @@ CHAT_HTML = r'''<!doctype html>
   };
   
   async function sendMessage(textArg, attsArg) {
-      const inputEl = document.querySelector('#msg') || document.querySelector('#textarea');
-      const text = (typeof textArg === 'string') ? textArg.trim() : (inputEl ? (inputEl.value || '').trim() : '');
-      const atts = Array.isArray(attsArg) ? attsArg : (cs.stagedFiles || []).slice();
-    
-      if (!text && (!atts || atts.length === 0)) return;
-    
-      try {
+    const inputEl = document.querySelector('#msg') || document.querySelector('#textarea');
+    const text = (typeof textArg === 'string') ? textArg.trim() : (inputEl ? (inputEl.value || '').trim() : '');
+    const atts = Array.isArray(attsArg) ? attsArg : (cs.stagedFiles || []).slice();
+
+    if (!text && (!atts || atts.length === 0)) return;
+
+    try {
         let res, json;
-    
+
         if (atts.length > 0) {
-          // send files + text
-          const fd = new FormData();
-          fd.append('text', text);
-          fd.append('sender', cs.myName);
-          for (const f of atts) fd.append('file', f, f.name);
-    
-          res = await fetch('/send_composite_message', { method: 'POST', body: fd, credentials: 'same-origin' });
-          json = await res.json().catch(() => null);
-    
-          if (res.ok && json && json.message) {
-            appendMessage(json.message);
-            cs.stagedFiles = [];
-            if (inputEl) inputEl.value = '';
-            const preview = document.getElementById('attachmentPreview') || document.getElementById('previewContainer');
-            if (preview) { preview.innerHTML = ''; preview.style.display = 'none'; }
-            cs.lastId = json.message.id || cs.lastId;
-            return json.message;
-          } else {
-            cs.lastId = 0;
-            if (typeof poll === 'function') await poll();
-            return null;
-          }
+            // send files + text
+            const fd = new FormData();
+            fd.append('text', text);
+            fd.append('sender', cs.myName);
+            for (const f of atts) fd.append('file', f, f.name);
+
+            res = await fetch('/send_composite_message', { method: 'POST', body: fd, credentials: 'same-origin' });
+            json = await res.json().catch(() => null);
+
+            if (res.ok && json && json.message) {
+                appendMessage(json.message);
+                cs.stagedFiles = [];
+                if (inputEl) inputEl.value = '';
+                const preview = document.getElementById('attachmentPreview') || document.getElementById('previewContainer');
+                if (preview) { preview.innerHTML = ''; preview.style.display = 'none'; }
+                cs.lastId = json.message.id || cs.lastId;
+                return json.message;
+            } else {
+                cs.lastId = 0;
+                if (typeof poll === 'function') await poll();
+                return null;
+            }
         } else {
-          // send text only
-          res = await fetch('/send_message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, sender: cs.myName }),
-            credentials: 'same-origin'
-          });
-    
-          json = await res.json().catch(() => null);
-    
-          if (res.ok && json && json.message) {
-            appendMessage(json.message);
-            if (inputEl) inputEl.value = '';
-            cs.stagedFiles = [];
-            cs.lastId = json.message.id || cs.lastId;
-            return json.message;
-          } else {
-            cs.lastId = 0;
-            if (typeof poll === 'function') await poll();
-            return null;
-          }
+            // send text only
+            res = await fetch('/send_message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, sender: cs.myName }),
+                credentials: 'same-origin'
+            });
+
+            json = await res.json().catch(() => null);
+
+            if (res.ok && json && json.message) {
+                appendMessage(json.message);
+                if (inputEl) inputEl.value = '';
+                cs.stagedFiles = [];
+                cs.lastId = json.message.id || cs.lastId;
+                return json.message;
+            } else {
+                cs.lastId = 0;
+                if (typeof poll === 'function') await poll();
+                return null;
+            }
         }
-      } catch (err) {
+    } catch (err) {
         console.error('sendMessage error', err);
         alert('Send error: ' + (err && err.message ? err.message : err));
         return null;
-      }
-  }
-    
-    // expose globally
-    window.sendMessage = sendMessage;
+    }
+}
+
+// expose globally
+window.sendMessage = sendMessage;
 
     // === Dedup & safe append helpers ===
     window._renderedMessageIds = window._renderedMessageIds || new Set();
@@ -5580,72 +5580,6 @@ def send_composite_message():
     except Exception as e:
         current_app.logger.exception("send_composite_message error")
         return jsonify({"error": str(e)}), 500
-
-async function sendMessage(textArg, attsArg) {
-    const inputEl = document.querySelector('#msg') || document.querySelector('#textarea');
-    const text = (typeof textArg === 'string') ? textArg.trim() : (inputEl ? (inputEl.value || '').trim() : '');
-    const atts = Array.isArray(attsArg) ? attsArg : (cs.stagedFiles || []).slice();
-
-    if (!text && (!atts || atts.length === 0)) return;
-
-    try {
-        let res, json;
-
-        if (atts.length > 0) {
-            // send files + text
-            const fd = new FormData();
-            fd.append('text', text);
-            fd.append('sender', cs.myName);
-            for (const f of atts) fd.append('file', f, f.name);
-
-            res = await fetch('/send_composite_message', { method: 'POST', body: fd, credentials: 'same-origin' });
-            json = await res.json().catch(() => null);
-
-            if (res.ok && json && json.message) {
-                appendMessage(json.message);
-                cs.stagedFiles = [];
-                if (inputEl) inputEl.value = '';
-                const preview = document.getElementById('attachmentPreview') || document.getElementById('previewContainer');
-                if (preview) { preview.innerHTML = ''; preview.style.display = 'none'; }
-                cs.lastId = json.message.id || cs.lastId;
-                return json.message;
-            } else {
-                cs.lastId = 0;
-                if (typeof poll === 'function') await poll();
-                return null;
-            }
-        } else {
-            // send text only
-            res = await fetch('/send_message', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, sender: cs.myName }),
-                credentials: 'same-origin'
-            });
-
-            json = await res.json().catch(() => null);
-
-            if (res.ok && json && json.message) {
-                appendMessage(json.message);
-                if (inputEl) inputEl.value = '';
-                cs.stagedFiles = [];
-                cs.lastId = json.message.id || cs.lastId;
-                return json.message;
-            } else {
-                cs.lastId = 0;
-                if (typeof poll === 'function') await poll();
-                return null;
-            }
-        }
-    } catch (err) {
-        console.error('sendMessage error', err);
-        alert('Send error: ' + (err && err.message ? err.message : err));
-        return null;
-    }
-}
-
-// expose globally
-window.sendMessage = sendMessage;
 
 @app.route('/poll_messages')
 def poll_messages():
