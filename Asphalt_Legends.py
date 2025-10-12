@@ -2249,6 +2249,7 @@ CHAT_HTML = r'''<!doctype html>
     isTyping: false,
     calls: {},     // call_id -> call state
     pcConfig: { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] }
+    window.messageStates = {};
   };
   const socket = (typeof cs !== 'undefined' && cs.socket) ? cs.socket : (typeof io === 'function' ? io() : null);
   // Safe DOM refs (assigned on DOMContentLoaded)
@@ -3152,14 +3153,33 @@ CHAT_HTML = r'''<!doctype html>
     
         for (const m of data) {
           const mid = Number(m.id || 0);
-          if (mid && window._renderedMessageIds.has(mid)) continue;
-    
-          // Delegate full rendering to appendMessage
-          appendMessage(m);
-    
-          if (mid) {
+          if (!mid) continue;
+        
+          const alreadyRendered = window._renderedMessageIds.has(mid);
+          if (!alreadyRendered) {
+            appendMessage(m);
             window._renderedMessageIds.add(mid);
             cs.lastId = Math.max(cs.lastId || 0, mid);
+          }
+        
+          // ---------- ✅ Delivery & Seen Tick Logic ----------
+          if (m.sender !== cs.myName) {
+            // Mark as seen if visible
+            if (!m.seenBy || !m.seenBy.includes(cs.myName)) {
+              fetch('/mark_seen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: m.id, user: cs.myName })
+              });
+            }
+          } else {
+            // Upgrade tick state for my messages
+            if (m.delivered && window.messageStates[m.id] !== 'delivered') {
+              updateMessageStatus(m.id, 'delivered');
+            }
+            if (m.seenBy && m.seenBy.length > 0 && window.messageStates[m.id] !== 'seen') {
+              updateMessageStatus(m.id, 'seen');
+            }
           }
         }
     
@@ -3407,23 +3427,56 @@ CHAT_HTML = r'''<!doctype html>
     
 
   // Reaction picker
-  function showEmojiPickerForMessage(msgId, anchorEl){
-    const picker = document.createElement('div'); picker.className='menu';
-    const emojis = ['😀','😁','😂','😍','😮','😢','😡','👍','👎','🎉','🔥','❤️','👏','🤝','🤯'];
-    emojis.forEach(em=>{
-      const el = document.createElement('div'); el.style.display='inline-flex'; el.style.padding='6px'; el.style.margin='4px'; el.style.cursor='pointer';
-      el.innerText = em;
-      el.onclick = async (ev)=>{ ev.stopPropagation(); try{ await fetch('/react_message',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: msgId, emoji: em }) }); }catch(err){console.warn('react failed',err);} picker.remove(); if(messagesEl){ messagesEl.innerHTML=''; } cs.lastId=0; await poll(); };
-      picker.appendChild(el);
-    });
-    document.body.appendChild(picker);
-    const rect = anchorEl.getBoundingClientRect();
-    let top = rect.bottom + 8;
-    let left = rect.left;
-    if(left + 240 > window.innerWidth) left = Math.max(8, window.innerWidth - 248);
-    picker.style.position='fixed'; picker.style.top = top + 'px'; picker.style.left = left + 'px';
-    const hide = ()=>{ picker.remove(); document.removeEventListener('click', hide); };
-    setTimeout(()=> document.addEventListener('click', hide), 50);
+  function showEmojiPickerForMessage(msgId, anchorEl) {
+      // remove any existing picker
+      document.querySelectorAll('.menu').forEach(m => m.remove());
+    
+      const picker = document.createElement('div');
+      picker.className = 'menu';
+      const emojis = ['😀','😁','😂','😍','😮','😢','😡','👍','👎','🎉','🔥','❤️','👏','🤝','🤯'];
+    
+      emojis.forEach(em => {
+        const el = document.createElement('div');
+        el.style.display = 'inline-flex';
+        el.style.padding = '6px';
+        el.style.margin = '4px';
+        el.style.cursor = 'pointer';
+        el.innerText = em;
+    
+        el.onclick = async (ev) => {
+          ev.stopPropagation();
+          try {
+            await fetch('/react_message', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: msgId, emoji: em })
+            });
+          } catch (err) {
+            console.warn('react failed', err);
+          }
+          picker.remove();
+          if (typeof messagesEl !== 'undefined' && messagesEl) messagesEl.innerHTML = '';
+          cs.lastId = 0;
+          if (typeof poll === 'function') await poll();
+        };
+    
+        picker.appendChild(el);
+      });
+    
+      document.body.appendChild(picker);
+    
+      const rect = anchorEl.getBoundingClientRect();
+      let top = rect.bottom + 8;
+      let left = rect.left;
+      if (left + 240 > window.innerWidth) left = Math.max(8, window.innerWidth - 248);
+    
+      picker.style.position = 'fixed';
+      picker.style.top = top + 'px';
+      picker.style.left = left + 'px';
+      picker.style.zIndex = 99999;
+    
+      const hide = () => { picker.remove(); document.removeEventListener('click', hide); };
+      setTimeout(() => document.addEventListener('click', hide), 50);
   }
   window.showEmojiPickerForMessage = showEmojiPickerForMessage;
 
@@ -3799,50 +3852,127 @@ CHAT_HTML = r'''<!doctype html>
 
   // Append message to messages container (used both for optimistic and incoming messages)
   window.appendMessage = function appendMessage(msg) {
-    try {
-      const messagesEl = document.getElementById('messages') || document.querySelector('.messages') || document.querySelector('#chatContainer');
-      if (!messagesEl) return console.warn('appendMessage: messages container not found');
-      const wrapper = document.createElement('div');
-      wrapper.className = msg.isSystem ? 'msg-row system' : (msg.from === cs.myName ? 'msg-row me' : 'msg-row them');
-      const body = document.createElement('div');
-      body.className = 'msg-body';
-      const bubble = document.createElement('div');
-      bubble.className = 'bubble';
-      if (msg.text) bubble.appendChild(document.createTextNode(msg.text));
-      // attachments (simple handling)
-      if (Array.isArray(msg.attachments)) {
-        msg.attachments.forEach(a => {
-          if (!a) return;
-          if (a.type === 'image' || (a.url && a.url.match(/\.(jpeg|jpg|gif|png|webp)$/i))) {
-            const img = document.createElement('img');
-            img.className = 'image-attachment';
-            img.src = a.url || a.preview || '';
-            bubble.appendChild(img);
-          } else if (a.type === 'audio' || (a.url && a.url.match(/\.(mp3|wav|ogg)$/i))) {
-            const au = document.createElement('audio');
-            au.controls = true;
-            au.src = a.url || a.preview || '';
-            bubble.appendChild(au);
-          } else if (a.type === 'location') {
-            const link = document.createElement('a');
-            link.href = a.url || '#';
-            link.target = '_blank';
-            link.textContent = a.url || `${a.lat},${a.lng}`;
-            bubble.appendChild(link);
-          } else { // generic file
-            const d = document.createElement('div'); d.className = 'preview-item-doc'; d.textContent = a.name || 'file';
-            bubble.appendChild(d);
-          }
-        });
+      try {
+        const messagesEl = document.getElementById('messages') ||
+                           document.querySelector('.messages') ||
+                           document.querySelector('#chatContainer');
+        if (!messagesEl) return console.warn('appendMessage: messages container not found');
+    
+        const wrapper = document.createElement('div');
+        wrapper.className = msg.isSystem
+          ? 'msg-row system'
+          : (msg.from === cs.myName ? 'msg-row me' : 'msg-row them');
+    
+        const body = document.createElement('div');
+        body.className = 'msg-body';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+    
+        // Text content
+        if (msg.text) {
+          const t = document.createElement('div');
+          t.className = 'msg-text';
+          t.textContent = msg.text;
+          bubble.appendChild(t);
+        }
+    
+        // ----- Attachments -----
+        if (Array.isArray(msg.attachments)) {
+          msg.attachments.forEach(a => {
+            if (!a) return;
+    
+            // 🧩 Universal WebP/sticker handling
+            if (a.type === 'sticker' || (a.url && a.url.match(/\.(webp|gif|png|jpg|jpeg)$/i))) {
+              const img = document.createElement('img');
+              img.className = 'sticker-attachment';
+              img.loading = 'lazy';
+              img.decoding = 'async';
+              img.src = a.url || a.preview || '';
+    
+              // Fallback: if WebP fails, auto-convert to PNG in-browser
+              img.onerror = () => {
+                if (img.src.endsWith('.webp')) {
+                  const alt = img.src.replace('.webp', '.png');
+                  fetch(alt, { method: 'HEAD' })
+                    .then(r => { if (r.ok) img.src = alt; })
+                    .catch(() => { img.style.opacity = '0.4'; });
+                } else {
+                  img.style.opacity = '0.4';
+                }
+              };
+    
+              bubble.appendChild(img);
+            }
+    
+            else if (a.type === 'audio' || (a.url && a.url.match(/\.(mp3|wav|ogg|webm)$/i))) {
+              const au = document.createElement('audio');
+              au.controls = true;
+              au.src = a.url || a.preview || '';
+              bubble.appendChild(au);
+            }
+    
+            else if (a.type === 'video' || (a.url && a.url.match(/\.(mp4|mov|mkv|webm)$/i))) {
+              const vid = document.createElement('video');
+              vid.controls = true;
+              vid.playsInline = true;
+              vid.muted = true;
+              vid.className = 'video-attachment';
+              vid.src = a.url || a.preview || '';
+              bubble.appendChild(vid);
+            }
+    
+            else if (a.type === 'location') {
+              const link = document.createElement('a');
+              link.href = a.url || '#';
+              link.target = '_blank';
+              link.textContent = a.url || `${a.lat},${a.lng}`;
+              bubble.appendChild(link);
+            }
+    
+            else {
+              const d = document.createElement('div');
+              d.className = 'preview-item-doc';
+              d.textContent = a.name || 'file';
+              bubble.appendChild(d);
+            }
+          });
+        }
+        // ---- Delivery Status (✓ system) ----
+        if (msg.from === cs.myName) {
+          const tick = document.createElement('span');
+          tick.className = 'msg-tick';
+          tick.dataset.id = msg.id;
+          tick.innerHTML = '✓'; // single tick at start
+          tick.style.marginLeft = '6px';
+          tick.style.color = '#6b7280';
+          tick.style.fontSize = '0.85rem';
+          bubble.appendChild(tick);
+        }
+    
+        body.appendChild(bubble);
+        wrapper.appendChild(body);
+        messagesEl.appendChild(wrapper);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return wrapper;
+    
+      } catch (err) {
+        console.error('appendMessage error', err);
       }
-      body.appendChild(bubble);
-      wrapper.appendChild(body);
-      messagesEl.appendChild(wrapper);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-      return wrapper;
-    } catch (err) {
-      console.error('appendMessage error', err);
-    }
+  };
+  window.updateMessageStatus = function (id, status) {
+      const el = document.querySelector(`.msg-tick[data-id="${id}"]`);
+      if (!el) return;
+      if (status === 'sent') {
+        el.innerHTML = '✓';
+        el.style.color = '#6b7280';
+      } else if (status === 'delivered') {
+        el.innerHTML = '✓✓';
+        el.style.color = '#6b7280';
+      } else if (status === 'seen') {
+        el.innerHTML = '✓✓';
+        el.style.color = '#0ea5e9'; // blue for seen
+      }
+      window.messageStates[id] = status;
   };
 
   // insertAtCursor: insert text into input/textarea at caret
@@ -5084,26 +5214,32 @@ if (cs.stagedFiles && cs.stagedFiles.length) {
     });
   }
 
-  // ---------- Tabs wiring (unchanged behavior) ----------
+  // ---------- Tabs wiring ----------
   const tabs = drawer.querySelectorAll('#drawerHeader [data-tab]');
   tabs.forEach(btn => btn.addEventListener('click', () => {
-    tabs.forEach(b => b.style.background = '');
-    btn.style.background = '#f1f1f1';
-    currentTab = btn.dataset.tab;
-    searchWrapper.style.display = currentTab === 'emoji' ? 'none' : 'block';
-    clearBody();
-    } if (currentTab === 'sticker') {
-      loadedItems = []; pageIndex = 0;
-      ensureItemsForPage(); renderPage();
-    } else if (currentTab === 'avatar'){
-      loadedItems = []; pageIndex = 0;
-      ensureItemsForPage(); renderPage();
-    } else {
-      loadedItems = []; pageIndex = 0;
-      ensureItemsForPage(); renderPage();
-    }
-    shiftComposer();
+      tabs.forEach(b => b.style.background = '');
+      btn.style.background = '#f1f1f1';
+      currentTab = btn.dataset.tab;
+    
+      // show search only for sticker, avatar, gif
+      searchWrapper.style.display = (currentTab === 'sticker' || currentTab === 'avatar' || currentTab === 'gif') ? 'block' : 'none';
+    
+      clearBody();
+    
+      if (currentTab === 'sticker') {
+        loadedItems = []; pageIndex = 0;
+        ensureItemsForPage(); renderPage();
+      } else if (currentTab === 'avatar') {
+        loadedItems = []; pageIndex = 0;
+        ensureItemsForPage(); renderPage();
+      } else if (currentTab === 'gif') {
+        loadedItems = []; pageIndex = 0;
+        ensureItemsForPage(); renderPage();
+      }
+    
+      shiftComposer();
   }));
+
 
   drawer.querySelector('#drawerClose').onclick = () => { drawer.style.display = 'none'; shiftComposer(); };
 
