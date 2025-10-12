@@ -2590,6 +2590,26 @@ CHAT_HTML = r'''<!doctype html>
             textNode.appendChild(editedSpan);
           }
         }
+        // --- add avatar image ---
+        if (m.avatar) {
+            const name = m.avatar;
+            if (/^m\d+\.(webp|png|jpg|jpeg)$/i.test(name) && name.toLowerCase() !== 'm47.webp') {
+                const avatarImg = document.createElement('img');
+                avatarImg.src = `/static/${name}`;          // correct URL
+                avatarImg.alt = 'avatar';
+                avatarImg.className = 'message-avatar';
+                avatarImg.style.width = '48px';            // adjust size as needed
+                avatarImg.style.height = '48px';
+                avatarImg.style.marginRight = '6px';
+                avatarImg.style.verticalAlign = 'middle';
+                avatarImg.onerror = () => { 
+                    avatarImg.src = '/static/m1.webp'; 
+                    avatarImg.title = '(fallback)'; 
+                };
+                // insert before text node
+                bubble.insertBefore(avatarImg, textNode);
+            }
+        }
         bubble.appendChild(textNode);
     
         (m.attachments || []).forEach(a => {
