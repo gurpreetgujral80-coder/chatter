@@ -2592,21 +2592,29 @@ CHAT_HTML = r'''<!doctype html>
         }
         bubble.appendChild(textNode);
     
-        // attachments (basic)
-        (m.attachments || []).forEach(a=>{
-          if (!a) return;
-          if (a.type === 'image') {
-            const img = document.createElement('img');
-            img.src = a.url;
-            img.className = 'image-attachment';
-            img.alt = a.name || '';
-            bubble.appendChild(img);
-          } else {
-            const d = document.createElement('div');
-            d.className = 'preview-item-doc';
-            d.textContent = a.name || a.url || '';
-            bubble.appendChild(d);
-          }
+        (m.attachments || []).forEach(a => {
+            if (!a) return;
+            if (a.type === 'image') {
+                // --- patch URL for local avatars ---
+                let url = a.url || '';
+                const name = url.split('/').pop();
+                if (/^m\d+\.(webp|png|jpg|jpeg)$/i.test(name) && name.toLowerCase() !== 'm47.webp') {
+                    url = `/static/${name}`;
+                    a.url = url; // update original object (optional)
+                }
+                const img = document.createElement('img');
+                img.src = url;
+                img.className = 'image-attachment';
+                img.alt = a.name || '';
+                // fallback in case image fails
+                img.onerror = () => { img.src = '/static/m1.webp'; img.title = (img.title || '') + ' (fallback)'; };
+                bubble.appendChild(img);
+            } else {
+                const d = document.createElement('div');
+                d.className = 'preview-item-doc';
+                d.textContent = a.name || a.url || '';
+                bubble.appendChild(d);
+            }
         });
     
         // three-dot options button
