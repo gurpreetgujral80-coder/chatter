@@ -96,7 +96,7 @@ init_db()
 @socketio.on('send_message')
 def handle_send_message(data):
     # Save message
-        sender = data.get('sender')
+    sender = data.get('sender')
     avatar = None
     try:
         user = load_user_by_name(sender)
@@ -108,12 +108,12 @@ def handle_send_message(data):
         avatar = None
 
     new_msg = {
-      "id": len(messages_store) + 1,
-      "sender": sender,
-      "text": data.get('text'),
-      "attachments": data.get('attachments', []),
-      "reactions": [],
-      "avatar": avatar
+        "id": len(messages_store) + 1,
+        "sender": sender,
+        "text": data.get('text'),
+        "attachments": data.get('attachments', []),
+        "reactions": [],
+        "avatar": avatar
     }
 
     messages_store.append(new_msg)
@@ -197,8 +197,6 @@ def get_partner():
     r = c.fetchone(); conn.close()
     if r: return {"id": r[0], "name": r[1]}
     return None
-
-import re  # at top of file if not already
 
 def save_message(sender, text, attachments=None):
     """
