@@ -2249,8 +2249,9 @@ CHAT_HTML = r'''<!doctype html>
     isTyping: false,
     calls: {},     // call_id -> call state
     pcConfig: { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] }
-    window.messageStates = {};
+    
   };
+  window.messageStates = {};
   const socket = (typeof cs !== 'undefined' && cs.socket) ? cs.socket : (typeof io === 'function' ? io() : null);
   // Safe DOM refs (assigned on DOMContentLoaded)
   let emojiBtn, composer, textarea, micBtn, plusBtn, attachMenuVertical;
