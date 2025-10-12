@@ -3281,7 +3281,7 @@ window.sendMessage = sendMessage;
         flexRow.style.display = 'flex';
         flexRow.style.alignItems = 'flex-start';
         flexRow.style.gap = '8px';
-        if (me) flexRow.style.flexDirection = 'row-reverse'; // my messages on right
+        if (me) flexRow.style.flexDirection = 'row-reverse';
     
         // --- avatar ---
         const avatarDiv = document.createElement('div');
@@ -3304,6 +3304,16 @@ window.sendMessage = sendMessage;
         const bubble = document.createElement('div');
         bubble.className = 'bubble ' + (me ? 'me' : 'them');
     
+        // --- META ---
+        const meta = document.createElement('div');
+        meta.className = 'msg-meta-top';
+        const leftMeta = document.createElement('div');
+        leftMeta.innerHTML = `<strong>${escapeHtml(m.sender)}</strong>`;
+        const rightMeta = document.createElement('div');
+        rightMeta.innerHTML = me ? '<span class="tick">✓</span>' : '';
+        meta.appendChild(leftMeta);
+        meta.appendChild(rightMeta);
+    
         // --- message text ---
         if (m.text) {
           const textNode = document.createElement('div');
@@ -3322,6 +3332,7 @@ window.sendMessage = sendMessage;
         // --- attachments ---
         (m.attachments || []).forEach(a => {
           if (!a) return;
+    
           if (a.type === 'sticker' || a.url?.match(/\.(webp|png|jpg|jpeg|gif)$/i)) {
             const img = document.createElement('img');
             img.src = a.url;
@@ -3489,21 +3500,22 @@ window.sendMessage = sendMessage;
           setTimeout(() => document.addEventListener('click', hide), 50);
         };
     
-        bubble.appendChild(meta);
+        // --- assemble bubble ---
+        bubble.insertBefore(meta, bubble.firstChild);
         bubble.appendChild(menuBtn);
         body.appendChild(bubble);
     
-        // append flex container (avatar + body) to wrapper
+        // --- assemble flex row ---
         flexRow.appendChild(avatarDiv);
         flexRow.appendChild(body);
         wrapper.appendChild(flexRow);
     
-        const messagesEl = document.getElementById('messages');
+        // --- append to container ---
+        const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
         if (messagesEl) messagesEl.appendChild(wrapper);
     
-        // auto scroll
-        const container = document.getElementById('messages') || document.querySelector('.messages');
-        if (container) container.scrollTop = container.scrollHeight;
+        // --- auto scroll ---
+        if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
     
       } catch (err) {
         console.error('appendMessage error', err);
