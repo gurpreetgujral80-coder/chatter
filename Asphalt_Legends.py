@@ -1514,7 +1514,10 @@ CHAT_HTML = r'''<!doctype html>
       background-image: url('/static/IMG_5939.jpeg');
       background-repeat: no-repeat;
       background-position: center center;
-      background-attachment: fixed; /* key: fixes background to viewport */
+      background-attachment{ 
+        position: fixed; 
+        overflow: hidden;
+      }
       background-size: cover;
       margin: 0;
       -webkit-font-smoothing: antialiased;
