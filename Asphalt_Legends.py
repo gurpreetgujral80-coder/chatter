@@ -794,151 +794,465 @@ VIDEO_CALL_HTML = r"""
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Video Call — Asphalt Legends</title>
   <style>
-    :root{--bg:#071021;--panel:#0f1720;--muted:#9fb0bf}
-    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
-    body{background:linear-gradient(180deg,#02101a,#04121a);display:flex;align-items:center;justify-content:center;color:#eaf4ff}
-    .call-wrap{width:100%;max-width:980px;height:80vh;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
-    .videos{flex:1;display:grid;grid-template-columns:1fr 320px;gap:12px}
-    .large-video, .small-video{background:#071621;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative}
-    video{width:100%;height:100%;object-fit:cover}
-    .controls{display:flex;gap:12px;justify-content:center;padding:8px}
-    .btn{background:rgba(255,255,255,0.04);border:0;padding:12px;border-radius:10px;cursor:pointer;color:inherit}
-    .btn.end{background:#ff3b30;color:#fff;padding:14px;border-radius:12px}
-    .mini-actions{position:absolute;right:12px;top:12px;display:flex;gap:8px}
-    .peer-info{position:absolute;left:12px;bottom:12px;background:linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.1));padding:8px;border-radius:8px}
+    :root{--bg:#071021;--panel:#0f1720;--muted:#9fb0bf;--accent:#25D366}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:radial-gradient(circle at 10% 10%, #041428, #02101a);color:#eaf4ff}
+    .call-frame{position:fixed;inset:0;display:flex;flex-direction:column;gap:8px;padding:12px;box-sizing:border-box}
+    .video-area{flex:1;display:block;position:relative;border-radius:12px;overflow:hidden;background:#000}
+    #remoteVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+    /* self view small box above composer, bottom-right */
+    .self-box{position:fixed;right:20px;bottom:110px;width:220px;height:140px;border-radius:10px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.6);border:2px solid rgba(255,255,255,0.04);background:#0a1722;z-index:30}
+    .self-box video{width:100%;height:100%;object-fit:cover;display:block}
+    /* composer area at bottom with gap */
+    .composer{position:fixed;left:12px;right:12px;bottom:12px;height:84px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:10px;display:flex;align-items:center;gap:10px;z-index:40}
+    .composer input[type="text"]{flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.05);background:transparent;color:inherit}
+    .controls{display:flex;gap:8px;align-items:center}
+    .btn{background:rgba(255,255,255,0.03);border:0;padding:10px;border-radius:8px;cursor:pointer;font-size:18px}
+    .btn.end{background:#ff3b30;color:#fff;padding:12px;border-radius:10px}
+    .bg-picker{display:flex;gap:6px}
+    .bg-thumb{width:48px;height:32px;border-radius:6px;overflow:hidden;border:2px solid rgba(255,255,255,0.03);cursor:pointer}
+    .status-bubble{position:absolute;left:12px;top:12px;background:rgba(0,0,0,0.35);padding:8px;border-radius:10px;font-weight:600;color:var(--muted);z-index:40}
+    .peer-label{position:absolute;left:12px;bottom:12px;background:linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.1));padding:8px;border-radius:8px;z-index:40}
+    @media (max-width:700px){ .self-box{width:160px;height:110px;right:12px;bottom:120px} .composer{height:96px;flex-direction:column;align-items:flex-end;padding:8px;gap:6px} .composer input[type="text"]{width:100%} }
   </style>
 </head>
 <body>
-  <div class="call-wrap">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div style="font-weight:700">Video Call</div>
-      <div style="color:var(--muted)">Asphalt Legends</div>
+  <div class="call-frame">
+    <div class="video-area" id="videoArea">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <div class="status-bubble" id="statusText">Preparing...</div>
+      <div class="peer-label" id="peerLabel">Connecting…</div>
     </div>
 
-    <div class="videos">
-      <div class="large-video" id="largeContainer">
-        <video id="remoteVideo" autoplay playsinline></video>
-        <div class="peer-info" id="peerLabel">Connecting…</div>
-      </div>
-      <div class="small-video" id="smallContainer">
-        <video id="localVideo" autoplay muted playsinline style="width:100%;height:100%;object-fit:cover"></video>
-        <div class="mini-actions">
-          <button id="switchCamera" class="btn">↺</button>
-          <button id="toggleCam" class="btn">📷</button>
-          <button id="toggleMic" class="btn">🎙️</button>
+    <div class="self-box" id="selfBox" title="You">
+      <video id="localVideo" autoplay muted playsinline></video>
+    </div>
+
+    <div class="composer" id="composer">
+      <input id="chatInput" type="text" placeholder="Type a message..." />
+      <div class="controls" aria-hidden="false">
+        <button id="btnToggleCam" class="btn" title="Camera on/off">📷</button>
+        <button id="btnFlipCam" class="btn" title="Flip camera">🔁</button>
+        <button id="btnToggleMic" class="btn" title="Mic on/off">🎙️</button>
+        <button id="btnShareScreen" class="btn" title="Share screen">🖥️</button>
+
+        <div style="display:flex;align-items:center;gap:6px;margin-left:8px">
+          <div style="font-size:12px;color:var(--muted);margin-right:6px">Background</div>
+          <div class="bg-picker" id="bgPicker" role="list">
+            <div class="bg-thumb" data-bg="none" title="None" style="background:linear-gradient(180deg,#222,#111)"></div>
+            <div class="bg-thumb" data-bg="blur" title="Blur" style="background:linear-gradient(180deg,#556,#334)"></div>
+            <div class="bg-thumb" data-bg="img1" title="Beach" style="background-image:url('/static/gifs/beach.jpg');background-size:cover"></div>
+          </div>
         </div>
-      </div>
-    </div>
 
-    <div class="controls">
-      <button id="hangup" class="btn end">End Call</button>
-      <div style="flex:1"></div>
-      <div id="statusText" style="align-self:center;color:var(--muted)">Preparing…</div>
+        <button id="btnLeave" class="btn end" title="Leave call">⛔</button>
+      </div>
     </div>
   </div>
 
+  <!-- socket.io client (CDN v4 compatible) -->
   <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
+
   <script>
-    const MYNAME = String({{ (session.get('username')|tojson) or '""' }}).replace(/^"|"$/g, '');
+    // Jinja-provided username
+    const MYNAME = String({{ (session.get('username')|tojson) or '""' }}).replace(/^"|"$/g,'');
     const params = new URLSearchParams(location.search);
     const CALL_ID = params.get('call_id');
     const PEER = params.get('peer') || params.get('to') || params.get('from') || '';
+    document.getElementById('peerLabel').textContent = PEER || 'Unknown';
 
     const socket = io();
     if (MYNAME) socket.emit('register_socket', {username: MYNAME});
 
     const remoteVideo = document.getElementById('remoteVideo');
     const localVideo = document.getElementById('localVideo');
-    const peerLabel = document.getElementById('peerLabel');
     const statusText = document.getElementById('statusText');
-
-    peerLabel.textContent = PEER || 'Unknown';
 
     let pc = null;
     let localStream = null;
+    let cameraSender = null;
     let usingFrontCamera = true;
+    let canvasProcessor = null; // {canvas,ctx,raf,stream,mode,image}
+    let originalVideoTrack = null;
+    let currentVideoTrack = null;
 
-    function setStatus(t){statusText.textContent = t}
+    function setStatus(t){ statusText.textContent = t; }
 
-    async function getLocalStream(){
-      if(localStream) return localStream;
-      try{
-        localStream = await navigator.mediaDevices.getUserMedia({video:{facingMode: usingFrontCamera? 'user':'environment'}, audio:true});
-        localVideo.srcObject = localStream;
+    async function getCameraStream() {
+      if (localStream) {
+        // if video exists return existing stream (but ensure new facingMode if needed)
         return localStream;
-      }catch(e){console.error('getUserMedia failed',e); setStatus('Camera/mic denied'); throw e}
+      }
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, audio: true });
+        localStream = s;
+        return s;
+      } catch (e) {
+        console.error('getUserMedia failed', e);
+        setStatus('Camera/mic denied');
+        throw e;
+      }
     }
 
-    function createPC(){
+    function createPeerConnection() {
       pc = new RTCPeerConnection();
-      pc.onicecandidate = (ev)=>{ if(ev.candidate){ socket.emit('call:candidate', {to: PEER, from: MYNAME, candidate: ev.candidate, call_id: CALL_ID}) } };
-      pc.ontrack = (ev)=>{ remoteVideo.srcObject = ev.streams[0]; }
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) socket.emit('call:candidate', { to: PEER, from: MYNAME, candidate: ev.candidate, call_id: CALL_ID });
+      };
+      pc.ontrack = (ev) => {
+        const [remoteStream] = ev.streams;
+        remoteVideo.srcObject = remoteStream;
+      };
       return pc;
     }
 
-    async function doCall(){
+    // call flow (caller creates offer)
+    async function callerStart(){
       setStatus('Calling');
-      await getLocalStream();
-      pc = createPC();
-      localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+      await getCameraStream();
+      pc = createPeerConnection();
+      // add all tracks (audio + video)
+      localStream.getTracks().forEach(track => {
+        const s = pc.addTrack(track, localStream);
+        if (track.kind === 'video') cameraSender = s;
+      });
+      originalVideoTrack = localStream.getVideoTracks()[0];
+      currentVideoTrack = originalVideoTrack;
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socket.emit('call:offer', {to: PEER, from: MYNAME, sdp: offer, call_id: CALL_ID});
+      socket.emit('call:offer', { to: PEER, from: MYNAME, sdp: offer, call_id: CALL_ID });
     }
 
-    socket.on('call:offer', async (data)=>{
-      if(!CALL_ID || data.call_id !== CALL_ID) return;
+    socket.on('call:offer', async (data) => {
+      if (!CALL_ID || data.call_id !== CALL_ID) return;
       setStatus('Incoming call');
-      try{
-        await getLocalStream();
-        pc = createPC();
-        localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+      try {
+        await getCameraStream();
+        pc = createPeerConnection();
+        localStream.getTracks().forEach(track => {
+          const s = pc.addTrack(track, localStream);
+          if (track.kind === 'video') cameraSender = s;
+        });
+        originalVideoTrack = localStream.getVideoTracks()[0];
+        currentVideoTrack = originalVideoTrack;
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socket.emit('call:answer', {to: data.from, from: MYNAME, sdp: answer, call_id: CALL_ID});
+        socket.emit('call:answer', { to: data.from, from: MYNAME, sdp: answer, call_id: CALL_ID });
         setStatus('Connected');
-      }catch(e){console.error(e); setStatus('Failed to join')}
-    });
-
-    socket.on('call:answer', async (data)=>{ if(!CALL_ID||data.call_id!==CALL_ID) return; if(!pc) return; try{ await pc.setRemoteDescription(new RTCSessionDescription(data.sdp)); setStatus('Connected'); }catch(e){console.error(e)} });
-
-    socket.on('call:candidate', async (data)=>{ if(!CALL_ID||data.call_id!==CALL_ID) return; try{ if(pc && data.candidate) await pc.addIceCandidate(data.candidate); }catch(e){console.warn(e)} });
-
-    socket.on('call:ended', (data)=>{ if(!CALL_ID||data.call_id!==CALL_ID) return; hangup(false); });
-
-    async function hangup(emit=true){ setStatus('Ending...'); try{ if(pc){ pc.getSenders().forEach(s=>s.track&&s.track.stop()); pc.close(); pc=null } if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null } }catch(e){} if(emit && CALL_ID) socket.emit('call:hangup', {call_id: CALL_ID, from: MYNAME}); setStatus('Call ended'); setTimeout(()=>{ window.close && window.close() },900); }
-
-    document.getElementById('hangup').addEventListener('click', ()=>hangup(true));
-
-    document.getElementById('toggleMic').addEventListener('click', ()=>{
-      if(!localStream) return; const t = localStream.getAudioTracks()[0]; if(!t) return; t.enabled = !t.enabled; document.getElementById('toggleMic').textContent = t.enabled? '🎙️' : '🔇';
-    });
-
-    document.getElementById('toggleCam').addEventListener('click', ()=>{
-      if(!localStream) return; const t = localStream.getVideoTracks()[0]; if(!t) return; t.enabled = !t.enabled; document.getElementById('toggleCam').textContent = t.enabled? '📷' : '🚫';
-    });
-
-    document.getElementById('switchCamera').addEventListener('click', async ()=>{
-      usingFrontCamera = !usingFrontCamera; try{ if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null } await getLocalStream(); if(pc){ // replace track
-        const vtrack = localStream.getVideoTracks()[0]; const sender = pc.getSenders().find(s=>s.track && s.track.kind === 'video'); if(sender) sender.replaceTrack(vtrack);
+      } catch (e) {
+        console.error(e);
+        setStatus('Failed to join');
       }
-      }catch(e){console.error(e)}
     });
 
+    socket.on('call:answer', async (data) => {
+      if (!CALL_ID || data.call_id !== CALL_ID) return;
+      if (!pc) return;
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        setStatus('Connected');
+      } catch (e) { console.error(e); }
+    });
+
+    socket.on('call:candidate', async (data) => {
+      if (!CALL_ID || data.call_id !== CALL_ID) return;
+      try {
+        if (pc && data.candidate) await pc.addIceCandidate(data.candidate);
+      } catch (e) { console.warn('addIce failed', e); }
+    });
+
+    socket.on('call:ended', (data) => {
+      if (!CALL_ID || data.call_id !== CALL_ID) return;
+      endCall(false);
+    });
+
+    function endCall(emit=true) {
+      setStatus('Call ended');
+      if (pc) {
+        try { pc.getSenders().forEach(s => { try { s.track && s.track.stop() } catch(e){} }); pc.close(); } catch(e) {}
+        pc = null;
+      }
+      if (canvasProcessor) stopCanvasProcessor();
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+      }
+      if (emit && CALL_ID) socket.emit('call:hangup', { call_id: CALL_ID, from: MYNAME });
+      setTimeout(()=>{ try{ window.close && window.close() }catch(e){} }, 900);
+    }
+
+    // utilities for replacing the outgoing video track (cameraSender)
+    async function replaceVideoTrack(newTrack) {
+      try {
+        if (!pc) return;
+        if (cameraSender) {
+          await cameraSender.replaceTrack(newTrack);
+          currentVideoTrack = newTrack;
+        } else {
+          // fallback: addTrack
+          cameraSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (cameraSender) await cameraSender.replaceTrack(newTrack);
+        }
+      } catch (e) { console.error('replaceTrack error', e); }
+    }
+
+    // toggle mic
+    document.getElementById('btnToggleMic').addEventListener('click', async ()=>{
+      try {
+        await getCameraStream();
+        const t = localStream.getAudioTracks()[0];
+        if (!t) return;
+        t.enabled = !t.enabled;
+        document.getElementById('btnToggleMic').textContent = t.enabled ? '🎙️' : '🔇';
+        // optional: inform peer
+        socket.emit('call:signal', { to: PEER, payload: { type: 'mic', enabled: t.enabled }});
+      } catch(e) { console.error(e); }
+    });
+
+    // toggle camera (mute/unmute video)
+    document.getElementById('btnToggleCam').addEventListener('click', async ()=>{
+      try {
+        await getCameraStream();
+        const t = localStream.getVideoTracks()[0];
+        if (!t) return;
+        t.enabled = !t.enabled;
+        document.getElementById('btnToggleCam').textContent = t.enabled ? '📷' : '🚫';
+        socket.emit('call:signal', { to: PEER, payload: { type: 'cam', enabled: t.enabled }});
+      } catch(e) { console.error(e); }
+    });
+
+    // flip camera (front <-> back)
+    document.getElementById('btnFlipCam').addEventListener('click', async ()=>{
+      try {
+        usingFrontCamera = !usingFrontCamera;
+        // stop current video track, get new stream
+        if (localStream) {
+          localStream.getVideoTracks().forEach(t => t.stop());
+          // keep audio track if present
+          const audioTracks = localStream.getAudioTracks();
+          localStream = null;
+          const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: usingFrontCamera ? 'user' : 'environment' }, audio: audioTracks.length ? {optional: []} : true });
+          // attach new video to localVideo and replace sender
+          const newVid = s.getVideoTracks()[0];
+          if (!newVid) return;
+          // keep audio track from previous local stream if available
+          if (audioTracks.length && s.getAudioTracks().length === 0) {
+            audioTracks.forEach(at => s.addTrack(at));
+          }
+          localStream = s;
+          localVideo.srcObject = s;
+          originalVideoTrack = newVid;
+          await replaceVideoTrack(newVid);
+        } else {
+          // no localStream yet
+          await getCameraStream();
+          localVideo.srcObject = localStream;
+          originalVideoTrack = localStream.getVideoTracks()[0];
+          await replaceVideoTrack(originalVideoTrack);
+        }
+      } catch (e) { console.error('flip camera failed', e); }
+    });
+
+    // share screen: replace outgoing video track with display media, revert when ended
+    document.getElementById('btnShareScreen').addEventListener('click', async ()=>{
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        const screenTrack = screenStream.getVideoTracks()[0];
+        if (!screenTrack) return;
+        // replace sender
+        await replaceVideoTrack(screenTrack);
+        // update local preview to show screen (unmuted)
+        localVideo.srcObject = screenStream;
+        // when screen sharing ends, revert
+        screenTrack.onended = async () => {
+          // stop screen stream tracks
+          screenStream.getTracks().forEach(t => t.stop());
+          // restore camera
+          await ensureCameraAndRestorePreview();
+        };
+      } catch (e) {
+        console.error('share screen failed', e);
+      }
+    });
+
+    async function ensureCameraAndRestorePreview() {
+      try {
+        if (!localStream) {
+          await getCameraStream();
+          localVideo.srcObject = localStream;
+          originalVideoTrack = localStream.getVideoTracks()[0];
+        }
+        // if canvasProcessor active, currentVideoTrack may be canvas stream
+        if (canvasProcessor && canvasProcessor.stream) {
+          await replaceVideoTrack(canvasProcessor.stream.getVideoTracks()[0]);
+          localVideo.srcObject = canvasProcessor.canvas.captureStream();
+        } else {
+          const camTrack = localStream.getVideoTracks()[0];
+          if (camTrack) {
+            await replaceVideoTrack(camTrack);
+            localVideo.srcObject = localStream;
+          }
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    // background picker
+    document.getElementById('bgPicker').addEventListener('click', async (ev) => {
+      const thumb = ev.target.closest('.bg-thumb');
+      if (!thumb) return;
+      const mode = thumb.dataset.bg;
+      // stop canvas processor first
+      stopCanvasProcessor();
+      if (mode === 'none') {
+        // restore camera unprocessed
+        await ensureCameraAndRestorePreview();
+      } else if (mode === 'blur') {
+        // start canvas processor in blur mode
+        startCanvasProcessor({ mode: 'blur' });
+      } else if (mode === 'img1') {
+        // a sample background image — try to load from /static, fallback to gradient
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = '/static/gifs/beach.jpg';
+        img.onload = () => startCanvasProcessor({ mode: 'image', image: img });
+        img.onerror = () => startCanvasProcessor({ mode: 'image', image: null });
+      }
+    });
+
+    // canvas-based virtual background processor
+    function startCanvasProcessor(opts = { mode: 'blur', image: null }) {
+      if (!localStream) { console.warn('no local stream'); return; }
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (!videoTrack) { console.warn('no video track'); return; }
+      // create canvas matching video size; we'll update size on the fly
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let raf = null;
+      let wantedWidth = 640, wantedHeight = 480;
+
+      // stop any existing
+      stopCanvasProcessor();
+
+      // draw frame loop
+      const draw = () => {
+        try {
+          const v = localVideo;
+          // if not ready size, schedule next
+          if (v.videoWidth && v.videoHeight) {
+            if (canvas.width !== v.videoWidth || canvas.height !== v.videoHeight) {
+              canvas.width = v.videoWidth;
+              canvas.height = v.videoHeight;
+            }
+            // simple approach: mode 'blur' -> draw blurred full-frame
+            if (opts.mode === 'blur') {
+              ctx.filter = 'blur(8px)';
+              ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+              // draw non-blurred center rectangle of person (approx) — this is heuristic
+              ctx.filter = 'none';
+              const cw = Math.floor(canvas.width * 0.6);
+              const ch = Math.floor(canvas.height * 0.7);
+              const cx = Math.floor((canvas.width - cw) / 2);
+              const cy = Math.floor((canvas.height - ch) / 2);
+              ctx.drawImage(v, cx, cy, cw, ch, cx, cy, cw, ch);
+            } else if (opts.mode === 'image') {
+              // draw background image first (cover)
+              if (opts.image) {
+                ctx.filter = 'none';
+                // cover math
+                const img = opts.image;
+                const arImg = img.width / img.height;
+                const arC = canvas.width / canvas.height;
+                let iw = canvas.width, ih = canvas.height, ix=0, iy=0;
+                if (arImg > arC) {
+                  ih = canvas.height; iw = arImg * ih; ix = -(iw - canvas.width)/2;
+                } else {
+                  iw = canvas.width; ih = iw / arImg; iy = -(ih - canvas.height)/2;
+                }
+                ctx.drawImage(img, ix, iy, iw, ih);
+              } else {
+                // fallback gradient
+                ctx.fillStyle = '#0a2a3a';
+                ctx.fillRect(0,0,canvas.width,canvas.height);
+              }
+              // draw foreground (video) scaled down slightly with border
+              const pad = 20;
+              const fw = canvas.width - pad*2;
+              const fh = canvas.height - pad*2;
+              ctx.drawImage(v, pad, pad, fw, fh);
+            } else {
+              // default: passthrough
+              ctx.filter = 'none';
+              ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+            }
+          }
+        } catch (e) {
+          console.warn('canvas draw error', e);
+        }
+        raf = requestAnimationFrame(draw);
+      };
+
+      draw();
+
+      const outStream = canvas.captureStream(25); // 25fps
+      const outTrack = outStream.getVideoTracks()[0];
+
+      // store processor
+      canvasProcessor = { canvas, ctx, raf, stream: outStream, mode: opts.mode, image: opts.image };
+
+      // replace outgoing track
+      replaceVideoTrack(outTrack);
+      // set local preview to the canvas so user sees processed feed
+      localVideo.srcObject = outStream;
+    }
+
+    function stopCanvasProcessor() {
+      if (!canvasProcessor) return;
+      try {
+        cancelAnimationFrame(canvasProcessor.raf);
+      } catch (e) {}
+      try {
+        canvasProcessor.stream.getTracks().forEach(t => t.stop());
+      } catch (e) {}
+      // restore local camera preview and outgoing track
+      canvasProcessor = null;
+      ensureCameraAndRestorePreview();
+    }
+
+    // composer send message (simple POST)
+    document.getElementById('chatInput').addEventListener('keypress', async (e)=>{
+      if (e.key === 'Enter') {
+        const txt = e.target.value.trim();
+        if (!txt) return;
+        try {
+          await fetch('/send_message', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text: txt, sender: MYNAME }), credentials: 'include' });
+        } catch (err) { console.warn('send failed', err); }
+        e.target.value = '';
+      }
+    });
+
+    // leave call
+    document.getElementById('btnLeave').addEventListener('click', ()=> endCall(true) );
+
+    // On page load — decide role
     (async ()=>{
-      if(!MYNAME){ setStatus('Sign in first'); return }
-      if(!CALL_ID){ setStatus('Missing call id'); return }
+      if (!MYNAME) { setStatus('Sign in first'); return; }
+      if (!CALL_ID) { setStatus('Missing call id'); return; }
       const role = params.get('role');
-      const fromParam = params.get('from')||'';
-      if(role === 'caller' || (fromParam && fromParam === MYNAME)){
-        try{ await doCall(); }catch(e){console.error(e)}
-      } else {
-        setStatus('Waiting for incoming call');
-      }
+      const fromParam = params.get('from') || '';
+      try {
+        // eager get camera preview for UX
+        try { await getCameraStream(); localVideo.srcObject = localStream; } catch(e) {}
+        if (role === 'caller' || (fromParam && fromParam === MYNAME)) {
+          await callerStart();
+        } else {
+          setStatus('Waiting for incoming call');
+        }
+      } catch (e) { console.error(e); }
     })();
 
-    window.addEventListener('beforeunload', ()=>{ hangup(true) });
+    // ensure cleanup when leaving
+    window.addEventListener('beforeunload', ()=> endCall(true) );
+
   </script>
 </body>
 </html>
