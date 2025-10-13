@@ -3285,24 +3285,22 @@ window.sendMessage = sendMessage;
       // remove existing
       document.querySelectorAll('.emoji-popover').forEach(n => n.remove());
     
-      const anchorRect = (anchorEl.closest && anchorEl.closest('.msg-row') || anchorEl).getBoundingClientRect();
-    
       const pop = document.createElement('div');
       pop.className = 'emoji-popover';
       pop.style.position = 'absolute';
-      pop.style.zIndex = 150000;
+      pop.style.zIndex = 160000;
       pop.style.padding = '8px';
       pop.style.background = '#fff';
       pop.style.border = '1px solid rgba(0,0,0,0.08)';
-      pop.style.boxShadow = '0 8px 20px rgba(0,0,0,0.08)';
-      pop.style.borderRadius = '999px'; // semicircle corners
+      pop.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+      pop.style.borderRadius = '12px';
       pop.style.display = 'flex';
       pop.style.gap = '6px';
-      pop.style.flexWrap = 'wrap';
-      pop.style.maxWidth = '320px';
+      pop.style.overflowX = 'auto';
+      pop.style.whiteSpace = 'nowrap';
+      pop.style.maxWidth = 'min(90vw, 420px)';
     
-      // common emoji set — change to your preferred emojis
-      const emojis = ['👍','❤️','😂','🎉','😮','😢','👀','🔥'];
+      const emojis = ['👍','❤️','❓','🎉','😮','😢','🤣','🔥','👏','🤔','💯'];
     
       emojis.forEach(emo => {
         const btn = document.createElement('button');
@@ -3310,15 +3308,18 @@ window.sendMessage = sendMessage;
         btn.className = 'emoji-btn';
         btn.textContent = emo;
         btn.style.border = 'none';
-        btn.style.background = 'white';
-        btn.style.padding = '6px 10px';
-        btn.style.borderRadius = '999px';
+        btn.style.background = 'transparent';
+        btn.style.padding = '6px 8px';
+        btn.style.borderRadius = '8px';
         btn.style.cursor = 'pointer';
-        btn.style.fontSize = '16px';
-        btn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
+        btn.style.fontSize = '18px';
+        btn.style.display = 'inline-block';
+    
         btn.onclick = async (ev) => {
           ev.stopPropagation();
-          // optimistic UI: add reaction locally if you want
+          // optimistic show
+          addReactionToMessageDOM(messageId, emo, (window.cs && window.cs.myName) || 'You');
+    
           try {
             await fetch('/react_message', {
               method: 'POST',
@@ -3335,21 +3336,20 @@ window.sendMessage = sendMessage;
       });
     
       document.body.appendChild(pop);
-      // need pop to be in DOM to measure
+      // position
+      const anchorRect = (anchorEl && anchorEl.getBoundingClientRect && anchorEl.getBoundingClientRect()) || anchorEl;
       requestAnimationFrame(() => positionPopover(pop, anchorRect));
     
       // close on outside click
       setTimeout(() => {
-        const hide = (ev) => {
-          if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', hide); }
-        };
+        const hide = (e) => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', hide); } };
         document.addEventListener('click', hide);
       }, 50);
     }
     
-/* ---------------------------
-  Main: appendMessage (full)
-  --------------------------- */
+    /* ---------------------------
+      Main: appendMessage (full)
+      --------------------------- */
   function appendMessage(m) {
       try {
         if (!m) return;
@@ -3361,7 +3361,7 @@ window.sendMessage = sendMessage;
         wrapper.className = 'msg-row';
         wrapper.dataset.messageId = m.id;
     
-        // body container (we removed .message-avatar per request)
+        // body container
         const bodyContainer = document.createElement('div');
         bodyContainer.className = 'msg-body-container';
         bodyContainer.style.display = 'flex';
@@ -3387,20 +3387,21 @@ window.sendMessage = sendMessage;
         meta.style.display = 'flex';
         meta.style.justifyContent = 'space-between';
         meta.style.width = '100%';
-        meta.style.color = '#000'; // keep meta text black
+        meta.style.color = '#000';
         const leftMeta = document.createElement('div');
         leftMeta.innerHTML = `<strong style="color:inherit">${escapeHtml(m.sender || '')}</strong>`;
         const rightMeta = document.createElement('div');
-        // create tick-wrap container now (two ticks for smooth transition)
-        rightMeta.innerHTML = me ? `<span class="tick-wrap" style="display:inline-block; margin-left:6px">
-                                      <span class="tick1" style="color:#6b7280; margin-right:2px">✓</span>
-                                      <span class="tick2" style="color:#6b7280; opacity:0; transform:scale(.8); transition: opacity .28s ease, transform .28s ease">✓</span>
-                                    </span>` : '';
+        rightMeta.innerHTML = me
+          ? `<span class="tick-wrap" style="display:inline-block; margin-left:6px">
+              <span class="tick1" style="color:#6b7280; margin-right:2px">✓</span>
+              <span class="tick2" style="color:#6b7280; opacity:0; transform:scale(.8); transition: opacity .28s ease, transform .28s ease">✓</span>
+            </span>`
+          : '';
         meta.appendChild(leftMeta);
         meta.appendChild(rightMeta);
         bubble.appendChild(meta);
     
-        // message text (we may skip for polls per your earlier request)
+        // message text
         const hasPoll = (m.attachments || []).some(a => a && a.type === 'poll');
         if (m.text && !hasPoll) {
           const textNode = document.createElement('div');
@@ -3428,30 +3429,32 @@ window.sendMessage = sendMessage;
             img.style.maxWidth = '220px';
             img.style.borderRadius = '8px';
             img.style.marginTop = '8px';
-            img.style.alignSelf = 'center'; // sticker centered
+            img.style.alignSelf = 'center';
             bubble.appendChild(img);
             return;
           }
     
-          // poll (use the poll UI created earlier but with the tick fill green)
+          // poll
           if (a.type === 'poll') {
             const pollContainer = document.createElement('div');
             pollContainer.className = 'poll';
             pollContainer.style.marginTop = '8px';
             pollContainer.style.width = '100%';
+            pollContainer.style.maxWidth = 'min(560px, 90vw)';
+            pollContainer.style.boxSizing = 'border-box';
     
-            // question removed from top (per request). We show "View votes" link below options.
-    
-            // options list
             const list = document.createElement('div');
             list.style.display = 'flex';
             list.style.flexDirection = 'column';
             list.style.gap = '8px';
     
             const counts = a.counts || new Array(a.options.length).fill(0);
-            const userVoteIndex = (a.userVoteIndex !== undefined) ? a.userVoteIndex
-                                    : (a.userVotes && a.userVotes[ (window.cs && window.cs.myName) ] !== undefined
-                                        ? a.userVotes[window.cs.myName] : undefined);
+            const userVoteIndex =
+              a.userVoteIndex !== undefined
+                ? a.userVoteIndex
+                : a.userVotes && a.userVotes[(window.cs && window.cs.myName)] !== undefined
+                ? a.userVotes[window.cs.myName]
+                : undefined;
     
             a.options.forEach((op, idx) => {
               const row = document.createElement('div');
@@ -3465,7 +3468,6 @@ window.sendMessage = sendMessage;
               row.style.cursor = 'pointer';
               row.style.transition = 'background .15s';
     
-              // circle + animated fill
               const circle = document.createElement('div');
               circle.style.width = '20px';
               circle.style.height = '20px';
@@ -3481,8 +3483,8 @@ window.sendMessage = sendMessage;
               fill.style.width = '12px';
               fill.style.height = '12px';
               fill.style.borderRadius = '50%';
-              fill.style.background = '#10b981'; // green fill
-              fill.style.transform = (userVoteIndex === idx) ? 'scale(1)' : 'scale(0)';
+              fill.style.background = '#10b981';
+              fill.style.transform = userVoteIndex === idx ? 'scale(1)' : 'scale(0)';
               fill.style.transition = 'transform .22s cubic-bezier(.2,.9,.2,1)';
               fill.style.transformOrigin = 'center';
     
@@ -3490,7 +3492,7 @@ window.sendMessage = sendMessage;
               check.style.position = 'absolute';
               check.style.fontSize = '12px';
               check.style.color = '#fff';
-              check.style.opacity = (userVoteIndex === idx) ? '1' : '0';
+              check.style.opacity = userVoteIndex === idx ? '1' : '0';
               check.style.transition = 'opacity .22s';
               check.innerText = '✓';
     
@@ -3500,8 +3502,8 @@ window.sendMessage = sendMessage;
               const label = document.createElement('div');
               label.textContent = op;
               label.style.flex = '1';
+              label.style.wordBreak = 'break-word';
     
-              // inline count kept hidden
               const countSpan = document.createElement('span');
               countSpan.style.display = 'none';
               countSpan.textContent = counts[idx] || 0;
@@ -3510,23 +3512,24 @@ window.sendMessage = sendMessage;
               row.appendChild(label);
               row.appendChild(countSpan);
     
-              // toggle vote handler (toggle on/off) with optimistic UI and animation
-              row.addEventListener('click', async (ev) => {
+              row.addEventListener('click', async ev => {
                 ev.preventDefault();
                 ev.stopPropagation();
     
-                const currentlySelected = (userVoteIndex === idx) || (row.dataset.voted === '1');
+                const currentlySelected = userVoteIndex === idx || row.dataset.voted === '1';
                 if (currentlySelected) {
-                  // optimistic deselect
                   fill.style.transform = 'scale(0)';
                   check.style.opacity = '0';
                   row.dataset.voted = '0';
-                  // call unvote endpoint
                   try {
                     await fetch('/unvote_poll', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ message_id: m.id, option: idx, user: (window.cs && window.cs.myName) })
+                      body: JSON.stringify({
+                        message_id: m.id,
+                        option: idx,
+                        user: window.cs && window.cs.myName
+                      })
                     });
                     cs.lastId = 0;
                     if (typeof poll === 'function') await poll();
@@ -3536,31 +3539,30 @@ window.sendMessage = sendMessage;
                   return;
                 }
     
-                // else vote
-                // animate fill
                 fill.style.transform = 'scale(1)';
                 check.style.opacity = '1';
-                // temporarily disable all rows until server response
-                Array.from(list.children).forEach(c => c.style.pointerEvents = 'none');
+                Array.from(list.children).forEach(c => (c.style.pointerEvents = 'none'));
                 try {
                   await fetch('/vote_poll', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message_id: m.id, option: idx, user: (window.cs && window.cs.myName) })
+                    body: JSON.stringify({
+                      message_id: m.id,
+                      option: idx,
+                      user: window.cs && window.cs.myName
+                    })
                   });
                   cs.lastId = 0;
                   if (typeof poll === 'function') await poll();
                 } catch (err) {
                   console.warn('vote failed', err);
-                  // revert on error
                   fill.style.transform = 'scale(0)';
                   check.style.opacity = '0';
                 } finally {
-                  Array.from(list.children).forEach(c => c.style.pointerEvents = 'auto');
+                  Array.from(list.children).forEach(c => (c.style.pointerEvents = 'auto'));
                 }
               });
     
-              // mark dataset if userVoteIndex found
               if (userVoteIndex === idx) row.dataset.voted = '1';
               else row.dataset.voted = '0';
     
@@ -3569,7 +3571,6 @@ window.sendMessage = sendMessage;
     
             pollContainer.appendChild(list);
     
-            // view votes link (blue)
             const viewVotes = document.createElement('div');
             viewVotes.textContent = 'View votes';
             viewVotes.style.color = '#2563eb';
@@ -3577,7 +3578,7 @@ window.sendMessage = sendMessage;
             viewVotes.style.marginTop = '8px';
             viewVotes.style.fontWeight = '600';
             viewVotes.style.alignSelf = 'flex-start';
-            viewVotes.addEventListener('click', (ev) => {
+            viewVotes.addEventListener('click', ev => {
               ev.preventDefault();
               ev.stopPropagation();
               openPollVotesDrawer(m, a);
@@ -3586,14 +3587,13 @@ window.sendMessage = sendMessage;
     
             bubble.appendChild(pollContainer);
             return;
-          } // end poll
+          }
     
-          // other attachment types - fallback
           const { element } = createAttachmentElement(a) || {};
           if (element) bubble.appendChild(element);
         });
     
-        // reactions area appended under attachments (unchanged layout)
+        // reactions
         if (m.reactions?.length) {
           const agg = {};
           for (const r of m.reactions) {
@@ -3630,7 +3630,7 @@ window.sendMessage = sendMessage;
           bubble.appendChild(reactionBar);
         }
     
-        // 3-dot menu button (positioned smartly to the right of the message)
+        // 3-dot menu button
         const menuBtn = document.createElement('button');
         menuBtn.className = 'three-dot';
         menuBtn.type = 'button';
@@ -3641,12 +3641,10 @@ window.sendMessage = sendMessage;
         menuBtn.style.fontSize = '18px';
         menuBtn.style.alignSelf = 'flex-end';
     
-        menuBtn.addEventListener('click', (ev) => {
+        menuBtn.addEventListener('click', ev => {
           ev.stopPropagation();
-          // remove other menus
           document.querySelectorAll('.msg-menu-popover').forEach(n => n.remove());
     
-          // create popover
           const menu = document.createElement('div');
           menu.className = 'msg-menu-popover';
           menu.style.position = 'absolute';
@@ -3658,66 +3656,83 @@ window.sendMessage = sendMessage;
           menu.style.padding = '8px';
           menu.style.minWidth = '150px';
     
-          // menu items
           const makeItem = (text, fn) => {
             const it = document.createElement('div');
             it.textContent = text;
             it.style.padding = '6px 10px';
             it.style.cursor = 'pointer';
             it.style.borderRadius = '6px';
-            it.addEventListener('click', (e) => { e.stopPropagation(); fn(); menu.remove(); });
-            it.addEventListener('mouseenter', () => it.style.background = '#f3f4f6');
-            it.addEventListener('mouseleave', () => it.style.background = 'transparent');
+            it.addEventListener('click', e => {
+              e.stopPropagation();
+              fn();
+              menu.remove();
+            });
+            it.addEventListener('mouseenter', () => (it.style.background = '#f3f4f6'));
+            it.addEventListener('mouseleave', () => (it.style.background = 'transparent'));
             return it;
           };
     
           menu.appendChild(makeItem('Copy', async () => {
             navigator.clipboard.writeText(m.text || '');
           }));
-          menu.appendChild(makeItem('Forward', () => { navigator.clipboard.writeText(m.text || ''); alert('Copied for forwarding'); }));
+    
+          menu.appendChild(makeItem('Forward', () => {
+            if (typeof sendMessage === 'function') {
+              sendMessage(m.text || '', m.attachments || []);
+            } else {
+              navigator.clipboard.writeText(m.text || '');
+              alert('Copied for forwarding');
+            }
+          }));
+    
           if (m.sender === (window.cs && window.cs.myName)) {
             menu.appendChild(makeItem('Delete', async () => {
               if (!confirm('Delete this message?')) return;
-              await fetch('/delete_message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id }) });
+              await fetch('/delete_message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: m.id })
+              });
               const cont = document.getElementById('messages') || document.querySelector('.messages');
-              if (cont) { cont.innerHTML = ''; (window.cs && (window.cs.lastId = 0)); if (typeof poll === 'function') poll(); }
+              if (cont) {
+                cont.innerHTML = '';
+                if (window.cs) window.cs.lastId = 0;
+                if (typeof poll === 'function') poll();
+              }
             }));
           }
+    
           menu.appendChild(makeItem('React', () => showEmojiPickerForMessage(m.id, menuBtn)));
     
           document.body.appendChild(menu);
-    
-          // position popover to the right of the message wrapper if possible
-          const anchorRect = wrapper.getBoundingClientRect();
-          // ensure menu is measured
+          const anchorRect = menuBtn.getBoundingClientRect();
           requestAnimationFrame(() => positionPopover(menu, anchorRect));
-          // close on outside click
           setTimeout(() => {
-            const hide = (ev) => {
-              if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', hide); }
+            const hide = ev2 => {
+              if (!menu.contains(ev2.target)) {
+                menu.remove();
+                document.removeEventListener('click', hide);
+              }
             };
             document.addEventListener('click', hide);
           }, 50);
         });
     
         bubble.appendChild(menuBtn);
-    
         body.appendChild(bubble);
         bodyContainer.appendChild(body);
         wrapper.appendChild(bodyContainer);
     
-        // append to messages container
         const messagesEl = document.getElementById('messages') || document.querySelector('.messages');
         if (messagesEl) messagesEl.appendChild(wrapper);
         if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
     
-        // Ensure tick state smoothly reflects any known status on message object
         if (m.status) updateMessageStatus(m.id, m.status);
-    
       } catch (err) {
         console.error('appendMessage error', err);
       }
   }
+
   // createAttachmentElement: returns DOM element for an attachment
   function createAttachmentElement(a){
     const container = document.createElement('div');
@@ -4198,36 +4213,54 @@ window.sendMessage = sendMessage;
       }
   };
   window.updateMessageStatus = function (id, status) {
-      const el = document.querySelector(`.msg-tick[data-id="${id}"]`);
-      if (!el) return;
+      const wrapper = document.querySelector(`[data-message-id="${id}"]`);
+      if (!wrapper) return;
     
-      // Ensure consistent width and smooth visual transition
+      // prefer tick-wrap
+      const tickWrap = wrapper.querySelector('.tick-wrap');
+      if (tickWrap) {
+        const t1 = tickWrap.querySelector('.tick1');
+        const t2 = tickWrap.querySelector('.tick2');
+        if (!t1 || !t2) return;
+        t1.style.transition = 'color .28s ease';
+        t2.style.transition = 'opacity .28s ease, transform .28s ease, color .28s ease';
+    
+        if (status === 'sent') {
+          t1.style.color = '#6b7280';
+          t2.style.opacity = '0';
+          t2.style.transform = 'scale(.8)';
+        } else if (status === 'delivered') {
+          t1.style.color = '#6b7280';
+          t2.style.color = '#6b7280';
+          t2.style.opacity = '1';
+          t2.style.transform = 'scale(1)';
+        } else if (status === 'seen') {
+          t1.style.color = '#0ea5e9';
+          t2.style.color = '#0ea5e9';
+          t2.style.opacity = '1';
+          t2.style.transform = 'scale(1)';
+        }
+        window.messageStates = window.messageStates || {};
+        window.messageStates[id] = status;
+        return;
+      }
+    
+      // fallback to legacy .msg-tick
+      const el = wrapper.querySelector(`.msg-tick[data-id="${id}"]`) || document.querySelector(`.msg-tick[data-id="${id}"]`);
+      if (!el) return;
       el.style.display = 'inline-block';
       el.style.minWidth = '20px';
       el.style.transition = 'color 0.3s ease, opacity 0.3s ease';
     
-      const prev = window.messageStates[id];
-      if (prev === status) return; // no redundant update
-    
       if (status === 'sent') {
-        el.textContent = '✓';
-        el.style.color = '#6b7280';
-        el.style.opacity = '1';
+        el.textContent = '✓'; el.style.color = '#6b7280'; el.style.opacity = '1';
       } else if (status === 'delivered') {
-        // smooth fade to double tick
         el.style.opacity = '0';
-        setTimeout(() => {
-          el.textContent = '✓✓';
-          el.style.color = '#6b7280';
-          el.style.opacity = '1';
-        }, 150);
+        setTimeout(() => { el.textContent = '✓✓'; el.style.color = '#6b7280'; el.style.opacity = '1'; }, 150);
       } else if (status === 'seen') {
-        // only color transition for seen
-        el.textContent = '✓✓';
-        el.style.color = '#0ea5e9'; // blue for seen
-        el.style.opacity = '1';
+        el.textContent = '✓✓'; el.style.color = '#0ea5e9'; el.style.opacity = '1';
       }
-    
+      window.messageStates = window.messageStates || {};
       window.messageStates[id] = status;
   };
 
@@ -5183,42 +5216,73 @@ function insertSticker(url){
     textarea.focus();
   }
 }
-function showMessageMenu(ev, wrapper, m, menuBtn) {
+function showMessageMenu(ev, menuBtn, wrapper, m) {
   ev.stopPropagation();
+  // remove existing
   document.querySelectorAll('.msg-menu-popover').forEach(n => n.remove());
 
+  // build menu
   const menu = document.createElement('div');
   menu.className = 'msg-menu-popover';
-  menu.style.position = 'absolute';
-  menu.style.zIndex = 99999;
-  menu.style.background = 'white';
+  menu.style.minWidth = '150px';
+  menu.style.background = '#fff';
   menu.style.border = '1px solid rgba(0,0,0,0.08)';
   menu.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
-  menu.style.borderRadius = '8px';
+  menu.style.borderRadius = '10px';
   menu.style.padding = '8px';
+  menu.style.zIndex = 150000;
 
   const makeItem = (text, fn) => {
     const it = document.createElement('div');
     it.textContent = text;
-    it.style.padding = '6px 10px';
+    it.style.padding = '8px 10px';
     it.style.cursor = 'pointer';
+    it.style.borderRadius = '8px';
+    it.addEventListener('mouseenter', () => it.style.background = '#f3f4f6');
+    it.addEventListener('mouseleave', () => it.style.background = 'transparent');
     it.addEventListener('click', (e) => { e.stopPropagation(); fn(); menu.remove(); });
     return it;
   };
 
   menu.appendChild(makeItem('Copy', () => navigator.clipboard.writeText(m.text || '')));
-  menu.appendChild(makeItem('Forward', () => navigator.clipboard.writeText(m.text || '')));
-  if (m.sender === cs.myName) {
+  menu.appendChild(makeItem('Forward', () => {
+    // resend message to chat (text + attachments if any)
+    if (typeof sendMessage === 'function') {
+      const atts = (m.attachments || []).map(a => {
+        // if attachments are in-server attachments, you might prefer to forward as links
+        return a;
+      });
+      // sendMessage(text, attachments) — attachments here depends on your sendMessage implementation
+      sendMessage(m.text || '', atts);
+    } else {
+      console.warn('sendMessage not available to forward');
+    }
+  }));
+
+  // Delete only allowed for own messages
+  if (m.sender === (window.cs && window.cs.myName)) {
     menu.appendChild(makeItem('Delete', async () => {
       if (!confirm('Delete this message?')) return;
-      await fetch('/delete_message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id }) });
-      if (typeof poll === 'function') poll();
+      try {
+        await fetch('/delete_message', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ id: m.id }) });
+        // refresh messages list or remove element
+        const container = document.getElementById('messages') || document.querySelector('.messages');
+        if (container) { container.innerHTML = ''; if (typeof poll === 'function') poll(); }
+      } catch (err) { console.warn('delete failed', err); }
     }));
   }
-  menu.appendChild(makeItem('React', () => showEmojiPickerForMessage(m.id, menuBtn)));
+
+  menu.appendChild(makeItem('React', () => {
+    // open emoji picker anchored to menuBtn
+    showEmojiPickerForMessage(m.id, menuBtn);
+  }));
 
   document.body.appendChild(menu);
-  requestAnimationFrame(() => positionPopover(menu, wrapper.getBoundingClientRect()));
+  // position it relative to the button's bounding rect (anchor to menuBtn)
+  const anchorRect = menuBtn.getBoundingClientRect();
+  requestAnimationFrame(() => positionPopover(menu, anchorRect));
+
+  // close on outside click
   setTimeout(() => {
     const hide = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', hide); } };
     document.addEventListener('click', hide);
@@ -5226,17 +5290,39 @@ function showMessageMenu(ev, wrapper, m, menuBtn) {
 }
 
 function positionPopover(menu, anchorRect) {
+  // anchorRect should be a DOMRect from the button (getBoundingClientRect())
+  const pad = 8;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const menuRect = menu.getBoundingClientRect();
-  let left = anchorRect.right + 8;
-  let top = anchorRect.top;
 
-  if (left + menuRect.width > vw) left = anchorRect.left - menuRect.width - 8;
-  if (top + menuRect.height > vh) top = vh - menuRect.height - 10;
+  // measure menu after it's in the DOM
+  const mRect = menu.getBoundingClientRect();
+  const menuW = mRect.width || 180;
+  const menuH = mRect.height || 160;
+
+  // calculate absolute coords
+  const absLeft = anchorRect.left + window.scrollX;
+  const absRight = anchorRect.right + window.scrollX;
+  const absTop = anchorRect.top + window.scrollY;
+  const absBottom = anchorRect.bottom + window.scrollY;
+
+  // try place below the anchor, aligned to anchor's right edge, but adjust to fit in viewport
+  let left = absRight - menuW; // align right edge of menu to anchor right
+  if (left < window.scrollX + pad) left = absLeft; // fallback to left align
+  if (left + menuW > window.scrollX + vw - pad) left = window.scrollX + vw - menuW - pad;
+  if (left < window.scrollX + pad) left = window.scrollX + pad;
+
+  // prefer below anchor
+  let top = absBottom + pad;
+  // if not enough space below, try above anchor
+  if (top + menuH > window.scrollY + vh - pad) {
+    top = absTop - menuH - pad;
+    if (top < window.scrollY + pad) top = window.scrollY + pad; // clamp
+  }
 
   menu.style.left = left + 'px';
   menu.style.top = top + 'px';
+  menu.style.position = 'absolute';
 }
 
 function observeMessageSeen(msgEl, msg) {
