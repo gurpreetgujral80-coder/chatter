@@ -1832,6 +1832,7 @@ CHAT_HTML = r'''<!doctype html>
       margin: 0;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      overflow: hidden;
     }
 
     header {
@@ -2451,7 +2452,7 @@ CHAT_HTML = r'''<!doctype html>
           </div>
         </div>
       </header>
-      <div id="chat-wrap" style="position:relative; min-height:360px; display:flex; flex-direction:column; top:6.5rem;">
+      <div id="chat-wrap" style="position:relative; min-height:360px; display:flex; flex-direction:column; top:6.5rem; overflow-y: auto;">
             <div id="messages" class="mb-6" aria-live="polite" style="padding: 12px;"></div>
         
             <!-- Bottom Drawer: Stickers/GIFs/Avatars/Emoji -->
