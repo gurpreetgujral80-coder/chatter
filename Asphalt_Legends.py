@@ -828,7 +828,6 @@ VIDEO_CALL_HTML = r"""
     </div>
 
     <div class="composer" id="composer">
-      <input id="chatInput" type="text" placeholder="Type a message..." />
       <div class="controls" aria-hidden="false">
         <button id="btnToggleCam" class="btn" title="Camera on/off">📷</button>
         <button id="btnFlipCam" class="btn" title="Flip camera">🔁</button>
@@ -6340,51 +6339,90 @@ def on_disconnect():
             emit('presence', {'user': u, 'online': False}, broadcast=True)
             break
 
+# ----------------- CALL SIGNALING EVENTS -----------------
 @socketio.on('call_outgoing')
 def on_call_outgoing(data):
+    """Caller initiates a call."""
     to = data.get('to')
     isVideo = data.get('isVideo', False)
     caller = data.get('from') or 'unknown'
     call_id = secrets.token_hex(12)
 
-    # Save call record
+    # Save call info
     save_call(call_id, caller, to, isVideo, status='ringing')
-    CALL_INVITES[call_id] = {"caller": caller, "callee": to}
+    CALL_INVITES[call_id] = {"caller": caller, "callee": to, "isVideo": isVideo}
 
-    sid = USER_SID.get(to)
-    if sid:
-        print(f"📞 Outgoing call from {caller} to {to} (SID {sid})")
+    sid_callee = USER_SID.get(to)
+    sid_caller = USER_SID.get(caller)
+
+    # ✅ If callee is online, send them an invite
+    if sid_callee:
+        print(f"📞 Outgoing call from {caller} to {to} — call_id={call_id}")
         emit(
             'incoming_call',
             {'from': caller, 'isVideo': isVideo, 'call_id': call_id},
-            room=sid,  # send only to that user
+            room=sid_callee
         )
     else:
-        print(f"❌ No SID found for {to} — user not online")
+        print(f"❌ {to} is offline — cannot deliver call invite.")
+
+    # ✅ Tell caller to open audio call page (always)
+    if sid_caller:
+        emit(
+            'open_audio_page',
+            {'url': f"/audio_call?call_id={call_id}&role=caller&to={to}"},
+            room=sid_caller
+        )
+
 
 @socketio.on('call_accept')
 def on_call_accept(data):
+    """Callee accepts a call."""
     call_id = data.get('call_id')
     info = CALL_INVITES.get(call_id)
-    if not info: return
+    if not info:
+        print("❌ Invalid call_id on accept.")
+        return
+
     update_call_started(call_id)
-    sid = USER_SID.get(info['caller'])
-    if sid:
-        emit('call_accepted', {'call_id': call_id, 'from': info['callee']}, room=sid)
+    sid_caller = USER_SID.get(info['caller'])
+    sid_callee = USER_SID.get(info['callee'])
+
+    # ✅ Tell the caller that the call is accepted and callee is ready
+    if sid_caller:
+        emit('call_accepted', {'call_id': call_id, 'from': info['callee']}, room=sid_caller)
+
+    # ✅ Open pages automatically:
+    # Caller: stays in audio call page (already there)
+    # Callee: open video call page
+    if sid_callee:
+        emit(
+            'open_video_page',
+            {'url': f"/video_call?call_id={call_id}&role=callee&from={info['caller']}"},
+            room=sid_callee
+        )
+
 
 @socketio.on('call_decline')
 def on_call_decline(data):
-    call_id = data.get('call_id'); info = CALL_INVITES.get(call_id)
-    if not info: return
+    """Callee declines call."""
+    call_id = data.get('call_id')
+    info = CALL_INVITES.get(call_id)
+    if not info:
+        return
     save_call(call_id, info['caller'], info['callee'], 0, status='declined')
-    sid = USER_SID.get(info['caller'])
-    if sid: emit('call_declined', {'call_id': call_id}, room=sid)
+    sid_caller = USER_SID.get(info['caller'])
+    if sid_caller:
+        emit('call_declined', {'call_id': call_id}, room=sid_caller)
     CALL_INVITES.pop(call_id, None)
+
 
 @socketio.on('call_end')
 def on_call_end(data):
+    """Either side ends the call."""
     call_id = data.get('call_id')
     update_call_ended(call_id)
+
     log = fetch_call_log_by_id(call_id)
     if log and log.get('started_at') and log.get('ended_at'):
         duration = log['ended_at'] - log['started_at']
@@ -6394,8 +6432,19 @@ def on_call_end(data):
     if info:
         sid_caller = USER_SID.get(info.get('caller'))
         sid_callee = USER_SID.get(info.get('callee'))
-        if sid_caller: emit('call_ended', {'call_id': call_id}, room=sid_caller)
-        if sid_callee: emit('call_ended', {'call_id': call_id}, room=sid_callee)
+        if sid_caller:
+            emit('call_ended', {'call_id': call_id}, room=sid_caller)
+        if sid_callee:
+            emit('call_ended', {'call_id': call_id}, room=sid_callee)
+
+socket.on('open_audio_page', data => {
+  if (data.url) window.location.href = data.url;
+});
+
+// When the callee accepts and is told to open the video call page
+socket.on('open_video_page', data => {
+  if (data.url) window.location.href = data.url;
+});
 
 # WebRTC signaling passthrough
 @socketio.on('webrtc_offer')
