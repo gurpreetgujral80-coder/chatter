@@ -1515,8 +1515,7 @@ CHAT_HTML = r'''<!doctype html>
       background-repeat: no-repeat;
       background-position: center center;
       background-attachment{ 
-        position: fixed; 
-        overflow: hidden;
+        position: fixed;
       }
       background-size: cover;
       margin: 0;
@@ -3348,10 +3347,10 @@ window.sendMessage = sendMessage;
       }, 50);
     }
     
-    /* ---------------------------
-       Main: appendMessage (full)
-       --------------------------- */
-    function appendMessage(m) {
+/* ---------------------------
+  Main: appendMessage (full)
+  --------------------------- */
+  function appendMessage(m) {
       try {
         if (!m) return;
     
@@ -3718,8 +3717,7 @@ window.sendMessage = sendMessage;
       } catch (err) {
         console.error('appendMessage error', err);
       }
-    }
-
+  }
   // createAttachmentElement: returns DOM element for an attachment
   function createAttachmentElement(a){
     const container = document.createElement('div');
@@ -5185,6 +5183,62 @@ function insertSticker(url){
     textarea.focus();
   }
 }
+function showMessageMenu(ev, wrapper, m, menuBtn) {
+  ev.stopPropagation();
+  document.querySelectorAll('.msg-menu-popover').forEach(n => n.remove());
+
+  const menu = document.createElement('div');
+  menu.className = 'msg-menu-popover';
+  menu.style.position = 'absolute';
+  menu.style.zIndex = 99999;
+  menu.style.background = 'white';
+  menu.style.border = '1px solid rgba(0,0,0,0.08)';
+  menu.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+  menu.style.borderRadius = '8px';
+  menu.style.padding = '8px';
+
+  const makeItem = (text, fn) => {
+    const it = document.createElement('div');
+    it.textContent = text;
+    it.style.padding = '6px 10px';
+    it.style.cursor = 'pointer';
+    it.addEventListener('click', (e) => { e.stopPropagation(); fn(); menu.remove(); });
+    return it;
+  };
+
+  menu.appendChild(makeItem('Copy', () => navigator.clipboard.writeText(m.text || '')));
+  menu.appendChild(makeItem('Forward', () => navigator.clipboard.writeText(m.text || '')));
+  if (m.sender === cs.myName) {
+    menu.appendChild(makeItem('Delete', async () => {
+      if (!confirm('Delete this message?')) return;
+      await fetch('/delete_message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id }) });
+      if (typeof poll === 'function') poll();
+    }));
+  }
+  menu.appendChild(makeItem('React', () => showEmojiPickerForMessage(m.id, menuBtn)));
+
+  document.body.appendChild(menu);
+  requestAnimationFrame(() => positionPopover(menu, wrapper.getBoundingClientRect()));
+  setTimeout(() => {
+    const hide = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', hide); } };
+    document.addEventListener('click', hide);
+  }, 50);
+}
+
+function positionPopover(menu, anchorRect) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const menuRect = menu.getBoundingClientRect();
+  let left = anchorRect.right + 8;
+  let top = anchorRect.top;
+
+  if (left + menuRect.width > vw) left = anchorRect.left - menuRect.width - 8;
+  if (top + menuRect.height > vh) top = vh - menuRect.height - 10;
+
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+}
+
 function observeMessageSeen(msgEl, msg) {
   if (!msgEl || !msg.id) return;
   const observer = new IntersectionObserver((entries) => {
@@ -5218,6 +5272,44 @@ if (cs.stagedFiles && cs.stagedFiles.length) {
     status: 'sending',
   };
   appendMessage(localMsg); // use your message-render function
+}
+
+function openPollVotesDrawer(m, pollData) {
+  let drawer = document.getElementById('pollVotesDrawer');
+  if (!drawer) {
+    drawer = document.createElement('div');
+    drawer.id = 'pollVotesDrawer';
+    drawer.style.position = 'fixed';
+    drawer.style.right = '0';
+    drawer.style.top = '0';
+    drawer.style.height = '100%';
+    drawer.style.width = '340px';
+    drawer.style.background = '#fff';
+    drawer.style.boxShadow = '-3px 0 10px rgba(0,0,0,0.15)';
+    drawer.style.transition = 'transform .3s ease';
+    drawer.style.transform = 'translateX(100%)';
+    drawer.style.overflowY = 'auto';
+    drawer.style.zIndex = '99999';
+    document.body.appendChild(drawer);
+  }
+
+  drawer.innerHTML = `
+    <div style="padding:16px; font-weight:600; border-bottom:1px solid #eee">${m.text || 'Poll votes'}</div>
+    <div style="padding:12px;">
+      ${pollData.options.map((op, i) => `
+        <div style="margin-top:12px;">
+          <div style="font-weight:500;">${op}</div>
+          ${(pollData.voters?.[i] || []).map(v => `
+            <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+              <img src="${v.avatar || '/static/m1.webp'}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">
+              <div>${v.name}</div>
+            </div>
+          `).join('') || '<div style="color:#888; font-size:0.9em;">No votes yet</div>'}
+        </div>
+      `).join('')}
+    </div>
+  `;
+  requestAnimationFrame(() => drawer.style.transform = 'translateX(0)');
 }
 </script>
 <script>
