@@ -6071,6 +6071,14 @@ function openPollVotesDrawer(m, pollData) {
   }
 
 })();
+socket.on('open_audio_page', data => {
+  if (data.url) window.location.href = data.url;
+});
+
+// When the callee accepts and is told to open the video call page
+socket.on('open_video_page', data => {
+  if (data.url) window.location.href = data.url;
+});
 </script>
 </body>
 </html>
@@ -6436,15 +6444,6 @@ def on_call_end(data):
             emit('call_ended', {'call_id': call_id}, room=sid_caller)
         if sid_callee:
             emit('call_ended', {'call_id': call_id}, room=sid_callee)
-
-socket.on('open_audio_page', data => {
-  if (data.url) window.location.href = data.url;
-});
-
-// When the callee accepts and is told to open the video call page
-socket.on('open_video_page', data => {
-  if (data.url) window.location.href = data.url;
-});
 
 # WebRTC signaling passthrough
 @socketio.on('webrtc_offer')
