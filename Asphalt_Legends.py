@@ -5769,10 +5769,24 @@ function openPollVotesDrawer(m, pollData) {
 
   // ---------- Sticker sources: user avatars (m1..m20, a1..a20) + moving-sticker generators ----------
   const avatarStickers = [];
-  for (let i = 1; i <= 78; i++) {
-    if (i === 47) continue;
-    avatarStickers.push(`/static/m${i}.webp`);
-    // avatarStickers.push(`/static/a${i}.webp`);
+
+  // Fetch current user info from backend
+  let userIsOwner = false;
+  try {
+      const res = await fetch("/api/current_user");
+      if (res.ok) {
+        const data = await res.json();
+        userIsOwner = data.is_owner === true;
+      }
+    } catch (err) {
+      console.warn("Could not get user info:", err);
+    }
+    
+    // Build sticker list based on ownership
+    for (let i = 1; i <= 78; i++) {
+      if (i === 47) continue; // skip missing file
+      const prefix = userIsOwner ? "m" : "a";
+      avatarStickers.push(`/static/${prefix}${i}.webp`);
   }
 
   const GIPHY_IDS = [
@@ -6430,8 +6444,6 @@ def profile_update():
 
 @app.route("/register", methods=["POST"])
 def register():
-    # Helper functions: hash_pass is defined in your file
-    # Helper functions: save_user is defined in your file
     body = request.get_json() or {}
     name = body.get("name", "").strip()
     passkey = body.get("passkey")
@@ -6439,23 +6451,23 @@ def register():
     if not name or not passkey:
         return "Missing username or passkey", 400
 
-    # Ensure the user doesn't already exist (case-insensitive check is handled by the DB constraint on name)
-    existing_user = load_user_by_name(name)
-    if existing_user:
-        # A name collision is detected (even if different casing, e.g., 'UserA' and 'usera')
-        return "User name is already taken", 409
-
-    salt, hash_val = hash_pass(passkey)
-    # The first user registered should be marked as the owner
+    # --- Step 1: Allow only if no users exist yet ---
     first_user = load_first_user()
-    save_user(name, salt, hash_val, make_owner=not first_user)
+    if first_user is not None:
+        # Prevent registration after the first user is created
+        return jsonify({"error": "Registration closed. The first user already exists."}), 403
 
-    # FIX: Clear the existing session to prevent immediate redirect issues
+    # --- Step 2: Create the first (owner) user ---
+    salt, hash_val = hash_pass(passkey)
+    save_user(name, salt, hash_val, make_owner=True)
+
+    # --- Step 3: Clear session and log them in immediately ---
     session.clear()
-
-    session['username'] = name
+    session["username"] = name
     touch_user_presence(name)
-    return jsonify({"status": "ok"})
+
+    app.logger.info(f"First user registered: {name}")
+    return jsonify({"status": "ok", "owner": True})
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -6464,6 +6476,11 @@ def login():
     passkey = body.get("passkey")
 
     app.logger.info("Login attempt: %s", name)
+
+    # If no user exists, force registration
+    if load_first_user() is None:
+        return jsonify({"error": "No users yet. Please register first."}), 403
+
     user = load_user_by_name(name)
 
     if not user:
@@ -6471,23 +6488,34 @@ def login():
         owner = get_owner()
         if not owner:
             return "Unauthorized", 401  # No owner set yet
-        # Create new user with same salt/hash as owner
         clone_user(name, owner['pass_salt'], owner['pass_hash'])
         user = load_user_by_name(name)
 
-    # Now verify passkey
+    # Verify password
     if not verify_pass(passkey, user['pass_salt'], user['pass_hash']):
         return "Unauthorized", 401
 
     session.clear()
     session['username'] = user['name']
     touch_user_presence(user['name'])
-    return jsonify({"status":"ok"})
+    return jsonify({"status": "ok"})
 
 @app.route("/logout", methods=["POST"])
 def logout():
     session.pop('username', None)
     return redirect(url_for('index'))
+
+@app.route("/api/current_user")
+def api_current_user():
+    username = session.get("username")
+    if not username:
+        return jsonify({"logged_in": False}), 401
+    user = load_user_by_name(username)
+    return jsonify({
+        "logged_in": True,
+        "name": user["name"],
+        "is_owner": bool(user.get("is_owner"))
+    })
 
 @app.route("/chat")
 def chat():
