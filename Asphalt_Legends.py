@@ -6070,13 +6070,313 @@ function openPollVotesDrawer(m, pollData) {
     });
   }
 
+// === UNIVERSAL PATCH: three-dot menu (works on new messages + external emoji bar) ===
+(() => {
+  /* === helper: add reaction === */
+  window.addReactionToMessageDOM = function (messageId, emoji) {
+    const msgRow = document.querySelector(`.msg-row[data-message-id="${messageId}"]`);
+    if (!msgRow) return;
+    const bubble = msgRow.querySelector('.bubble');
+    if (!bubble) return;
+
+    let bar = bubble.querySelector('.reaction-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'reaction-bar';
+      bar.style.marginTop = '6px';
+      bar.style.display = 'flex';
+      bar.style.flexWrap = 'wrap';
+      bar.style.gap = '6px';
+      bubble.appendChild(bar);
+    }
+
+    let pill = Array.from(bar.children).find(p => p.dataset.emoji === emoji);
+    if (!pill) {
+      pill = document.createElement('div');
+      pill.dataset.emoji = emoji;
+      pill.className = 'reaction-pill';
+      pill.style.background = '#fff';
+      pill.style.borderRadius = '999px';
+      pill.style.padding = '4px 8px';
+      pill.style.display = 'flex';
+      pill.style.alignItems = 'center';
+      pill.style.gap = '6px';
+      pill.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
+
+      const e = document.createElement('div');
+      e.className = 'reaction-emoji';
+      e.innerText = emoji;
+      const c = document.createElement('div');
+      c.style.fontSize = '0.85rem';
+      c.style.color = '#374151';
+      c.innerText = '1';
+      pill.appendChild(e);
+      pill.appendChild(c);
+      bar.appendChild(pill);
+    } else {
+      const c = pill.querySelector('div:last-child');
+      c.innerText = String(Number(c.innerText || '0') + 1);
+    }
+  };
+
+  /* === style tweak: meta row expands bubble properly (single line) === */
+  const style = document.createElement('style');
+  style.textContent = `
+    /* force meta row into single line and let bubble expand */
+    .msg-meta-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      /* prevent wrapping so it's one straight line */
+      flex-wrap: nowrap !important;
+      width: 100%;
+      /* don't force wrapping; allow overflow if necessary */
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    /* prevent child shrinking problems in flex */
+    .msg-meta-top > * { min-width: 0; }
+
+    /* ensure bubble can expand vertically if needed */
+    .bubble {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .emoji-floating-bar {
+      position: absolute;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 12px;
+      padding: 6px 10px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.15);
+      display: flex;
+      gap: 8px;
+      z-index: 999999;
+    }
+    .emoji-floating-bar button {
+      border: none;
+      background: transparent;
+      font-size: 20px;
+      cursor: pointer;
+    }
+    .emoji-floating-bar button:hover { transform: scale(1.2); }
+  `;
+  document.head.appendChild(style);
+
+  /* === binding function (works for new and old messages) === */
+
+  // robust extractors to handle different message shapes
+  const extractTextFromMsg = (m, msgRow) => {
+    if (!m && !msgRow) return '';
+    // try many likely properties
+    const candidates = [
+      m?.text, m?.body, m?.message, m?.content, m?.html,
+      // some apps use `textContent`, `msg`, or `payload`
+      m?.textContent, m?.msg, m?.payload?.text
+    ];
+    for (const c of candidates) {
+      if (typeof c === 'string' && c.trim()) return c.trim();
+    }
+    // parts/blocks arrays
+    if (Array.isArray(m?.parts)) {
+      const joined = m.parts.map(p => (p?.text || p?.body || p?.content || '')).filter(Boolean).join('\n').trim();
+      if (joined) return joined;
+    }
+    // attachments may have captions
+    if (Array.isArray(m?.attachments)) {
+      const captions = m.attachments.map(a => a?.caption || a?.title || '').filter(Boolean).join('\n').trim();
+      if (captions) return captions;
+    }
+    // fallback to DOM text (if available)
+    if (msgRow) {
+      const bubble = msgRow.querySelector('.bubble');
+      if (bubble) {
+        // try common DOM selectors
+        const domTextSelectors = ['.text', '.msg-text', '.message-text', '.content', '.bubble-text'];
+        for (const s of domTextSelectors) {
+          const el = bubble.querySelector(s);
+          if (el && el.innerText && el.innerText.trim()) return el.innerText.trim();
+        }
+        const raw = bubble.innerText || '';
+        if (raw.trim()) return raw.trim();
+      }
+    }
+    return '';
+  };
+
+  const extractAttachmentsFromMsg = (m) => {
+    if (!m) return [];
+    return (
+      m.attachments ||
+      m.files ||
+      m.media ||
+      m.images ||
+      m._attachments ||
+      m?.attachments_list ||
+      []
+    );
+  };
+
+  window.attachThreeDotMenus = function () {
+    document.querySelectorAll('.three-dot').forEach(btn => {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+
+      btn.addEventListener('click', ev => {
+        ev.stopPropagation();
+        document.querySelectorAll('.msg-menu-popover, .emoji-floating-bar').forEach(p => p.remove());
+
+        const msgRow = btn.closest('.msg-row');
+        if (!msgRow) return;
+        const msgId = msgRow.dataset.messageId;
+        const msg = (window.cs?.messages || []).find(x => String(x.id) === String(msgId) || String(x._id) === String(msgId) || String(x.message_id) === String(msgId));
+
+        const menu = document.createElement('div');
+        menu.className = 'msg-menu-popover';
+        menu.style.position = 'absolute';
+        menu.style.background = '#fff';
+        menu.style.border = '1px solid rgba(0,0,0,0.08)';
+        menu.style.borderRadius = '8px';
+        menu.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+        menu.style.padding = '8px';
+        menu.style.minWidth = '150px';
+        menu.style.zIndex = 999999;
+
+        const makeItem = (label, fn) => {
+          const i = document.createElement('div');
+          i.textContent = label;
+          i.style.padding = '6px 10px';
+          i.style.cursor = 'pointer';
+          i.style.borderRadius = '6px';
+          i.addEventListener('mouseenter', () => i.style.background = '#f3f4f6');
+          i.addEventListener('mouseleave', () => i.style.background = 'transparent');
+          i.addEventListener('click', e => { e.stopPropagation(); fn(); });
+          return i;
+        };
+
+        menu.appendChild(makeItem('Copy', () => {
+          const txt = extractTextFromMsg(msg, msgRow) || '';
+          navigator.clipboard.writeText(txt);
+          alert('Copied!');
+          menu.remove();
+        }));
+
+        menu.appendChild(makeItem('Forward', async () => {
+          try {
+            const text = extractTextFromMsg(msg, msgRow);
+            const attachments = extractAttachmentsFromMsg(msg) || [];
+
+            if (!text && attachments.length === 0) {
+              alert('Nothing to forward (empty message).');
+              menu.remove();
+              return;
+            }
+
+            const payload = { sender: window.cs?.myName || 'unknown', text: text, attachments: attachments };
+            const res = await fetch('/send_message', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            if (res.ok && typeof poll === 'function') poll();
+            else {
+              console.warn('Forward failed', res.status, await res.text());
+              alert('Forward failed (see console).');
+            }
+          } catch (e) {
+            console.error('Forward error', e);
+            alert('Forward error (see console).');
+          }
+          menu.remove();
+        }));
+
+        menu.appendChild(makeItem('Delete', async () => {
+          if (!confirm('Delete this message?')) return;
+          try {
+            await fetch('/delete_message', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: msgId })
+            });
+            msgRow.remove();
+          } catch (e) { console.error('Delete failed', e); alert('Delete failed (see console).'); }
+          menu.remove();
+        }));
+
+        // React option — opens separate floating emoji bar
+        menu.appendChild(makeItem('React', () => {
+          const rect = btn.getBoundingClientRect();
+          const bar = document.createElement('div');
+          bar.className = 'emoji-floating-bar';
+          ['😀','😂','😍','👍','🔥','😮','😢','👏','❤️'].forEach(em => {
+            const b = document.createElement('button');
+            b.textContent = em;
+            b.onclick = async e => {
+              e.stopPropagation();
+              addReactionToMessageDOM(msgId, em);
+              try {
+                await fetch('/react_message', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: msgId, emoji: em, user: window.cs?.myName })
+                });
+              } catch {}
+              bar.remove();
+            };
+            bar.appendChild(b);
+          });
+          document.body.appendChild(bar);
+          const scrollY = window.scrollY || document.documentElement.scrollTop;
+          const scrollX = window.scrollX || document.documentElement.scrollLeft;
+          bar.style.top = `${rect.bottom + scrollY + 6}px`;
+          bar.style.left = `${rect.left + scrollX - 20}px`;
+
+          const closeBar = e => {
+            if (!bar.contains(e.target)) {
+              bar.remove();
+              document.removeEventListener('click', closeBar);
+            }
+          };
+          setTimeout(() => document.addEventListener('click', closeBar), 100);
+        }));
+
+        document.body.appendChild(menu);
+
+        const rect = btn.getBoundingClientRect();
+        const scrollY = window.scrollY || document.documentElement.scrollTop;
+        const scrollX = window.scrollX || document.documentElement.scrollLeft;
+        menu.style.top = `${rect.bottom + scrollY + 4}px`;
+        menu.style.left = `${rect.left + scrollX - 100}px`;
+
+        const close = e => {
+          if (!menu.contains(e.target)) {
+            menu.remove();
+            document.removeEventListener('click', close);
+          }
+        };
+        setTimeout(() => document.addEventListener('click', close), 50);
+      });
+    });
+  };
+
+  /* initial bind */
+  window.attachThreeDotMenus();
+
+  /* observer to auto-bind new messages */
+  const observer = new MutationObserver(() => window.attachThreeDotMenus());
+  observer.observe(document.body, { childList: true, subtree: true });
 })();
-socketio.on('open_audio_page', data => {
+
+})();
+socket.on('open_audio_page', data => {
   if (data.url) window.location.href = data.url;
 });
 
 // When the callee accepts and is told to open the video call page
-socketio.on('open_video_page', data => {
+socket.on('open_video_page', data => {
   if (data.url) window.location.href = data.url;
 });
 </script>
