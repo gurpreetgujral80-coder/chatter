@@ -1832,7 +1832,6 @@ CHAT_HTML = r'''<!doctype html>
       margin: 0;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
-      overflow: hidden;
     }
 
     header {
@@ -6072,12 +6071,12 @@ function openPollVotesDrawer(m, pollData) {
   }
 
 })();
-socket.on('open_audio_page', data => {
+socketio.on('open_audio_page', data => {
   if (data.url) window.location.href = data.url;
 });
 
 // When the callee accepts and is told to open the video call page
-socket.on('open_video_page', data => {
+socketio.on('open_video_page', data => {
   if (data.url) window.location.href = data.url;
 });
 </script>
